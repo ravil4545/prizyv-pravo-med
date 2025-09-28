@@ -28,38 +28,32 @@ const ServicesPage = () => {
     {
       icon: FileText,
       title: "Анализ документов и личного дела",
-      description: "Детальный разбор всех документов в военкомате",
-      price: "от 5 000 ₽"
+      description: "Детальный разбор всех документов в военкомате"
     },
     {
       icon: Gavel,
       title: "Составление жалоб и заявлений",
-      description: "Профессиональная подготовка процессуальных документов",
-      price: "от 3 000 ₽"
+      description: "Профессиональная подготовка процессуальных документов"
     },
     {
       icon: Users,
       title: "Представительство в военкомате",
-      description: "Личное сопровождение на заседаниях призывной комиссии",
-      price: "от 8 000 ₽"
+      description: "Личное сопровождение на заседаниях призывной комиссии"
     },
     {
       icon: Scale,
       title: "Судебное представительство",
-      description: "Полное ведение дела в судах всех инстанций",
-      price: "от 15 000 ₽"
+      description: "Полное ведение дела в судах всех инстанций"
     },
     {
       icon: AlertTriangle,
       title: "Экстренная правовая помощь",
-      description: "Срочные консультации в критических ситуациях",
-      price: "от 2 000 ₽"
+      description: "Срочные консультации в критических ситуациях"
     },
     {
       icon: BookOpen,
       title: "Правовое просвещение",
-      description: "Обучение правам и обязанностям призывника",
-      price: "от 1 500 ₽"
+      description: "Обучение правам и обязанностям призывника"
     }
   ];
 
@@ -67,26 +61,22 @@ const ServicesPage = () => {
     {
       icon: Heart,
       title: "Анализ медицинских документов",
-      description: "Экспертная оценка имеющихся справок и заключений",
-      price: "от 4 000 ₽"
+      description: "Экспертная оценка имеющихся справок и заключений"
     },
     {
       icon: FileCheck,
       title: "Планирование дополнительных обследований",
-      description: "Рекомендации по необходимым медицинским процедурам",
-      price: "от 3 000 ₽"
+      description: "Рекомендации по необходимым медицинским процедурам"
     },
     {
       icon: Users,
       title: "Подготовка к медкомиссии",
-      description: "Консультации по процедуре медицинского освидетельствования",
-      price: "от 2 500 ₽"
+      description: "Консультации по процедуре медицинского освидетельствования"
     },
     {
       icon: BookOpen,
       title: "Консультации по Расписанию болезней",
-      description: "Разъяснение медицинских критериев годности",
-      price: "от 2 000 ₽"
+      description: "Разъяснение медицинских критериев годности"
     }
   ];
 
@@ -174,9 +164,8 @@ const ServicesPage = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <span className="text-2xl font-bold text-primary">{service.price}</span>
-                      <Button variant="outline" size="sm">
+                    <div className="flex items-center justify-center">
+                      <Button variant="outline" size="sm" className="w-full">
                         Подробнее
                       </Button>
                     </div>
@@ -215,9 +204,8 @@ const ServicesPage = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-bold text-accent">{service.price}</span>
-                      <Button variant="outline" size="sm">
+                    <div className="flex items-center justify-center">
+                      <Button variant="outline" size="sm" className="w-full">
                         Заказать
                       </Button>
                     </div>

@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Phone, MessageCircle, Send } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const Header = () => {
+  const location = useLocation();
+  
   const handlePhoneCall = () => {
     window.location.href = "tel:+79253500533";
   };
@@ -15,6 +17,8 @@ const Header = () => {
   const handleTelegram = () => {
     window.open("https://t.me/nepriziv2", "_blank");
   };
+
+  const isActive = (path: string) => location.pathname === path;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -31,16 +35,52 @@ const Header = () => {
           </Link>
 
           <nav className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="text-sm font-medium text-foreground hover:text-primary transition-smooth">
+            <Link 
+              to="/" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
               Главная
             </Link>
-            <Link to="/services" className="text-sm font-medium text-foreground hover:text-primary transition-smooth">
+            <Link 
+              to="/services" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/services") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/services") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
               Услуги
             </Link>
-            <Link to="/testimonials" className="text-sm font-medium text-foreground hover:text-primary transition-smooth">
+            <Link 
+              to="/testimonials" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/testimonials") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/testimonials") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
               Отзывы
             </Link>
-            <Link to="/templates" className="text-sm font-medium text-foreground hover:text-primary transition-smooth">
+            <Link 
+              to="/templates" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/templates") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/templates") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
               Шаблоны
             </Link>
           </nav>
@@ -50,7 +90,7 @@ const Header = () => {
               variant="ghost"
               size="sm"
               onClick={handlePhoneCall}
-              className="hidden sm:flex"
+              className="hidden sm:flex hover:bg-gradient-soft hover:text-primary hover:scale-105 transition-all duration-300"
             >
               <Phone className="h-4 w-4" />
               <span className="hidden lg:inline">Позвонить</span>
@@ -59,6 +99,7 @@ const Header = () => {
               variant="ghost"
               size="sm"
               onClick={handleWhatsApp}
+              className="hover:bg-gradient-soft hover:text-accent hover:scale-105 transition-all duration-300"
             >
               <MessageCircle className="h-4 w-4" />
               <span className="hidden lg:inline">WhatsApp</span>
@@ -67,6 +108,7 @@ const Header = () => {
               variant="ghost"
               size="sm"
               onClick={handleTelegram}
+              className="hover:bg-gradient-soft hover:text-primary hover:scale-105 transition-all duration-300"
             >
               <Send className="h-4 w-4" />
               <span className="hidden lg:inline">Telegram</span>

@@ -2,55 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Professional Design System for Legal Consultation Services */
+/* Modern Two-Tone Design System with Soft Blending */
 
 @layer base {
   :root {
-    /* Professional Blue Palette */
+    /* Modern Two-Tone Palette - Warm & Cool */
     --background: 0 0% 100%;
-    --foreground: 215 28% 17%;
+    --foreground: 220 15% 20%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 28% 17%;
+    --card-foreground: 220 15% 20%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 28% 17%;
+    --popover-foreground: 220 15% 20%;
 
-    /* Professional Primary - Deep Blue */
-    --primary: 215 84% 35%;
+    /* Primary - Warm Indigo */
+    --primary: 250 85% 60%;
     --primary-foreground: 0 0% 98%;
-    --primary-light: 215 84% 45%;
-    --primary-dark: 215 84% 25%;
+    --primary-light: 250 85% 70%;
+    --primary-dark: 250 85% 50%;
 
-    /* Trust Secondary - Light Blue */
-    --secondary: 215 40% 95%;
-    --secondary-foreground: 215 84% 35%;
+    /* Secondary - Soft Coral */
+    --secondary: 15 80% 95%;
+    --secondary-foreground: 250 85% 60%;
 
-    /* Muted Professional Gray */
-    --muted: 215 20% 95%;
-    --muted-foreground: 215 15% 45%;
+    /* Muted - Neutral Gray */
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 15% 50%;
 
-    /* Success Accent - Professional Green */
-    --accent: 145 65% 35%;
+    /* Accent - Warm Coral */
+    --accent: 15 80% 60%;
     --accent-foreground: 0 0% 98%;
-    --accent-light: 145 65% 45%;
+    --accent-light: 15 80% 70%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 215 20% 90%;
-    --input: 215 20% 95%;
-    --ring: 215 84% 35%;
+    --border: 220 15% 92%;
+    --input: 220 15% 96%;
+    --ring: 250 85% 60%;
 
-    /* Professional Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(215, 84%, 35%) 0%, hsl(215, 84%, 45%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(215, 84%, 35%) 0%, hsl(215, 84%, 25%) 50%, hsl(215, 84%, 35%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(215, 40%, 98%) 100%);
+    /* Modern Gradients with Soft Blending */
+    --gradient-primary: linear-gradient(135deg, hsl(250, 85%, 60%) 0%, hsl(15, 80%, 60%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(250, 85%, 60%) 0%, hsl(250, 85%, 50%) 30%, hsl(15, 80%, 60%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0, 0%, 100%) 0%, hsl(220, 15%, 98%) 50%, hsl(250, 85%, 98%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(15, 80%, 60%) 0%, hsl(250, 85%, 60%) 100%);
+    --gradient-soft: linear-gradient(135deg, hsl(250, 85%, 97%) 0%, hsl(15, 80%, 97%) 100%);
     
-    /* Shadows */
-    --shadow-soft: 0 2px 8px hsl(215, 84%, 35% / 0.1);
-    --shadow-medium: 0 4px 16px hsl(215, 84%, 35% / 0.15);
-    --shadow-strong: 0 8px 32px hsl(215, 84%, 35% / 0.25);
+    /* Soft Shadows with Color Tint */
+    --shadow-soft: 0 2px 8px hsl(250, 85%, 60% / 0.08);
+    --shadow-medium: 0 4px 16px hsl(250, 85%, 60% / 0.12);
+    --shadow-strong: 0 8px 32px hsl(250, 85%, 60% / 0.20);
+    --shadow-accent: 0 4px 20px hsl(15, 80%, 60% / 0.15);
 
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -69,35 +72,35 @@
   }
 
   .dark {
-    --background: 215 28% 8%;
+    --background: 220 15% 9%;
     --foreground: 0 0% 98%;
 
-    --card: 215 28% 10%;
+    --card: 220 15% 11%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 215 28% 10%;
+    --popover: 220 15% 11%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 215 84% 45%;
-    --primary-foreground: 215 28% 8%;
-    --primary-light: 215 84% 55%;
-    --primary-dark: 215 84% 35%;
+    --primary: 250 85% 65%;
+    --primary-foreground: 220 15% 9%;
+    --primary-light: 250 85% 75%;
+    --primary-dark: 250 85% 55%;
 
-    --secondary: 215 28% 15%;
+    --secondary: 220 15% 15%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 215 20% 15%;
-    --muted-foreground: 215 15% 65%;
+    --muted: 220 15% 15%;
+    --muted-foreground: 220 15% 65%;
 
-    --accent: 145 65% 45%;
-    --accent-foreground: 215 28% 8%;
+    --accent: 15 80% 65%;
+    --accent-foreground: 220 15% 9%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 215 20% 20%;
-    --input: 215 20% 15%;
-    --ring: 215 84% 45%;
+    --border: 220 15% 20%;
+    --input: 220 15% 15%;
+    --ring: 250 85% 65%;
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;

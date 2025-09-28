@@ -9,15 +9,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft transition-smooth",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-        hero: "bg-gradient-primary text-primary-foreground hover:bg-primary-light shadow-medium transition-bounce hover:shadow-strong hover:-translate-y-1",
-        cta: "bg-accent text-accent-foreground hover:bg-accent-light shadow-soft transition-smooth hover:shadow-medium",
-        contact: "bg-gradient-hero text-primary-foreground hover:bg-primary-dark shadow-medium transition-smooth border border-primary-light/20",
+        default: "bg-gradient-primary text-primary-foreground hover:bg-gradient-accent shadow-soft transition-all duration-300 hover:scale-105 hover:shadow-medium",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300",
+        outline: "border border-input bg-background hover:bg-gradient-soft hover:text-primary hover:border-primary/30 transition-all duration-300 hover:scale-105",
+        secondary: "bg-gradient-soft text-secondary-foreground hover:bg-gradient-accent hover:text-accent-foreground transition-all duration-300 hover:scale-105",
+        ghost: "hover:bg-gradient-soft hover:text-accent-foreground transition-all duration-300 hover:scale-105",
+        link: "text-primary underline-offset-4 hover:underline hover:text-accent transition-all duration-300",
+        hero: "bg-gradient-primary text-primary-foreground hover:bg-gradient-accent shadow-medium transition-all duration-500 hover:shadow-accent hover:-translate-y-2 hover:scale-105",
+        cta: "bg-gradient-accent text-accent-foreground hover:bg-gradient-primary shadow-soft transition-all duration-300 hover:shadow-accent hover:scale-105",
+        contact: "bg-gradient-hero text-primary-foreground hover:bg-gradient-accent shadow-medium transition-all duration-300 border border-primary-light/20 hover:scale-105",
       },
       size: {
         default: "h-10 px-4 py-2",
