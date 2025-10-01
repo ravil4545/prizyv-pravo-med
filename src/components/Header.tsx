@@ -1,9 +1,25 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Phone, MessageCircle, Send, LogIn, LogOut } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Header = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
   
   const handlePhoneCall = () => {
     window.location.href = "tel:+79253500533";
@@ -16,6 +32,14 @@ const Header = () => {
 
   const handleTelegram = () => {
     window.open("https://t.me/nepriziv2", "_blank");
+  };
+
+  const handleAuth = async () => {
+    if (user) {
+      await supabase.auth.signOut();
+    } else {
+      navigate("/auth");
+    }
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -83,6 +107,30 @@ const Header = () => {
             >
               Шаблоны
             </Link>
+            <Link 
+              to="/diagnoses" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/diagnoses") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/diagnoses") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
+              Диагнозы
+            </Link>
+            <Link 
+              to="/forum" 
+              className={`text-sm font-medium transition-all duration-300 relative ${
+                isActive("/forum") 
+                  ? "text-primary font-semibold" 
+                  : "text-foreground hover:text-primary"
+              } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                isActive("/forum") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+              } after:transition-transform after:duration-300`}
+            >
+              Форум
+            </Link>
           </nav>
 
           <div className="flex items-center space-x-2">
@@ -112,6 +160,15 @@ const Header = () => {
             >
               <Send className="h-4 w-4" />
               <span className="hidden lg:inline">Telegram</span>
+            </Button>
+            <Button
+              variant={user ? "ghost" : "default"}
+              size="sm"
+              onClick={handleAuth}
+              className="hover:scale-105 transition-all duration-300"
+            >
+              {user ? <LogOut className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+              <span className="hidden lg:inline">{user ? "Выйти" : "Войти"}</span>
             </Button>
           </div>
         </div>

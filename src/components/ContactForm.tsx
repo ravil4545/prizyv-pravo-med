@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Phone, MessageCircle, Send, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const ContactForm = () => {
   const { toast } = useToast();
@@ -30,7 +31,19 @@ const ContactForm = () => {
     setIsSubmitting(true);
 
     try {
-      // Create mailto link as fallback
+      // Save to database
+      const { error } = await supabase
+        .from("contact_submissions")
+        .insert({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          message: formData.message,
+        });
+
+      if (error) throw error;
+
+      // Also send mailto as notification
       const subject = encodeURIComponent("Заявка на консультацию с сайта");
       const body = encodeURIComponent(
         `Имя: ${formData.name}\nТелефон: ${formData.phone}\nEmail: ${formData.email}\n\nСообщение:\n${formData.message}`
@@ -44,11 +57,11 @@ const ContactForm = () => {
       });
 
       setFormData({ name: "", phone: "", email: "", message: "" });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Ошибка отправки",
-        description: "Пожалуйста, попробуйте еще раз или свяжитесь с нами напрямую.",
+        description: error.message || "Пожалуйста, попробуйте еще раз.",
       });
     } finally {
       setIsSubmitting(false);
