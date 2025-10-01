@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Star } from "lucide-react";
+import { testimonialSchema } from "@/lib/validations";
 
 interface Testimonial {
   id: string;
@@ -23,6 +24,8 @@ const TestimonialsPage = () => {
   const [rating, setRating] = useState(5);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [authorName, setAuthorName] = useState("");
 
   useEffect(() => {
     loadTestimonials();
@@ -32,6 +35,21 @@ const TestimonialsPage = () => {
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user || null);
+    
+    // Fetch user's full name from profiles if available
+    if (session?.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", session.user.id)
+        .single();
+      
+      if (profile?.full_name) {
+        setAuthorName(profile.full_name);
+      } else {
+        setAuthorName("Аноним");
+      }
+    }
   };
 
   const loadTestimonials = async () => {
@@ -61,16 +79,34 @@ const TestimonialsPage = () => {
       return;
     }
 
-    if (!newTestimonial.trim()) return;
+    setErrors({});
+
+    // Validate input
+    const validation = testimonialSchema.safeParse({ content: newTestimonial, rating });
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Проверьте правильность заполнения полей",
+      });
+      return;
+    }
 
     setLoading(true);
 
     const { error } = await supabase
       .from("testimonials")
       .insert({
-        author_name: user.email,
-        content: newTestimonial,
-        rating: rating,
+        author_name: authorName || "Аноним",
+        content: validation.data.content,
+        rating: validation.data.rating,
       });
 
     if (error) {
@@ -120,12 +156,16 @@ const TestimonialsPage = () => {
                     />
                   ))}
                 </div>
-                <Textarea
-                  placeholder="Ваш отзыв..."
-                  value={newTestimonial}
-                  onChange={(e) => setNewTestimonial(e.target.value)}
-                  rows={4}
-                />
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Ваш отзыв..."
+                    value={newTestimonial}
+                    onChange={(e) => setNewTestimonial(e.target.value)}
+                    rows={4}
+                    maxLength={1000}
+                  />
+                  {errors.content && <p className="text-sm text-destructive">{errors.content}</p>}
+                </div>
                 <Button onClick={submitTestimonial} disabled={loading}>
                   Отправить отзыв
                 </Button>

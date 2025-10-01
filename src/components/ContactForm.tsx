@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Phone, MessageCircle, Send, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { contactFormSchema } from "@/lib/validations";
 
 const ContactForm = () => {
   const { toast } = useToast();
@@ -17,6 +18,7 @@ const ContactForm = () => {
     message: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -28,25 +30,65 @@ const ContactForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate input
+    const validation = contactFormSchema.safeParse(formData);
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Проверьте правильность заполнения полей",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Save to database
+      // Check rate limiting (client-side check)
+      const lastSubmission = localStorage.getItem("lastContactSubmission");
+      if (lastSubmission) {
+        const timeSince = Date.now() - parseInt(lastSubmission);
+        const cooldownMinutes = 5;
+        if (timeSince < cooldownMinutes * 60 * 1000) {
+          const remainingMinutes = Math.ceil((cooldownMinutes * 60 * 1000 - timeSince) / 60000);
+          toast({
+            variant: "destructive",
+            title: "Слишком частые запросы",
+            description: `Пожалуйста, подождите ${remainingMinutes} мин. перед следующей заявкой`,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // Save to database with sanitized data
       const { error } = await supabase
         .from("contact_submissions")
         .insert({
-          name: formData.name,
-          phone: formData.phone,
-          email: formData.email,
-          message: formData.message,
+          name: validation.data.name,
+          phone: validation.data.phone,
+          email: validation.data.email || "",
+          message: validation.data.message,
         });
 
       if (error) throw error;
 
-      // Also send mailto as notification
+      // Store timestamp for rate limiting
+      localStorage.setItem("lastContactSubmission", Date.now().toString());
+
+      // Also send mailto as notification with encoded data
       const subject = encodeURIComponent("Заявка на консультацию с сайта");
       const body = encodeURIComponent(
-        `Имя: ${formData.name}\nТелефон: ${formData.phone}\nEmail: ${formData.email}\n\nСообщение:\n${formData.message}`
+        `Имя: ${validation.data.name}\nТелефон: ${validation.data.phone}\nEmail: ${validation.data.email || "не указан"}\n\nСообщение:\n${validation.data.message}`
       );
       
       window.location.href = `mailto:dompc9@gmail.com?subject=${subject}&body=${body}`;
@@ -112,8 +154,10 @@ const ContactForm = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="Введите ваше имя"
+                    maxLength={100}
                     required
                   />
+                  {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -125,8 +169,10 @@ const ContactForm = () => {
                     value={formData.phone}
                     onChange={handleInputChange}
                     placeholder="+7 (999) 123-45-67"
+                    maxLength={18}
                     required
                   />
+                  {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -138,7 +184,9 @@ const ContactForm = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="your@email.com"
+                    maxLength={255}
                   />
+                  {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -150,8 +198,10 @@ const ContactForm = () => {
                     onChange={handleInputChange}
                     placeholder="Расскажите подробно о вашей ситуации..."
                     rows={5}
+                    maxLength={2000}
                     required
                   />
+                  {errors.message && <p className="text-sm text-destructive">{errors.message}</p>}
                 </div>
 
                 <Button 

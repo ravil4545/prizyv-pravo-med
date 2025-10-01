@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { signUpSchema, signInSchema } from "@/lib/validations";
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ const AuthPage = () => {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Check if user is already logged in
@@ -39,19 +41,39 @@ const AuthPage = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate input
+    const validation = signUpSchema.safeParse({ email, password, fullName, phone });
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Проверьте правильность заполнения полей",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       const redirectUrl = `${window.location.origin}/`;
       
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: validation.data.email,
+        password: validation.data.password,
         options: {
           emailRedirectTo: redirectUrl,
           data: {
-            full_name: fullName,
-            phone: phone
+            full_name: validation.data.fullName,
+            phone: validation.data.phone || ""
           }
         }
       });
@@ -81,12 +103,32 @@ const AuthPage = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate input
+    const validation = signInSchema.safeParse({ email, password });
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Проверьте правильность заполнения полей",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: validation.data.email,
+        password: validation.data.password,
       });
 
       if (error) {
@@ -139,8 +181,10 @@ const AuthPage = () => {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      maxLength={255}
                       required
                     />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password-signin">Пароль</Label>
@@ -151,6 +195,7 @@ const AuthPage = () => {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                    {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Загрузка..." : "Войти"}
@@ -167,8 +212,10 @@ const AuthPage = () => {
                       type="text"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
+                      maxLength={100}
                       required
                     />
+                    {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Телефон</Label>
@@ -178,7 +225,9 @@ const AuthPage = () => {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+7"
+                      maxLength={18}
                     />
+                    {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email-signup">Email</Label>
@@ -187,19 +236,23 @@ const AuthPage = () => {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      maxLength={255}
                       required
                     />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password-signup">Пароль</Label>
+                    <Label htmlFor="password-signup">Пароль (мин. 8 символов, заглавная буква, цифра)</Label>
                     <Input
                       id="password-signup"
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      maxLength={72}
                       required
-                      minLength={6}
+                      minLength={8}
                     />
+                    {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Загрузка..." : "Зарегистрироваться"}

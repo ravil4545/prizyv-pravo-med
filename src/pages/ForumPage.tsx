@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, AlertCircle, FileText, Award } from "lucide-react";
+import { forumPostSchema } from "@/lib/validations";
 
 interface ForumPost {
   id: string;
@@ -28,6 +29,7 @@ const ForumPage = () => {
   const [newContent, setNewContent] = useState("");
   const [activeTopic, setActiveTopic] = useState<"urgent" | "diagnoses" | "success_stories">("urgent");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     checkUser();
@@ -66,7 +68,25 @@ const ForumPage = () => {
       return;
     }
 
-    if (!newTitle.trim() || !newContent.trim()) return;
+    setErrors({});
+
+    // Validate input
+    const validation = forumPostSchema.safeParse({ title: newTitle, content: newContent });
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Проверьте правильность заполнения полей",
+      });
+      return;
+    }
 
     setLoading(true);
 
@@ -74,8 +94,8 @@ const ForumPage = () => {
       .from("forum_posts")
       .insert({
         topic_type: activeTopic,
-        title: newTitle,
-        content: newContent,
+        title: validation.data.title,
+        content: validation.data.content,
         user_id: user.id,
       });
 
@@ -162,17 +182,25 @@ const ForumPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input
-                  placeholder="Заголовок..."
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                />
-                <Textarea
-                  placeholder="Содержание поста..."
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  rows={5}
-                />
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Заголовок..."
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    maxLength={200}
+                  />
+                  {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Содержание поста..."
+                    value={newContent}
+                    onChange={(e) => setNewContent(e.target.value)}
+                    rows={5}
+                    maxLength={5000}
+                  />
+                  {errors.content && <p className="text-sm text-destructive">{errors.content}</p>}
+                </div>
                 <Button onClick={createPost} disabled={loading}>
                   Опубликовать
                 </Button>
