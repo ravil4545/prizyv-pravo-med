@@ -55,28 +55,34 @@ export type Database = {
           created_at: string | null
           email: string
           id: string
+          ip_address: unknown | null
           message: string
           name: string
           phone: string
           status: string | null
+          user_agent: string | null
         }
         Insert: {
           created_at?: string | null
           email: string
           id?: string
+          ip_address?: unknown | null
           message: string
           name: string
           phone: string
           status?: string | null
+          user_agent?: string | null
         }
         Update: {
           created_at?: string | null
           email?: string
           id?: string
+          ip_address?: unknown | null
           message?: string
           name?: string
           phone?: string
           status?: string | null
+          user_agent?: string | null
         }
         Relationships: []
       }
