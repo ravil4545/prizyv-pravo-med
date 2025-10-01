@@ -53,39 +53,25 @@ const ContactForm = () => {
     setIsSubmitting(true);
 
     try {
-      // Check rate limiting (client-side check)
-      const lastSubmission = localStorage.getItem("lastContactSubmission");
-      if (lastSubmission) {
-        const timeSince = Date.now() - parseInt(lastSubmission);
-        const cooldownMinutes = 5;
-        if (timeSince < cooldownMinutes * 60 * 1000) {
-          const remainingMinutes = Math.ceil((cooldownMinutes * 60 * 1000 - timeSince) / 60000);
-          toast({
-            variant: "destructive",
-            title: "Слишком частые запросы",
-            description: `Пожалуйста, подождите ${remainingMinutes} мин. перед следующей заявкой`,
-          });
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      // Save to database with sanitized data
-      const { error } = await supabase
-        .from("contact_submissions")
-        .insert({
+      // Submit via secure edge function with server-side rate limiting
+      const { data, error } = await supabase.functions.invoke('submit-contact', {
+        body: {
           name: validation.data.name,
           phone: validation.data.phone,
           email: validation.data.email || "",
           message: validation.data.message,
-        });
+        }
+      });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || "Ошибка отправки");
+      }
 
-      // Store timestamp for rate limiting
-      localStorage.setItem("lastContactSubmission", Date.now().toString());
+      if (!data?.success) {
+        throw new Error(data?.message || "Ошибка при обработке заявки");
+      }
 
-      // Also send mailto as notification with encoded data
+      // Send mailto as notification with encoded data
       const subject = encodeURIComponent("Заявка на консультацию с сайта");
       const body = encodeURIComponent(
         `Имя: ${validation.data.name}\nТелефон: ${validation.data.phone}\nEmail: ${validation.data.email || "не указан"}\n\nСообщение:\n${validation.data.message}`
@@ -100,11 +86,20 @@ const ContactForm = () => {
 
       setFormData({ name: "", phone: "", email: "", message: "" });
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Ошибка отправки",
-        description: error.message || "Пожалуйста, попробуйте еще раз.",
-      });
+      // Handle rate limiting error specifically
+      if (error.message?.includes("подождите")) {
+        toast({
+          variant: "destructive",
+          title: "Слишком частые запросы",
+          description: error.message,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Ошибка отправки",
+          description: error.message || "Пожалуйста, попробуйте еще раз.",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
