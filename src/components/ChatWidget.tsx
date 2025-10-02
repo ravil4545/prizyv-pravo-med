@@ -211,9 +211,16 @@ const ChatWidget = () => {
         variant="cta"
         size="lg"
         onClick={() => setIsOpen(!isOpen)}
-        className="h-14 w-14 rounded-full shadow-strong hover:shadow-medium transition-bounce"
+        className="h-14 px-6 rounded-full shadow-strong hover:shadow-medium transition-bounce flex items-center gap-2"
       >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {isOpen ? (
+          <X className="h-6 w-6" />
+        ) : (
+          <>
+            <MessageCircle className="h-6 w-6" />
+            <span className="font-semibold">Free AI</span>
+          </>
+        )}
       </Button>
     </div>
   );
