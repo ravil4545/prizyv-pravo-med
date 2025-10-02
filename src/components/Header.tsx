@@ -1,13 +1,21 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, LogIn, LogOut } from "lucide-react";
+import { Phone, MessageCircle, Send, LogIn, LogOut, Menu } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -134,6 +142,91 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center space-x-2">
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="md:hidden hover:bg-gradient-soft hover:text-primary"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px]">
+                <SheetHeader>
+                  <SheetTitle>Навигация</SheetTitle>
+                </SheetHeader>
+                <nav className="flex flex-col space-y-4 mt-8">
+                  <Link 
+                    to="/" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Главная
+                  </Link>
+                  <Link 
+                    to="/services" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/services") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Услуги
+                  </Link>
+                  <Link 
+                    to="/testimonials" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/testimonials") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Отзывы
+                  </Link>
+                  <Link 
+                    to="/templates" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/templates") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Шаблоны
+                  </Link>
+                  <Link 
+                    to="/diagnoses" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/diagnoses") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Диагнозы
+                  </Link>
+                  <Link 
+                    to="/forum" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                      isActive("/forum") 
+                        ? "bg-gradient-soft text-primary font-semibold" 
+                        : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                    }`}
+                  >
+                    Форум
+                  </Link>
+                </nav>
+              </SheetContent>
+            </Sheet>
+
             <Button
               variant="ghost"
               size="sm"
