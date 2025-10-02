@@ -128,7 +128,7 @@ const ChatWidget = () => {
   return (
     <div className="fixed bottom-6 right-4 z-50">
       {isOpen && (
-        <Card className="mb-4 w-96 h-[500px] shadow-strong border-0 bg-background flex flex-col">
+        <Card className="mb-4 w-80 h-[500px] shadow-strong border-0 bg-background flex flex-col">
           <CardHeader className="pb-3 border-b">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">AI Консультант</CardTitle>
