@@ -10,6 +10,10 @@ import AuthPage from "./pages/AuthPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
 import DiagnosesPage from "./pages/DiagnosesPage";
 import ForumPage from "./pages/ForumPage";
+import BlogPage from "./pages/BlogPage";
+import DashboardPage from "./pages/DashboardPage";
+import UserTemplatesPage from "./pages/UserTemplatesPage";
+import AIChatDashboardPage from "./pages/AIChatDashboardPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +32,10 @@ const App = () => (
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/diagnoses" element={<DiagnosesPage />} />
           <Route path="/forum" element={<ForumPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
+          <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

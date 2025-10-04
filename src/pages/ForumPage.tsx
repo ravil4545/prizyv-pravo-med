@@ -14,7 +14,7 @@ import { forumPostSchema } from "@/lib/validations";
 
 interface ForumPost {
   id: string;
-  topic_type: "urgent" | "diagnoses" | "success_stories";
+  topic_type: "urgent" | "diagnoses" | "success_stories" | "legal" | "health" | "general";
   title: string;
   content: string;
   created_at: string;
@@ -126,6 +126,12 @@ const ForumPage = () => {
         return <FileText className="w-5 h-5" />;
       case "success_stories":
         return <Award className="w-5 h-5" />;
+      case "legal":
+        return <FileText className="w-5 h-5" />;
+      case "health":
+        return <FileText className="w-5 h-5" />;
+      case "general":
+        return <MessageCircle className="w-5 h-5" />;
       default:
         return <MessageCircle className="w-5 h-5" />;
     }
@@ -139,6 +145,12 @@ const ForumPage = () => {
         return "Непризывные диагнозы";
       case "success_stories":
         return "Истории успеха";
+      case "legal":
+        return "Юридические вопросы";
+      case "health":
+        return "Медицинские вопросы";
+      case "general":
+        return "Общие вопросы";
       default:
         return type;
     }
