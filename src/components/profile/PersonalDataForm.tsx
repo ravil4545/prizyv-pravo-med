@@ -57,9 +57,16 @@ const PersonalDataForm = ({ profile, onUpdate }: PersonalDataFormProps) => {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
+      // Конвертируем пустые строки в null для полей дат
+      const dataToUpdate = {
+        ...values,
+        birth_date: values.birth_date || null,
+        passport_issue_date: values.passport_issue_date || null,
+      };
+
       const { error } = await supabase
         .from("profiles")
-        .update(values)
+        .update(dataToUpdate)
         .eq("id", profile.id);
 
       if (error) throw error;
