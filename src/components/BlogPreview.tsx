@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
-import { ru } from "date-fns/locale";
 import { Link } from "react-router-dom";
+import { enhanceTypography } from "@/lib/typography";
 
 interface BlogPost {
   id: string;
@@ -88,7 +88,7 @@ const BlogPreview = () => {
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground line-clamp-3">
-                    {post.excerpt || post.content.substring(0, 120) + "..."}
+                    {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
                   </p>
                 </CardContent>
               </Card>

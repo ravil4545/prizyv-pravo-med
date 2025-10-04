@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Trash2 } from "lucide-react";
+import { enhanceTypography } from "@/lib/typography";
 
 interface Comment {
   id: string;
@@ -170,7 +171,7 @@ const BlogComments = ({ postId }: BlogCommentsProps) => {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap">{comment.content}</p>
+              <p className="whitespace-pre-wrap">{enhanceTypography(comment.content)}</p>
             </CardContent>
           </Card>
         ))}

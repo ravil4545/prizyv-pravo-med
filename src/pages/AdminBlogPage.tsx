@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Edit, Trash, MessageSquare, CheckCircle, Upload, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { enhanceTypography } from "@/lib/typography";
 
 interface BlogPost {
   id: string;
@@ -444,7 +445,7 @@ const AdminBlogPage = () => {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm mb-4 line-clamp-2">{post.excerpt || post.content}</p>
+                    <p className="text-sm mb-4 line-clamp-2">{enhanceTypography(post.excerpt || post.content)}</p>
                     <div className="flex gap-2">
                       <Button
                         size="sm"

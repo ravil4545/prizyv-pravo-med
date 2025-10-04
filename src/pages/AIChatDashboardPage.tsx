@@ -9,6 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Send, Plus, MessageSquare, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { enhanceTypography } from "@/lib/typography";
 
 interface Message {
   role: "user" | "assistant";
@@ -340,7 +343,15 @@ const AIChatDashboardPage = () => {
                             : "bg-muted"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        {message.role === "assistant" ? (
+                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {enhanceTypography(message.content)}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{enhanceTypography(message.content)}</p>
+                        )}
                       </div>
                     </div>
                   ))}

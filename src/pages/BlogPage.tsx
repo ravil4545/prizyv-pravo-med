@@ -6,10 +6,13 @@ import ChatWidget from "@/components/ChatWidget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, User } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import BlogComments from "@/components/BlogComments";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { enhanceTypography } from "@/lib/typography";
 
 interface BlogPost {
   id: string;
@@ -92,7 +95,11 @@ const BlogPage = () => {
                   </div>
                 )}
               </div>
-              <div className="whitespace-pre-line">{selectedPost.content}</div>
+              <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl prose-p:text-base prose-p:leading-relaxed prose-li:text-base prose-strong:text-foreground prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:border prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-img:rounded-lg prose-hr:border-border">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {enhanceTypography(selectedPost.content)}
+                </ReactMarkdown>
+              </div>
               <BlogComments postId={selectedPost.id} />
             </article>
           </div>

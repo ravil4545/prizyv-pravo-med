@@ -13,6 +13,7 @@ import { MessageCircle, AlertCircle, FileText, Award } from "lucide-react";
 import { forumPostSchema } from "@/lib/validations";
 import ForumComments from "@/components/ForumComments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { enhanceTypography } from "@/lib/typography";
 
 interface ForumPost {
   id: string;
@@ -247,7 +248,7 @@ const ForumPage = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-foreground/90 whitespace-pre-wrap line-clamp-3">{post.content}</p>
+                  <p className="text-foreground/90 whitespace-pre-wrap line-clamp-3">{enhanceTypography(post.content)}</p>
                 </CardContent>
               </Card>
             ))}
@@ -280,7 +281,7 @@ const ForumPage = () => {
                 {selectedPost && new Date(selectedPost.created_at).toLocaleDateString("ru-RU")}
               </span>
             </div>
-            <p className="whitespace-pre-wrap">{selectedPost?.content}</p>
+            <p className="whitespace-pre-wrap">{selectedPost && enhanceTypography(selectedPost.content)}</p>
             {selectedPost && <ForumComments postId={selectedPost.id} />}
           </div>
         </DialogContent>
