@@ -10,6 +10,8 @@ import WorkForm from "@/components/profile/WorkForm";
 import MilitaryForm from "@/components/profile/MilitaryForm";
 import DiagnosesForm from "@/components/profile/DiagnosesForm";
 import DocumentsGenerator from "@/components/profile/DocumentsGenerator";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { Loader2 } from "lucide-react";
 
 const ProfilePage = () => {
@@ -91,6 +93,7 @@ const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Header />
       <div className="container mx-auto py-8 px-4">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -139,6 +142,7 @@ const ProfilePage = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <Footer />
     </div>
   );
 };
