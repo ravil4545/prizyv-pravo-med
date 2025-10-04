@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, User } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import BlogComments from "@/components/BlogComments";
 
 interface BlogPost {
   id: string;
@@ -84,6 +85,7 @@ const BlogPage = () => {
                 )}
               </div>
               <div className="whitespace-pre-line">{selectedPost.content}</div>
+              <BlogComments postId={selectedPost.id} />
             </article>
           </div>
         ) : (

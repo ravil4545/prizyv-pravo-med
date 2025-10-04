@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle, XCircle, Eye } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Eye, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ForumPost {
@@ -141,6 +141,28 @@ const AdminForumPage = () => {
     }
   };
 
+  const deletePost = async (postId: string) => {
+    const { error } = await supabase
+      .from("forum_posts")
+      .delete()
+      .eq("id", postId);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить тему",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Удалено",
+        description: "Тема удалена",
+      });
+      loadPosts();
+      setSelectedPost(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
       pending: "secondary",
@@ -230,6 +252,14 @@ const AdminForumPage = () => {
                         </Button>
                       </>
                     )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deletePost(post.id)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Удалить
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -251,21 +281,30 @@ const AdminForumPage = () => {
               {selectedPost && getStatusBadge(selectedPost.status)}
             </div>
             <p className="whitespace-pre-wrap">{selectedPost?.content}</p>
-            {selectedPost?.status === "pending" && (
-              <div className="flex gap-2 pt-4 border-t">
-                <Button onClick={() => updatePostStatus(selectedPost.id, "approved")}>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Одобрить
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => updatePostStatus(selectedPost.id, "rejected")}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Отклонить
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-2 pt-4 border-t">
+              {selectedPost?.status === "pending" && (
+                <>
+                  <Button onClick={() => updatePostStatus(selectedPost.id, "approved")}>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Одобрить
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => updatePostStatus(selectedPost.id, "rejected")}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Отклонить
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="destructive"
+                onClick={() => deletePost(selectedPost!.id)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Удалить
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, AlertCircle, FileText, Award } from "lucide-react";
 import { forumPostSchema } from "@/lib/validations";
+import ForumComments from "@/components/ForumComments";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ForumPost {
   id: string;
@@ -30,6 +32,7 @@ const ForumPage = () => {
   const [activeTopic, setActiveTopic] = useState<"urgent" | "diagnoses" | "success_stories">("urgent");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -222,7 +225,11 @@ const ForumPage = () => {
 
           <div className="space-y-6">
             {filteredPosts.map((post) => (
-              <Card key={post.id} className="glass-card hover-lift">
+              <Card 
+                key={post.id} 
+                className="glass-card hover-lift cursor-pointer"
+                onClick={() => setSelectedPost(post)}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -240,7 +247,7 @@ const ForumPage = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-foreground/90 whitespace-pre-wrap">{post.content}</p>
+                  <p className="text-foreground/90 whitespace-pre-wrap line-clamp-3">{post.content}</p>
                 </CardContent>
               </Card>
             ))}
@@ -257,6 +264,27 @@ const ForumPage = () => {
       </main>
 
       <Footer />
+
+      <Dialog open={!!selectedPost} onOpenChange={() => setSelectedPost(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedPost?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              {selectedPost && getTopicIcon(selectedPost.topic_type)}
+              <Badge variant="outline">
+                {selectedPost && getTopicLabel(selectedPost.topic_type)}
+              </Badge>
+              <span className="text-sm text-muted-foreground ml-auto">
+                {selectedPost && new Date(selectedPost.created_at).toLocaleDateString("ru-RU")}
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap">{selectedPost?.content}</p>
+            {selectedPost && <ForumComments postId={selectedPost.id} />}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
