@@ -12,7 +12,7 @@ import { ru } from "date-fns/locale";
 import BlogComments from "@/components/BlogComments";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { enhanceTypography } from "@/lib/typography";
+import { enhanceTypography, textToMarkdown } from "@/lib/typography";
 
 interface BlogPost {
   id: string;
@@ -95,9 +95,24 @@ const BlogPage = () => {
                   </div>
                 )}
               </div>
-              <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl prose-p:text-base prose-p:leading-relaxed prose-li:text-base prose-strong:text-foreground prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:border prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-img:rounded-lg prose-hr:border-border">
+              <div className="prose prose-slate dark:prose-invert max-w-none 
+                prose-headings:font-bold prose-headings:text-foreground prose-headings:mt-8 prose-headings:mb-4
+                prose-h1:text-4xl prose-h1:mt-0
+                prose-h2:text-3xl prose-h2:border-b prose-h2:border-border prose-h2:pb-2
+                prose-h3:text-2xl 
+                prose-h4:text-xl
+                prose-p:text-base prose-p:leading-relaxed prose-p:mb-4 prose-p:text-foreground
+                prose-strong:font-semibold prose-strong:text-foreground
+                prose-li:text-base prose-li:leading-relaxed prose-li:mb-2
+                prose-ul:my-4 prose-ol:my-4
+                prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                prose-pre:bg-muted prose-pre:border prose-pre:p-4 prose-pre:rounded-lg
+                prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
+                prose-img:rounded-lg prose-img:shadow-lg
+                prose-hr:border-border prose-hr:my-8">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {enhanceTypography(selectedPost.content)}
+                  {enhanceTypography(textToMarkdown(selectedPost.content))}
                 </ReactMarkdown>
               </div>
               <BlogComments postId={selectedPost.id} />
