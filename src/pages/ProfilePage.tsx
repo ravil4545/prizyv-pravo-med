@@ -10,7 +10,6 @@ import WorkForm from "@/components/profile/WorkForm";
 import MilitaryForm from "@/components/profile/MilitaryForm";
 import DiagnosesForm from "@/components/profile/DiagnosesForm";
 import DocumentsGenerator from "@/components/profile/DocumentsGenerator";
-import ContactForm from "@/components/ContactForm";
 import { Loader2 } from "lucide-react";
 
 const ProfilePage = () => {
@@ -105,9 +104,8 @@ const ProfilePage = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="questionnaire" className="w-full">
-          <TabsList className="grid w-full grid-cols-7 mb-8">
-            <TabsTrigger value="questionnaire">Анкета</TabsTrigger>
+        <Tabs defaultValue="personal" className="w-full">
+          <TabsList className="grid w-full grid-cols-6 mb-8">
             <TabsTrigger value="personal">Личные данные</TabsTrigger>
             <TabsTrigger value="education">Образование</TabsTrigger>
             <TabsTrigger value="work">Работа</TabsTrigger>
@@ -115,10 +113,6 @@ const ProfilePage = () => {
             <TabsTrigger value="diagnoses">Диагнозы</TabsTrigger>
             <TabsTrigger value="documents">Документы</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="questionnaire">
-            <ContactForm />
-          </TabsContent>
 
           <TabsContent value="personal">
             <PersonalDataForm profile={profile} onUpdate={loadProfile} />
