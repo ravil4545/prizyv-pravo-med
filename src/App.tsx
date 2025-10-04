@@ -19,6 +19,7 @@ import AdminBlogPage from "./pages/AdminBlogPage";
 import AdminTestimonialsPage from "./pages/AdminTestimonialsPage";
 import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import ProfilePage from "./pages/ProfilePage";
+import MedicalDocumentsPage from "./pages/MedicalDocumentsPage";
 import NotFound from "./pages/NotFound";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
@@ -53,6 +54,7 @@ const App = () => (
           <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
           <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/medical-documents" element={<MedicalDocumentsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

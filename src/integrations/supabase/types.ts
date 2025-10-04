@@ -377,6 +377,51 @@ export type Database = {
         }
         Relationships: []
       }
+      medical_documents: {
+        Row: {
+          ai_analysis: Json | null
+          ai_fitness_category: string | null
+          ai_recommendations: string | null
+          created_at: string
+          document_type: string
+          extracted_text: string | null
+          file_name: string
+          file_path: string
+          id: string
+          updated_at: string
+          upload_date: string
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string | null
+          created_at?: string
+          document_type: string
+          extracted_text?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          updated_at?: string
+          upload_date?: string
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string | null
+          created_at?: string
+          document_type?: string
+          extracted_text?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          updated_at?: string
+          upload_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           actual_address: string | null

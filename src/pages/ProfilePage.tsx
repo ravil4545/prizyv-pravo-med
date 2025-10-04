@@ -108,13 +108,14 @@ const ProfilePage = () => {
         </div>
 
         <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-8">
+          <TabsList className="grid w-full grid-cols-7 mb-8">
             <TabsTrigger value="personal">Личные данные</TabsTrigger>
             <TabsTrigger value="education">Образование</TabsTrigger>
             <TabsTrigger value="work">Работа</TabsTrigger>
             <TabsTrigger value="military">Военкомат</TabsTrigger>
             <TabsTrigger value="diagnoses">Диагнозы</TabsTrigger>
-            <TabsTrigger value="documents">Документы</TabsTrigger>
+            <TabsTrigger value="documents">Шаблоны</TabsTrigger>
+            <TabsTrigger value="medical-docs">Мед. документы</TabsTrigger>
           </TabsList>
 
           <TabsContent value="personal">
@@ -139,6 +140,17 @@ const ProfilePage = () => {
 
           <TabsContent value="documents">
             <DocumentsGenerator profile={profile} userId={user?.id} />
+          </TabsContent>
+
+          <TabsContent value="medical-docs">
+            <div className="text-center py-8">
+              <p className="mb-4 text-muted-foreground">
+                Управляйте своими медицинскими документами на отдельной странице
+              </p>
+              <Button onClick={() => navigate("/medical-documents")}>
+                Перейти к медицинским документам
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
