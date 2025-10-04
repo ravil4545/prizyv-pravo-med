@@ -37,73 +37,100 @@ export function textToMarkdown(text: string): string {
   if (!text) return text;
   
   // Если текст уже содержит markdown-разметку, возвращаем как есть
-  if (text.includes('#') || text.includes('**') || text.includes('##')) {
+  if (text.includes('##') && text.includes('**')) {
     return text;
   }
   
   let lines = text.split('\n');
   let result: string[] = [];
+  let inList = false;
   
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
     
+    // Пустая строка - добавляем разрыв абзаца
     if (!line) {
+      if (inList) {
+        inList = false;
+      }
       result.push('');
       continue;
     }
     
-    // Определяем заголовки по паттернам
-    // H2: строки, которые заканчиваются без точки и следующая строка - обычный текст
+    // H2: Основные заголовки (начинаются с цифры и точки, например "1. Заголовок")
+    if (line.match(/^\d+\.\s+[А-ЯЁA-Z]/)) {
+      result.push('');
+      result.push(`## ${line}`);
+      result.push('');
+      inList = false;
+      continue;
+    }
+    
+    // H3: Подзаголовки (короткие строки с заглавной буквы без точки в конце)
     if (
-      line.length < 100 && 
+      line.length < 80 && 
+      line.match(/^[А-ЯЁA-Z]/) &&
       !line.endsWith('.') && 
       !line.endsWith(',') && 
       !line.endsWith(':') &&
-      !line.match(/^\d+\./) && // не начинается с цифры и точки
+      !line.match(/^\d+\)/) &&
+      !line.match(/^[•\-\*\–\—]/) &&
       i + 1 < lines.length && 
       lines[i + 1].trim().length > 0
     ) {
-      // Проверяем, не часть ли это списка
       const nextLine = lines[i + 1].trim();
-      if (!nextLine.match(/^[•\-\*]/)) {
-        result.push(`## ${line}`);
+      // Проверяем, что следующая строка не список
+      if (!nextLine.match(/^[•\-\*\–\—]/) && !nextLine.match(/^\d+\)/)) {
+        result.push('');
+        result.push(`### ${line}`);
+        result.push('');
+        inList = false;
         continue;
       }
     }
     
-    // H3: Подзаголовки (более короткие строки без точки)
-    if (
-      line.length < 50 && 
-      !line.endsWith('.') && 
-      !line.endsWith(',') &&
-      !line.match(/^\d+\./) &&
-      line.match(/^[А-ЯЁA-Z]/)
-    ) {
-      result.push(`### ${line}`);
+    // Нумерованные подсписки с круглой скобкой (1) 2) 3))
+    if (line.match(/^\d+\)\s+/)) {
+      if (!inList) {
+        result.push('');
+      }
+      result.push(line.replace(/^(\d+)\)\s+/, '$1. '));
+      inList = true;
       continue;
     }
     
-    // Нумерованные списки
-    if (line.match(/^\d+\./)) {
+    // Маркированные списки (•, -, *, –, —)
+    if (line.match(/^[•\-\*\–\—]\s+/)) {
+      if (!inList) {
+        result.push('');
+      }
+      result.push(line.replace(/^[•\–\—]/, '-'));
+      inList = true;
+      continue;
+    }
+    
+    // Жирный текст для важных терминов и фраз
+    // 1. Фразы с двоеточием (Важно: текст)
+    if (line.match(/^[А-ЯЁA-Z][а-яёa-zA-Z\s]+:/)) {
+      line = line.replace(/^([^:]+):/, '**$1:**');
+    }
+    
+    // 2. Текст в кавычках делаем жирным
+    line = line.replace(/«([^»]+)»/g, '**«$1»**');
+    
+    // 3. Критерии, правила и другие ключевые фразы
+    line = line.replace(/\b(Критерии для освобождения|Как подтвердить|Важно|Внимание|Примечание|Обратите внимание)\b/g, '**$1**');
+    
+    // Добавляем обычный текст
+    if (inList) {
       result.push(line);
-      continue;
+    } else {
+      if (result.length > 0 && result[result.length - 1] !== '') {
+        result.push('');
+      }
+      result.push(line);
     }
-    
-    // Маркированные списки
-    if (line.match(/^[•\-\*]/)) {
-      result.push(line.replace(/^[•]/, '-'));
-      continue;
-    }
-    
-    // Жирный текст для важных фраз (в скобках или с двоеточием в конце)
-    if (line.match(/^[А-ЯЁ][а-яё\s]+:/)) {
-      result.push(line.replace(/^([^:]+):/, '**$1:**'));
-      continue;
-    }
-    
-    // Обычный текст
-    result.push(line);
   }
   
-  return result.join('\n\n');
+  return result.join('\n');
 }
