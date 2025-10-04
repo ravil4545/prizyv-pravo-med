@@ -69,12 +69,16 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
 
       if (error) throw error;
 
-      // Создаем blob из текста и скачиваем
-      const blob = new Blob([data], { type: 'text/plain;charset=utf-8' });
+      // Создаем blob и скачиваем
+      const mimeType = format === 'docx' 
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      
+      const blob = new Blob([data], { type: mimeType });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${docType}.txt`;
+      a.download = `${docType}.${format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

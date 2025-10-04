@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "https://esm.sh/docx@8.5.0";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,39 +43,57 @@ serve(async (req) => {
     console.log('Profile data loaded:', { profile, diagnoses });
 
     // Генерируем контент документа в зависимости от типа
-    let content = '';
+    let textContent = '';
     
     switch (docType) {
       case 'priobschenie':
-        content = generatePriobschenieDocument(profile, diagnoses || []);
+        textContent = generatePriobschenieDocument(profile, diagnoses || []);
         break;
       case 'vypiska':
-        content = generateVypiskaDocument(profile);
+        textContent = generateVypiskaDocument(profile);
         break;
       case 'obzhalovanie':
-        content = generateObzhalovanieDocument(profile, diagnoses || []);
+        textContent = generateObzhalovanieDocument(profile, diagnoses || []);
         break;
       case 'prokuratura':
-        content = generateProkuraturaDocument(profile);
+        textContent = generateProkuraturaDocument(profile);
         break;
       case 'isk_sud':
-        content = generateIskSudDocument(profile, diagnoses || []);
+        textContent = generateIskSudDocument(profile, diagnoses || []);
         break;
       case 'apellyaciya':
-        content = generateApellyaciyaDocument(profile);
+        textContent = generateApellyaciyaDocument(profile);
         break;
       default:
         throw new Error('Неизвестный тип документа');
     }
 
-    // Возвращаем текстовый документ
-    return new Response(content, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${docType}.txt"`,
-      },
-    });
+    // Генерируем файл в зависимости от формата
+    if (format === 'docx') {
+      const doc = generateDocxDocument(textContent);
+      const buffer = await Packer.toBuffer(doc);
+      
+      return new Response(buffer, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': `attachment; filename="${docType}.docx"`,
+        },
+      });
+    } else if (format === 'xlsx') {
+      const workbook = generateXlsxDocument(textContent);
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+      return new Response(buffer, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${docType}.xlsx"`,
+        },
+      });
+    } else {
+      throw new Error('Неподдерживаемый формат');
+    }
 
   } catch (error) {
     console.error('Error generating document:', error);
@@ -281,4 +301,47 @@ ${profile.registration_address || '[Адрес регистрации]'}
 
 Дата: ${new Date().toLocaleDateString('ru-RU')}
 Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+}
+
+function generateDocxDocument(textContent: string): Document {
+  const lines = textContent.split('\n');
+  const paragraphs = lines.map(line => {
+    const trimmedLine = line.trim();
+    
+    // Определяем, является ли строка заголовком (в верхнем регистре)
+    const isHeading = trimmedLine === trimmedLine.toUpperCase() && 
+                      trimmedLine.length > 0 && 
+                      trimmedLine.length < 100 &&
+                      !trimmedLine.startsWith('От:') &&
+                      !trimmedLine.startsWith('Дата:');
+    
+    if (isHeading && trimmedLine.length > 0) {
+      return new Paragraph({
+        text: trimmedLine,
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 240, after: 120 },
+      });
+    }
+    
+    return new Paragraph({
+      children: [new TextRun(line)],
+      spacing: { after: 120 },
+    });
+  });
+
+  return new Document({
+    sections: [{
+      properties: {},
+      children: paragraphs,
+    }],
+  });
+}
+
+function generateXlsxDocument(textContent: string) {
+  const lines = textContent.split('\n').map(line => [line]);
+  const worksheet = XLSX.utils.aoa_to_sheet(lines);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Документ');
+  
+  return workbook;
 }
