@@ -386,9 +386,8 @@ const AdminForumPage = () => {
                 )}
               </TabsTrigger>
             </TabsList>
-          </Tabs>
 
-          <TabsContent value="posts">
+            <TabsContent value="posts">
             <div className="grid gap-4">
               {posts.map((post) => (
                 <Card key={post.id}>
@@ -456,9 +455,9 @@ const AdminForumPage = () => {
                 </Card>
               ))}
             </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="comments">
+            <TabsContent value="comments">
             <div className="space-y-4">
               {comments.length === 0 ? (
                 <Card>
@@ -517,7 +516,8 @@ const AdminForumPage = () => {
                 ))
               )}
             </div>
-          </TabsContent>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
       <Footer />

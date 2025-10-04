@@ -358,9 +358,8 @@ const AdminBlogPage = () => {
                 )}
               </TabsTrigger>
             </TabsList>
-          </Tabs>
 
-          <TabsContent value="posts">
+            <TabsContent value="posts">
             <div className="grid gap-4">
               {posts.map((post) => (
                 <Card key={post.id}>
@@ -409,9 +408,9 @@ const AdminBlogPage = () => {
                 </Card>
               )}
             </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="comments">
+            <TabsContent value="comments">
             <div className="space-y-4">
               {comments.length === 0 ? (
                 <Card>
@@ -470,7 +469,8 @@ const AdminBlogPage = () => {
                 ))
               )}
             </div>
-          </TabsContent>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
       <Footer />
