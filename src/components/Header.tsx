@@ -152,18 +152,32 @@ const Header = () => {
               Блог
             </Link>
             {user && (
-              <Link 
-                to="/dashboard" 
-                className={`text-sm font-medium transition-all duration-300 relative ${
-                  isActive("/dashboard") 
-                    ? "text-primary font-semibold" 
-                    : "text-foreground hover:text-primary"
-                } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
-                  isActive("/dashboard") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
-                } after:transition-transform after:duration-300`}
-              >
-                Кабинет
-              </Link>
+              <>
+                <Link 
+                  to="/dashboard" 
+                  className={`text-sm font-medium transition-all duration-300 relative ${
+                    isActive("/dashboard") 
+                      ? "text-primary font-semibold" 
+                      : "text-foreground hover:text-primary"
+                  } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                    isActive("/dashboard") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+                  } after:transition-transform after:duration-300`}
+                >
+                  Кабинет
+                </Link>
+                <Link 
+                  to="/profile" 
+                  className={`text-sm font-medium transition-all duration-300 relative ${
+                    isActive("/profile") 
+                      ? "text-primary font-semibold" 
+                      : "text-foreground hover:text-primary"
+                  } after:content-[''] after:absolute after:w-full after:h-0.5 after:bg-gradient-primary after:bottom-[-4px] after:left-0 after:transform after:origin-center ${
+                    isActive("/profile") ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"
+                  } after:transition-transform after:duration-300`}
+                >
+                  Анкета
+                </Link>
+              </>
             )}
           </nav>
 
@@ -261,17 +275,30 @@ const Header = () => {
                     Блог
                   </Link>
                   {user && (
-                    <Link 
-                      to="/dashboard" 
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
-                        isActive("/dashboard") 
-                          ? "bg-gradient-soft text-primary font-semibold" 
-                          : "text-foreground hover:bg-gradient-soft hover:text-primary"
-                      }`}
-                    >
-                      Личный кабинет
-                    </Link>
+                    <>
+                      <Link 
+                        to="/dashboard" 
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                          isActive("/dashboard") 
+                            ? "bg-gradient-soft text-primary font-semibold" 
+                            : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                        }`}
+                      >
+                        Кабинет
+                      </Link>
+                      <Link 
+                        to="/profile" 
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`text-base font-medium py-2 px-4 rounded-lg transition-all duration-300 ${
+                          isActive("/profile") 
+                            ? "bg-gradient-soft text-primary font-semibold" 
+                            : "text-foreground hover:bg-gradient-soft hover:text-primary"
+                        }`}
+                      >
+                        Анкета
+                      </Link>
+                    </>
                   )}
                 </nav>
               </SheetContent>

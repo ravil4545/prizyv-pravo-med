@@ -379,25 +379,115 @@ export type Database = {
       }
       profiles: {
         Row: {
+          actual_address: string | null
+          birth_date: string | null
+          birth_place: string | null
+          city: string | null
+          court_by_military: string | null
+          court_by_registration: string | null
           created_at: string | null
+          education_course: string | null
+          education_institution: string | null
+          education_specialty: string | null
+          education_type: string | null
           full_name: string | null
           id: string
+          military_commissariat: string | null
+          military_commissariat_address: string | null
+          passport_code: string | null
+          passport_issue_date: string | null
+          passport_issued_by: string | null
+          passport_number: string | null
+          passport_series: string | null
           phone: string | null
+          prosecutor_office: string | null
+          region: string | null
+          registration_address: string | null
+          superior_military_commissariat: string | null
+          superior_military_commissariat_address: string | null
           updated_at: string | null
+          work_address: string | null
+          work_place: string | null
+          work_position: string | null
         }
         Insert: {
+          actual_address?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          city?: string | null
+          court_by_military?: string | null
+          court_by_registration?: string | null
           created_at?: string | null
+          education_course?: string | null
+          education_institution?: string | null
+          education_specialty?: string | null
+          education_type?: string | null
           full_name?: string | null
           id: string
+          military_commissariat?: string | null
+          military_commissariat_address?: string | null
+          passport_code?: string | null
+          passport_issue_date?: string | null
+          passport_issued_by?: string | null
+          passport_number?: string | null
+          passport_series?: string | null
           phone?: string | null
+          prosecutor_office?: string | null
+          region?: string | null
+          registration_address?: string | null
+          superior_military_commissariat?: string | null
+          superior_military_commissariat_address?: string | null
           updated_at?: string | null
+          work_address?: string | null
+          work_place?: string | null
+          work_position?: string | null
         }
         Update: {
+          actual_address?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          city?: string | null
+          court_by_military?: string | null
+          court_by_registration?: string | null
           created_at?: string | null
+          education_course?: string | null
+          education_institution?: string | null
+          education_specialty?: string | null
+          education_type?: string | null
           full_name?: string | null
           id?: string
+          military_commissariat?: string | null
+          military_commissariat_address?: string | null
+          passport_code?: string | null
+          passport_issue_date?: string | null
+          passport_issued_by?: string | null
+          passport_number?: string | null
+          passport_series?: string | null
           phone?: string | null
+          prosecutor_office?: string | null
+          region?: string | null
+          registration_address?: string | null
+          superior_military_commissariat?: string | null
+          superior_military_commissariat_address?: string | null
           updated_at?: string | null
+          work_address?: string | null
+          work_place?: string | null
+          work_position?: string | null
+        }
+        Relationships: []
+      }
+      "ravil4545@gmail.com": {
+        Row: {
+          created_at: string
+          id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
         }
         Relationships: []
       }
@@ -430,6 +520,56 @@ export type Database = {
           status?: string | null
         }
         Relationships: []
+      }
+      user_diagnoses: {
+        Row: {
+          ai_fitness_category: string | null
+          created_at: string | null
+          diagnosis_code: string | null
+          diagnosis_name: string
+          id: string
+          medical_documents: string | null
+          notes: string | null
+          updated_at: string | null
+          user_article: string | null
+          user_fitness_category: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_fitness_category?: string | null
+          created_at?: string | null
+          diagnosis_code?: string | null
+          diagnosis_name: string
+          id?: string
+          medical_documents?: string | null
+          notes?: string | null
+          updated_at?: string | null
+          user_article?: string | null
+          user_fitness_category?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_fitness_category?: string | null
+          created_at?: string | null
+          diagnosis_code?: string | null
+          diagnosis_name?: string
+          id?: string
+          medical_documents?: string | null
+          notes?: string | null
+          updated_at?: string | null
+          user_article?: string | null
+          user_fitness_category?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_diagnoses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

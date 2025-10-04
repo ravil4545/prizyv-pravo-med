@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.submit-contact]
 verify_jwt = false
+
+[functions.find-government-structures]
+verify_jwt = true
+
+[functions.analyze-diagnosis]
+verify_jwt = true
