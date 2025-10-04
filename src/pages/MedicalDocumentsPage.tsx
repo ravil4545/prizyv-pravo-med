@@ -448,61 +448,91 @@ export default function MedicalDocumentsPage() {
                   <Button
                     variant="outline"
                     onClick={async () => {
-                      const { data } = await supabase.storage
-                        .from("medical-documents")
-                        .download(doc.file_path);
-                      if (data) {
-                        const url = URL.createObjectURL(data);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = doc.file_name;
-                        a.click();
+                      try {
+                        const { data, error } = await supabase.storage
+                          .from("medical-documents")
+                          .download(doc.file_path);
+                        
+                        if (error) throw error;
+                        
+                        if (data) {
+                          const url = URL.createObjectURL(data);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = doc.file_name;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                          toast({
+                            title: "Успех",
+                            description: "Документ скачан",
+                          });
+                        }
+                      } catch (error) {
+                        console.error("Download error:", error);
+                        toast({
+                          title: "Ошибка",
+                          description: "Не удалось скачать документ",
+                          variant: "destructive",
+                        });
                       }
                     }}
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Скачать JPEG
+                    Скачать
                   </Button>
                   
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      const { data } = await supabase.storage
-                        .from("medical-documents")
-                        .download(doc.file_path);
-                      if (data) {
-                        const url = URL.createObjectURL(data);
-                        window.open(url, '_blank');
-                      }
-                    }}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Просмотр
-                  </Button>
-                </div>
-
-                {doc.ai_fitness_category && doc.ai_recommendations && (
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button className="mb-4">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Резюме ИИ
+                      <Button variant="outline">
+                        <Eye className="h-4 w-4 mr-2" />
+                        Просмотр
                       </Button>
                     </DialogTrigger>
+                    <DialogContent className="max-w-4xl max-h-[90vh]">
+                      <DialogHeader>
+                        <DialogTitle>{doc.file_name}</DialogTitle>
+                      </DialogHeader>
+                      <ScrollArea className="h-[70vh] w-full">
+                        <img 
+                          src={`${supabase.storage.from("medical-documents").getPublicUrl(doc.file_path).data.publicUrl}`}
+                          alt={doc.file_name}
+                          className="w-full h-auto"
+                        />
+                      </ScrollArea>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button className="mb-4">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Резюме ИИ
+                    </Button>
+                  </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[80vh]">
                       <DialogHeader>
                         <DialogTitle>Резюме анализа ИИ</DialogTitle>
                       </DialogHeader>
                       <ScrollArea className="h-[60vh] pr-4">
                         <div className="space-y-4">
-                          <div>
-                            <h4 className="font-semibold mb-2">Категория годности:</h4>
-                            <p>{doc.ai_fitness_category}</p>
-                          </div>
-                          <div>
-                            <h4 className="font-semibold mb-2">Рекомендации:</h4>
-                            <pre className="text-sm whitespace-pre-wrap">{doc.ai_recommendations}</pre>
-                          </div>
+                          {doc.ai_fitness_category && (
+                            <div>
+                              <h4 className="font-semibold mb-2">Категория годности:</h4>
+                              <p>{doc.ai_fitness_category}</p>
+                            </div>
+                          )}
+                          {doc.ai_recommendations && (
+                            <div>
+                              <h4 className="font-semibold mb-2">Рекомендации:</h4>
+                              <pre className="text-sm whitespace-pre-wrap">{doc.ai_recommendations}</pre>
+                            </div>
+                          )}
+                          {!doc.ai_fitness_category && !doc.ai_recommendations && (
+                            <p className="text-muted-foreground">Резюме ИИ пока недоступно. Попробуйте загрузить документ заново.</p>
+                          )}
                         </div>
                       </ScrollArea>
                       <div className="flex gap-2 mt-4">
@@ -536,8 +566,7 @@ export default function MedicalDocumentsPage() {
                         </Button>
                       </div>
                     </DialogContent>
-                  </Dialog>
-                )}
+                </Dialog>
 
                 {doc.extracted_text && (
                   <Dialog>
