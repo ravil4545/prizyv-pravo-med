@@ -88,6 +88,12 @@ export default function MedicalDocumentsPage() {
   };
 
   const compressImage = async (file: File): Promise<Blob> => {
+    // Проверяем тип файла
+    if (file.type === 'application/pdf') {
+      // Для PDF возвращаем как есть
+      return file;
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -97,6 +103,11 @@ export default function MedicalDocumentsPage() {
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
           
           // Максимальные размеры
           const MAX_WIDTH = 1920;
@@ -119,7 +130,7 @@ export default function MedicalDocumentsPage() {
           
           canvas.width = width;
           canvas.height = height;
-          ctx?.drawImage(img, 0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
           
           canvas.toBlob((blob) => {
             if (blob) {
@@ -129,9 +140,9 @@ export default function MedicalDocumentsPage() {
             }
           }, 'image/jpeg', 0.8);
         };
-        img.onerror = reject;
+        img.onerror = () => reject(new Error('Failed to load image'));
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error('Failed to read file'));
     });
   };
 
@@ -149,85 +160,99 @@ export default function MedicalDocumentsPage() {
     
     try {
       // Компрессия изображения
+      console.log("Starting file compression...");
       toast({
         title: "Обработка",
         description: "Сжатие изображения...",
       });
 
       const compressedBlob = await compressImage(selectedFile);
+      console.log("File compressed successfully");
       
       // Загрузка в Supabase Storage
-      const fileName = `${user.id}/${Date.now()}.jpg`;
+      const fileExtension = selectedFile.type === 'application/pdf' ? 'pdf' : 'jpg';
+      const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
+      console.log("Uploading to storage:", fileName);
+      
       const { error: uploadError } = await supabase.storage
         .from("medical-documents")
         .upload(fileName, compressedBlob, {
-          contentType: "image/jpeg",
+          contentType: selectedFile.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg',
           cacheControl: "3600",
         });
 
-      if (uploadError) throw uploadError;
-
-      // Получение публичного URL для анализа
-      const { data: { publicUrl } } = supabase.storage
-        .from("medical-documents")
-        .getPublicUrl(fileName);
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw uploadError;
+      }
+      console.log("File uploaded successfully");
 
       // Конвертация в base64 для отправки в AI
-      const reader = new FileReader();
-      reader.readAsDataURL(compressedBlob);
-      reader.onloadend = async () => {
-        const base64Image = reader.result as string;
+      console.log("Converting to base64...");
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(compressedBlob);
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to convert to base64'));
+      });
 
-        // Анализ документа с помощью AI
-        toast({
-          title: "Анализ",
-          description: "ИИ анализирует документ...",
-        });
+      console.log("Starting AI analysis...");
+      // Анализ документа с помощью AI
+      toast({
+        title: "Анализ",
+        description: "ИИ анализирует документ...",
+      });
 
-        const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
-          "analyze-medical-document",
-          {
-            body: {
-              imageBase64: base64Image,
-              documentType: documentType,
-            },
-          }
-        );
-
-        if (analysisError) {
-          console.error("Analysis error:", analysisError);
+      const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
+        "analyze-medical-document",
+        {
+          body: {
+            imageBase64: base64Image,
+            documentType: documentType,
+          },
         }
+      );
 
-        // Сохранение метаданных в базу данных
-        const { error: dbError } = await supabase
-          .from("medical_documents")
-          .insert({
-            user_id: user.id,
-            file_name: selectedFile.name,
-            file_path: fileName,
-            document_type: documentType,
-            extracted_text: analysisData?.extractedText || null,
-            ai_fitness_category: analysisData?.fitnessCategory || null,
-            ai_recommendations: analysisData?.recommendations?.join('\n') || null,
-          });
+      if (analysisError) {
+        console.error("Analysis error:", analysisError);
+      } else {
+        console.log("AI analysis completed:", analysisData);
+      }
 
-        if (dbError) throw dbError;
-
-        toast({
-          title: "Успех",
-          description: "Документ успешно загружен и проанализирован",
+      // Сохранение метаданных в базу данных
+      console.log("Saving to database...");
+      const { error: dbError } = await supabase
+        .from("medical_documents")
+        .insert({
+          user_id: user.id,
+          file_name: selectedFile.name,
+          file_path: fileName,
+          document_type: documentType,
+          extracted_text: analysisData?.extractedText || null,
+          ai_fitness_category: analysisData?.fitnessCategory || null,
+          ai_recommendations: analysisData?.recommendations?.join('\n') || null,
         });
 
-        setSelectedFile(null);
-        setDocumentType("");
-        loadDocuments();
-      };
+      if (dbError) {
+        console.error("Database error:", dbError);
+        throw dbError;
+      }
 
-    } catch (error) {
+      console.log("Document saved successfully");
+      toast({
+        title: "Успех",
+        description: "Документ успешно загружен и проанализирован",
+      });
+
+      setSelectedFile(null);
+      setDocumentType("");
+      await loadDocuments();
+
+    } catch (error: any) {
       console.error("Error uploading document:", error);
       toast({
         title: "Ошибка",
-        description: "Не удалось загрузить документ",
+        description: error.message || "Не удалось загрузить документ",
         variant: "destructive",
       });
     } finally {
