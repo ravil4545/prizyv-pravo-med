@@ -51,6 +51,7 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
       .from("forum_comments")
       .select("*")
       .eq("post_id", postId)
+      .eq("status", "approved")
       .order("created_at", { ascending: true });
 
     if (!error && data) {

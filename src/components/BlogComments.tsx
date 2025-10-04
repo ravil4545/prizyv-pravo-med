@@ -51,6 +51,7 @@ const BlogComments = ({ postId }: BlogCommentsProps) => {
       .from("blog_comments")
       .select("*")
       .eq("post_id", postId)
+      .eq("status", "approved")
       .order("created_at", { ascending: true });
 
     if (!error && data) {
