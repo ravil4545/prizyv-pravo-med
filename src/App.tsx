@@ -14,6 +14,8 @@ import BlogPage from "./pages/BlogPage";
 import DashboardPage from "./pages/DashboardPage";
 import UserTemplatesPage from "./pages/UserTemplatesPage";
 import AIChatDashboardPage from "./pages/AIChatDashboardPage";
+import AdminForumPage from "./pages/AdminForumPage";
+import AdminBlogPage from "./pages/AdminBlogPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,8 @@ const App = () => (
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
           <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
+          <Route path="/admin/forum" element={<AdminForumPage />} />
+          <Route path="/admin/blog" element={<AdminBlogPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

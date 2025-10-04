@@ -42,10 +42,10 @@ serve(async (req) => {
     }
     
     const { messages } = validation.data;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const systemPrompt = `Вы - виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
@@ -67,14 +67,16 @@ serve(async (req) => {
 - WhatsApp и Telegram доступны
 - Email: dompc9@gmail.com`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://kqbetheonxiclwgyatnm.supabase.co",
+        "X-Title": "Legal Consultation Chat",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "x-ai/grok-4",
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,

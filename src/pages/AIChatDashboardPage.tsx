@@ -6,11 +6,9 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ArrowLeft, Send, Settings } from "lucide-react";
+import { ArrowLeft, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
 
 interface Message {
   role: "user" | "assistant";
@@ -23,15 +21,12 @@ const AIChatDashboardPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     checkUser();
-    loadApiKey();
   }, []);
 
   useEffect(() => {
@@ -55,38 +50,12 @@ const AIChatDashboardPage = () => {
     }
   };
 
-  const loadApiKey = () => {
-    const saved = localStorage.getItem("user_openai_api_key");
-    if (saved) {
-      setApiKey(saved);
-    }
-  };
-
-  const saveApiKey = () => {
-    localStorage.setItem("user_openai_api_key", apiKey);
-    setShowSettings(false);
-    toast({
-      title: "API ключ сохранён",
-      description: "Теперь вы можете использовать чат",
-    });
-  };
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || !apiKey) {
-      if (!apiKey) {
-        toast({
-          title: "Необходим API ключ",
-          description: "Пожалуйста, добавьте свой OpenAI API ключ в настройках",
-          variant: "destructive",
-        });
-        setShowSettings(true);
-      }
-      return;
-    }
+    if (!input.trim()) return;
 
     const userMessage: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
@@ -94,44 +63,59 @@ const AIChatDashboardPage = () => {
     setSending(true);
 
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Вы - опытный юридический консультант, специализирующийся на вопросах призыва на военную службу, воинского учёта и прав призывников. Отвечайте подробно, со ссылками на законодательство РФ.",
-            },
-            ...messages,
-            userMessage,
-          ],
-        }),
+      const { data, error } = await supabase.functions.invoke("chat", {
+        body: { messages: [...messages, userMessage] },
       });
 
-      if (!response.ok) {
-        throw new Error("Ошибка при отправке запроса");
+      if (error) throw error;
+
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      const data = await response.json();
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.choices[0].message.content,
-      };
+      const reader = data.body?.getReader();
+      const decoder = new TextDecoder();
+      let assistantContent = "";
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                assistantContent += content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1].content = assistantContent;
+                  return newMessages;
+                });
+              }
+            } catch (e) {
+              // Ignore parse errors for incomplete chunks
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       toast({
         title: "Ошибка",
-        description: "Не удалось отправить сообщение. Проверьте API ключ.",
+        description: error instanceof Error ? error.message : "Не удалось отправить сообщение",
         variant: "destructive",
       });
+      setMessages((prev) => prev.slice(0, -1));
     } finally {
       setSending(false);
     }
@@ -158,51 +142,16 @@ const AIChatDashboardPage = () => {
               <ArrowLeft className="mr-2 h-4 w-4" />
               Назад в личный кабинет
             </Button>
-            <Button variant="outline" onClick={() => setShowSettings(!showSettings)}>
-              <Settings className="mr-2 h-4 w-4" />
-              Настройки API
-            </Button>
           </div>
-
-          {showSettings && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Настройки API</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="apiKey">OpenAI API Ключ</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="mt-2"
-                  />
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Ваш API ключ хранится только в вашем браузере и используется для
-                    прямого подключения к OpenAI
-                  </p>
-                </div>
-                <Button onClick={saveApiKey}>Сохранить</Button>
-              </CardContent>
-            </Card>
-          )}
 
           <Card className="h-[600px] flex flex-col">
             <CardHeader>
-              <CardTitle>Продвинутый AI консультант</CardTitle>
+              <CardTitle>AI Юридический консультант</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Консультация по вопросам призыва и воинского учёта
+              </p>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col">
-              {!apiKey && (
-                <Alert className="mb-4">
-                  <AlertDescription>
-                    Для использования чата необходимо добавить API ключ OpenAI в
-                    настройках
-                  </AlertDescription>
-                </Alert>
-              )}
 
               <div className="flex-1 overflow-y-auto mb-4 space-y-4">
                 {messages.length === 0 && (
@@ -244,11 +193,11 @@ const AIChatDashboardPage = () => {
                   placeholder="Введите ваш вопрос..."
                   className="resize-none"
                   rows={3}
-                  disabled={sending || !apiKey}
+                  disabled={sending}
                 />
                 <Button
                   onClick={sendMessage}
-                  disabled={sending || !apiKey || !input.trim()}
+                  disabled={sending || !input.trim()}
                   size="icon"
                   className="self-end"
                 >
