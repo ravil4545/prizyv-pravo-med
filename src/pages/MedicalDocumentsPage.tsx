@@ -96,7 +96,7 @@ export default function MedicalDocumentsPage() {
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [documentType, setDocumentType] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
   const [filterType, setFilterType] = useState<string>("all");
@@ -205,6 +205,63 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  const mergeImagesVertically = async (imageBlobs: Blob[]): Promise<Blob> => {
+    console.log(`Merging ${imageBlobs.length} images...`);
+    
+    // Загружаем все изображения
+    const images = await Promise.all(
+      imageBlobs.map(blob => {
+        return new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = URL.createObjectURL(blob);
+        });
+      })
+    );
+
+    // Вычисляем размеры итогового изображения
+    const maxWidth = Math.max(...images.map(img => img.width));
+    const totalHeight = images.reduce((sum, img) => sum + img.height, 0);
+
+    // Создаем canvas для объединенного изображения
+    const canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = totalHeight;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Не удалось создать контекст canvas');
+    }
+
+    // Рисуем все изображения друг под другом
+    let currentY = 0;
+    for (const img of images) {
+      const x = (maxWidth - img.width) / 2; // Центрируем изображение
+      ctx.drawImage(img, x, currentY);
+      currentY += img.height;
+    }
+
+    // Освобождаем память
+    images.forEach(img => URL.revokeObjectURL(img.src));
+
+    // Конвертируем в blob
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            console.log("Images merged successfully");
+            resolve(blob);
+          } else {
+            reject(new Error('Не удалось создать объединенное изображение'));
+          }
+        },
+        'image/jpeg',
+        0.85
+      );
+    });
+  };
+
   const compressImage = async (file: File): Promise<Blob> => {
     // Конвертация PDF в JPEG
     if (file.type === 'application/pdf') {
@@ -219,10 +276,8 @@ export default function MedicalDocumentsPage() {
 
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
+      reader.onload = (e) => {
         const img = new Image();
-        img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
@@ -231,49 +286,50 @@ export default function MedicalDocumentsPage() {
             reject(new Error('Failed to get canvas context'));
             return;
           }
-          
-          // Максимальные размеры
-          const MAX_WIDTH = 1920;
-          const MAX_HEIGHT = 1920;
-          
+
           let width = img.width;
           let height = img.height;
-          
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
+          const maxSize = 1920;
+
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = (height / width) * maxSize;
+              width = maxSize;
+            } else {
+              width = (width / height) * maxSize;
+              height = maxSize;
             }
           }
-          
+
           canvas.width = width;
           canvas.height = height;
           ctx.drawImage(img, 0, 0, width, height);
-          
-          canvas.toBlob((blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to compress image'));
-            }
-          }, 'image/jpeg', 0.8);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error('Failed to compress image'));
+              }
+            },
+            'image/jpeg',
+            0.85
+          );
         };
         img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
     });
   };
 
   const handleFileUpload = async () => {
-    if (!selectedFile || !documentType || !user) {
+    if (selectedFiles.length === 0 || !documentType || !user) {
       toast({
         title: "Ошибка",
-        description: "Выберите файл и тип документа",
+        description: "Выберите файл(ы) и тип документа",
         variant: "destructive",
       });
       return;
@@ -282,27 +338,50 @@ export default function MedicalDocumentsPage() {
     setUploading(true);
     
     try {
-      // Компрессия изображения
-      console.log("Starting file compression...");
-      const processingMessage = selectedFile.type === 'application/pdf' 
-        ? "Конвертация PDF в изображение..." 
-        : "Сжатие изображения...";
+      console.log(`Processing ${selectedFiles.length} file(s)...`);
       
       toast({
         title: "Обработка",
-        description: processingMessage,
+        description: `Обработка ${selectedFiles.length} файл(ов)...`,
       });
 
-      const compressedBlob = await compressImage(selectedFile);
-      console.log("File compressed/converted successfully");
-      
-      // Все файлы теперь в формате JPEG после компрессии/конвертации
-      const fileName = `${user.id}/${Date.now()}.jpg`;
+      // Конвертируем и сжимаем все файлы
+      const processedBlobs = await Promise.all(
+        selectedFiles.map(file => compressImage(file))
+      );
+      console.log("All files compressed/converted successfully");
+
+      // Объединяем изображения, если файлов больше одного
+      let finalBlob: Blob;
+      let fileName: string;
+      let smartFileName: string;
+
+      if (processedBlobs.length > 1) {
+        toast({
+          title: "Объединение",
+          description: "Объединение файлов в один документ...",
+        });
+        finalBlob = await mergeImagesVertically(processedBlobs);
+        fileName = `${user.id}/${Date.now()}_merged.jpg`;
+        smartFileName = `${getDocumentTypeLabel(documentType)}_${selectedFiles.length}файлов_${new Date().toLocaleDateString('ru-RU')}.jpg`;
+      } else {
+        finalBlob = processedBlobs[0];
+        fileName = `${user.id}/${Date.now()}.jpg`;
+        smartFileName = selectedFiles[0].name.replace(/\.[^/.]+$/, "") + '.jpg';
+      }
+
+      console.log("Final blob size:", finalBlob.size);
       console.log("Uploading to storage:", fileName);
       
+      // Загрузка в Supabase Storage
+      toast({
+        title: "Загрузка",
+        description: "Загрузка в хранилище...",
+      });
+
       const { error: uploadError } = await supabase.storage
         .from("medical-documents")
-        .upload(fileName, compressedBlob, {
+        .upload(fileName, finalBlob, {
           contentType: 'image/jpeg',
           cacheControl: "3600",
         });
@@ -317,7 +396,7 @@ export default function MedicalDocumentsPage() {
       console.log("Converting to base64...");
       const base64Image = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(compressedBlob);
+        reader.readAsDataURL(finalBlob);
         reader.onloadend = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error('Failed to convert to base64'));
       });
@@ -343,15 +422,14 @@ export default function MedicalDocumentsPage() {
         console.error("Analysis error:", analysisError);
         toast({
           title: "Предупреждение",
-          description: "Документ загружен, но AI анализ не удался. Текст может быть извлечен позже.",
+          description: "Документ загружен, но AI анализ не удался.",
         });
       } else {
         console.log("AI analysis completed:", analysisData);
       }
 
-      // Создаем умное название файла на основе анализа
-      let smartFileName = selectedFile.name;
-      if (analysisData?.extractedText) {
+      // Обновляем имя файла если есть извлеченный текст
+      if (analysisData?.extractedText && processedBlobs.length === 1) {
         const docTypeLabel = getDocumentTypeLabel(documentType);
         const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const shortText = analysisData.extractedText.substring(0, 50).replace(/[^\wа-яА-Я\s]/g, '').trim();
@@ -380,10 +458,12 @@ export default function MedicalDocumentsPage() {
       console.log("Document saved successfully");
       toast({
         title: "Успех",
-        description: "Документ успешно загружен и проанализирован",
+        description: selectedFiles.length > 1 
+          ? `${selectedFiles.length} файл(ов) объединены и загружены` 
+          : "Документ успешно загружен и проанализирован",
       });
 
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setDocumentType("");
       await loadDocuments();
 
@@ -484,14 +564,44 @@ export default function MedicalDocumentsPage() {
           <h2 className="text-2xl font-semibold mb-4">Загрузить документ</h2>
           <div className="grid gap-4">
             <div>
-              <Label htmlFor="file">Файл (фото или PDF)</Label>
+              <Label htmlFor="file">
+                Файл(ы) (фото или PDF)
+                {selectedFiles.length > 0 && (
+                  <span className="ml-2 text-sm text-muted-foreground">
+                    ({selectedFiles.length} выбрано)
+                  </span>
+                )}
+              </Label>
               <Input
                 id="file"
                 type="file"
                 accept="image/*,.pdf"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.length > 0) setSelectedFiles(files);
+                }}
                 disabled={uploading}
               />
+              {selectedFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <div 
+                      key={index} 
+                      className="flex items-center justify-between text-sm bg-secondary/30 px-3 py-2 rounded"
+                    >
+                      <span className="truncate flex-1 mr-2">{file.name}</span>
+                      <button
+                        onClick={() => setSelectedFiles(files => files.filter((_, i) => i !== index))}
+                        className="text-destructive hover:text-destructive/80 font-semibold"
+                        disabled={uploading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="type">Тип документа</Label>
@@ -508,7 +618,7 @@ export default function MedicalDocumentsPage() {
             </div>
             <Button
               onClick={handleFileUpload}
-              disabled={!selectedFile || !documentType || uploading}
+              disabled={selectedFiles.length === 0 || !documentType || uploading}
             >
               {uploading ? (
                 <>
@@ -518,7 +628,7 @@ export default function MedicalDocumentsPage() {
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  Загрузить
+                  {selectedFiles.length > 1 ? `Загрузить и объединить (${selectedFiles.length})` : "Загрузить"}
                 </>
               )}
             </Button>
