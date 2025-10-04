@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Download, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DocumentsGeneratorProps {
   profile: any;
@@ -58,10 +59,30 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
 
     setLoading(true);
     try {
-      // В реальной реализации здесь будет вызов edge function для генерации документа
+      const { data, error } = await supabase.functions.invoke('generate-document', {
+        body: {
+          userId,
+          docType,
+          format,
+        },
+      });
+
+      if (error) throw error;
+
+      // Создаем blob из текста и скачиваем
+      const blob = new Blob([data], { type: 'text/plain;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${docType}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
       toast({
-        title: "Генерация документа",
-        description: "Функция будет реализована с использованием библиотек для работы с DOCX и XLSX",
+        title: "Документ создан",
+        description: "Файл успешно скачан. Проверьте папку загрузок.",
       });
     } catch (error) {
       console.error("Error generating document:", error);
