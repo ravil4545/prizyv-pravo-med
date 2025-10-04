@@ -47,13 +47,13 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
   ];
 
   const handleGenerateDocument = async (docType: string, format: "docx" | "xlsx") => {
+    // Предупреждение, если не все данные заполнены
     if (!profile?.full_name || !profile?.passport_series) {
       toast({
-        title: "Заполните данные",
-        description: "Сначала заполните все разделы профиля",
-        variant: "destructive",
+        title: "Данные не полностью заполнены",
+        description: "Некоторые поля в документе могут быть пустыми. Заполните профиль для лучшего результата.",
+        variant: "default",
       });
-      return;
     }
 
     setLoading(true);
