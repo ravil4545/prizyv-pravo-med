@@ -59,22 +59,34 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-document', {
-        body: {
-          userId,
-          docType,
-          format,
-        },
-      });
-
-      if (error) throw error;
-
-      // Создаем blob и скачиваем
-      const mimeType = format === 'docx' 
-        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      // Используем fetch напрямую для бинарных данных
+      const { data: { session } } = await supabase.auth.getSession();
       
-      const blob = new Blob([data], { type: mimeType });
+      const response = await fetch(
+        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || ''}`,
+          },
+          body: JSON.stringify({
+            userId,
+            docType,
+            format,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Ошибка генерации документа');
+      }
+
+      // Получаем бинарные данные как blob
+      const blob = await response.blob();
+      
+      // Скачиваем файл
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -92,7 +104,7 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
       console.error("Error generating document:", error);
       toast({
         title: "Ошибка",
-        description: "Не удалось сгенерировать документ",
+        description: error instanceof Error ? error.message : "Не удалось сгенерировать документ",
         variant: "destructive",
       });
     } finally {
