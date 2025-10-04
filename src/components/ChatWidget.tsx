@@ -129,10 +129,10 @@ const ChatWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-4 z-50">
+    <div className="fixed bottom-4 sm:bottom-6 right-2 sm:right-4 z-50">
       {isOpen && (
-        <Card className="mb-4 w-80 h-[500px] shadow-strong border-0 bg-background flex flex-col">
-          <CardHeader className="pb-3 border-b">
+        <Card className="mb-4 w-[calc(100vw-1rem)] sm:w-96 h-[85vh] sm:h-[500px] max-h-[600px] shadow-strong border-0 bg-background flex flex-col">
+          <CardHeader className="pb-3 border-b flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">AI Консультант</CardTitle>
               <div className="flex gap-2">
@@ -194,7 +194,7 @@ const ChatWidget = () => {
             </div>
           </ScrollArea>
 
-          <CardContent className="pt-4 border-t">
+          <CardContent className="pt-4 border-t flex-shrink-0">
             <div className="flex gap-2">
               <Input
                 value={input}
@@ -202,16 +202,18 @@ const ChatWidget = () => {
                 onKeyPress={handleKeyPress}
                 placeholder="Задайте вопрос..."
                 disabled={isLoading}
+                className="text-sm sm:text-base"
               />
               <Button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
                 size="icon"
+                className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-2 text-center">
               AI помощник • Для точной консультации звоните
             </p>
           </CardContent>
@@ -222,14 +224,14 @@ const ChatWidget = () => {
         variant="cta"
         size="lg"
         onClick={() => setIsOpen(!isOpen)}
-        className="h-14 px-6 rounded-full shadow-strong hover:shadow-medium transition-bounce flex items-center gap-2"
+        className="h-12 sm:h-14 px-4 sm:px-6 rounded-full shadow-strong hover:shadow-medium transition-bounce flex items-center gap-2"
       >
         {isOpen ? (
-          <X className="h-6 w-6" />
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
         ) : (
           <>
-            <MessageCircle className="h-6 w-6" />
-            <span className="font-semibold">Free AI</span>
+            <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span className="font-semibold text-sm sm:text-base">Free AI</span>
           </>
         )}
       </Button>

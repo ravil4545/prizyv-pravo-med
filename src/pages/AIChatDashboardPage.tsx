@@ -6,9 +6,11 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Plus, MessageSquare, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { enhanceTypography } from "@/lib/typography";
@@ -33,10 +35,11 @@ const AIChatDashboardPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     checkUser();
@@ -248,85 +251,119 @@ const AIChatDashboardPage = () => {
     );
   }
 
+  const SidebarContent = () => (
+    <>
+      <Button
+        size="sm"
+        className="w-full mb-4"
+        onClick={() => {
+          createNewConversation();
+          setMobileSidebarOpen(false);
+        }}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Новый диалог
+      </Button>
+      
+      <ScrollArea className="h-[calc(100vh-250px)]">
+        <div className="space-y-2">
+          {conversations.map((conv) => (
+            <div
+              key={conv.id}
+              className={`p-3 rounded-lg cursor-pointer hover:bg-muted flex items-start justify-between gap-2 ${
+                currentConversationId === conv.id ? 'bg-muted' : ''
+              }`}
+            >
+              <div 
+                className="flex-1 min-w-0"
+                onClick={() => {
+                  setCurrentConversationId(conv.id);
+                  setMobileSidebarOpen(false);
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  <span className="text-sm font-medium truncate">{conv.title || "Новый диалог"}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(conv.updated_at).toLocaleDateString('ru-RU')}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteConversation(conv.id);
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-12 flex gap-4">
-        {/* Sidebar */}
-        <div 
-          className={`${sidebarOpen ? 'w-64' : 'w-12'} transition-all duration-300 flex-shrink-0`}
-          onMouseEnter={() => setSidebarOpen(true)}
-          onMouseLeave={() => setSidebarOpen(false)}
-        >
-          <Card className="h-full">
-            <CardContent className="p-2">
-              <Button
-                size="sm"
-                className="w-full mb-2"
-                onClick={createNewConversation}
-              >
-                <Plus className="h-4 w-4" />
-                {sidebarOpen && <span className="ml-2">Новый диалог</span>}
-              </Button>
-              
-              {sidebarOpen && (
-                <ScrollArea className="h-[calc(100vh-200px)]">
-                  <div className="space-y-2">
-                    {conversations.map((conv) => (
-                      <div
-                        key={conv.id}
-                        className={`p-2 rounded cursor-pointer hover:bg-muted flex items-center justify-between ${
-                          currentConversationId === conv.id ? 'bg-muted' : ''
-                        }`}
-                      >
-                        <div 
-                          className="flex-1 truncate"
-                          onClick={() => setCurrentConversationId(conv.id)}
-                        >
-                          <MessageSquare className="h-4 w-4 inline mr-2" />
-                          <span className="text-sm">{conv.title}</span>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteConversation(conv.id);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 gap-4">
+        {/* Desktop Sidebar */}
+        {!isMobile && (
+          <div className="hidden md:block w-64 flex-shrink-0">
+            <Card className="h-full">
+              <CardContent className="p-4">
+                <SidebarContent />
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Main Chat */}
-        <div className="flex-1 flex flex-col max-w-4xl">
-          <div className="flex items-center justify-between mb-6">
-            <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Назад в личный кабинет
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex items-center justify-between mb-4 gap-2">
+            {isMobile && (
+              <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Menu className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px] sm:w-[320px]">
+                  <SheetHeader className="mb-4">
+                    <SheetTitle>Диалоги</SheetTitle>
+                  </SheetHeader>
+                  <SidebarContent />
+                </SheetContent>
+              </Sheet>
+            )}
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate("/dashboard")}
+              className="text-xs sm:text-sm"
+            >
+              <ArrowLeft className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Назад в личный кабинет</span>
+              <span className="sm:hidden">Назад</span>
             </Button>
           </div>
 
-          <Card className="flex flex-col">
-            <CardHeader>
-              <CardTitle>AI Юридический консультант</CardTitle>
-              <p className="text-sm text-muted-foreground">
+          <Card className="flex flex-col flex-1">
+            <CardHeader className="pb-3 sm:pb-4">
+              <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Консультация по вопросам призыва и воинского учёта
               </p>
             </CardHeader>
-            <CardContent className="flex flex-col">
-              <ScrollArea className="h-[calc(100vh-400px)] pr-4 mb-4">
-                <div className="space-y-4">
+            <CardContent className="flex flex-col flex-1 p-2 sm:p-6">
+              <ScrollArea className="flex-1 mb-4 pr-2 sm:pr-4" style={{ height: 'calc(100vh - 320px)' }}>
+                <div className="space-y-3 sm:space-y-4">
                   {messages.length === 0 && (
-                    <div className="text-center text-muted-foreground py-12">
-                      <p>Задайте вопрос юридическому AI консультанту</p>
+                    <div className="text-center text-muted-foreground py-8 sm:py-12 px-4">
+                      <p className="text-sm sm:text-base">Задайте вопрос юридическому AI консультанту</p>
                     </div>
                   )}
                   {messages.map((message, index) => (
@@ -337,20 +374,20 @@ const AIChatDashboardPage = () => {
                       }`}
                     >
                       <div
-                        className={`max-w-[80%] p-4 rounded-lg ${
+                        className={`max-w-[85%] sm:max-w-[80%] p-3 sm:p-4 rounded-lg ${
                           message.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
                         }`}
                       >
                         {message.role === "assistant" ? (
-                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 sm:prose-p:my-2 prose-ul:my-1 sm:prose-ul:my-2 prose-ol:my-1 sm:prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {enhanceTypography(message.content)}
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <p className="whitespace-pre-wrap">{enhanceTypography(message.content)}</p>
+                          <p className="whitespace-pre-wrap text-sm sm:text-base">{enhanceTypography(message.content)}</p>
                         )}
                       </div>
                     </div>
@@ -370,17 +407,17 @@ const AIChatDashboardPage = () => {
                     }
                   }}
                   placeholder="Введите ваш вопрос..."
-                  className="resize-none"
-                  rows={3}
+                  className="resize-none text-sm sm:text-base"
+                  rows={isMobile ? 2 : 3}
                   disabled={sending}
                 />
                 <Button
                   onClick={sendMessage}
                   disabled={sending || !input.trim()}
                   size="icon"
-                  className="self-end"
+                  className="self-end h-9 w-9 sm:h-10 sm:w-10"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3 w-3 sm:h-4 sm:w-4" />
                 </Button>
               </div>
             </CardContent>

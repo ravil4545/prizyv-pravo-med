@@ -94,28 +94,28 @@ const ProfilePage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <div className="container mx-auto py-8 px-4">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">Личный кабинет</h1>
-            <p className="text-muted-foreground">
+      <div className="container mx-auto py-4 sm:py-8 px-2 sm:px-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2">Личный кабинет</h1>
+            <p className="text-sm sm:text-base text-muted-foreground truncate">
               Email: {user?.email}
             </p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
+          <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
             Выйти
           </Button>
         </div>
 
         <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="grid w-full grid-cols-7 mb-8">
-            <TabsTrigger value="personal">Личные данные</TabsTrigger>
-            <TabsTrigger value="education">Образование</TabsTrigger>
-            <TabsTrigger value="work">Работа</TabsTrigger>
-            <TabsTrigger value="military">Военкомат</TabsTrigger>
-            <TabsTrigger value="diagnoses">Диагнозы</TabsTrigger>
-            <TabsTrigger value="documents">Шаблоны</TabsTrigger>
-            <TabsTrigger value="medical-docs">Мед. документы</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 mb-8 h-auto gap-1">
+            <TabsTrigger value="personal" className="text-xs sm:text-sm">Личные данные</TabsTrigger>
+            <TabsTrigger value="education" className="text-xs sm:text-sm">Образование</TabsTrigger>
+            <TabsTrigger value="work" className="text-xs sm:text-sm">Работа</TabsTrigger>
+            <TabsTrigger value="military" className="text-xs sm:text-sm">Военкомат</TabsTrigger>
+            <TabsTrigger value="diagnoses" className="text-xs sm:text-sm">Диагнозы</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs sm:text-sm">Шаблоны</TabsTrigger>
+            <TabsTrigger value="medical-docs" className="text-xs sm:text-sm">Мед. документы</TabsTrigger>
           </TabsList>
 
           <TabsContent value="personal">
