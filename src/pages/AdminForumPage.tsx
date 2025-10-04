@@ -7,11 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle, XCircle, Eye, Trash2, Edit } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Eye, Trash2, Edit, MessageSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ForumPost {
   id: string;
@@ -24,19 +25,33 @@ interface ForumPost {
   author_name?: string;
 }
 
+interface ForumComment {
+  id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  post_id: string;
+  status: string;
+  author_name?: string;
+  post_title?: string;
+}
+
 const AdminForumPage = () => {
   const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [comments, setComments] = useState<ForumComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [activeTab, setActiveTab] = useState("posts");
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     checkAdmin();
     loadPosts();
+    loadComments();
     setupRealtimeSubscription();
   }, []);
 
@@ -125,6 +140,43 @@ const AdminForumPage = () => {
     setLoading(false);
   };
 
+  const loadComments = async () => {
+    const { data, error } = await supabase
+      .from("forum_comments")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading comments:", error);
+      return;
+    }
+
+    // Fetch author names and post titles
+    const commentsWithDetails = await Promise.all(
+      (data || []).map(async (comment) => {
+        const [profileResult, postResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", comment.user_id)
+            .single(),
+          supabase
+            .from("forum_posts")
+            .select("title")
+            .eq("id", comment.post_id)
+            .single()
+        ]);
+        
+        return {
+          ...comment,
+          author_name: profileResult.data?.full_name || "Неизвестный",
+          post_title: postResult.data?.title || "Удалённая тема",
+        };
+      })
+    );
+    setComments(commentsWithDetails);
+  };
+
   const updatePostStatus = async (postId: string, status: string) => {
     const { error } = await supabase
       .from("forum_posts")
@@ -148,6 +200,26 @@ const AdminForumPage = () => {
   };
 
   const deletePost = async (postId: string) => {
+    if (!confirm("Вы уверены, что хотите удалить эту тему? Все комментарии к ней также будут удалены.")) {
+      return;
+    }
+
+    // First delete all comments for this post
+    const { error: commentsError } = await supabase
+      .from("forum_comments")
+      .delete()
+      .eq("post_id", postId);
+
+    if (commentsError) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить комментарии темы",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Then delete the post
     const { error } = await supabase
       .from("forum_posts")
       .delete()
@@ -161,11 +233,58 @@ const AdminForumPage = () => {
       });
     } else {
       toast({
-        title: "Удалено",
-        description: "Тема удалена",
+        title: "Успешно",
+        description: "Тема и её комментарии удалены",
       });
       loadPosts();
+      loadComments();
       setSelectedPost(null);
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Вы уверены, что хотите удалить этот комментарий?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("forum_comments")
+      .delete()
+      .eq("id", commentId);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить комментарий",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Комментарий удален",
+      });
+      loadComments();
+    }
+  };
+
+  const approveComment = async (commentId: string) => {
+    const { error } = await supabase
+      .from("forum_comments")
+      .update({ status: "approved" })
+      .eq("id", commentId);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось одобрить комментарий",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Комментарий одобрен",
+      });
+      loadComments();
     }
   };
 
@@ -247,73 +366,158 @@ const AdminForumPage = () => {
             </Button>
           </div>
 
-          <div className="grid gap-4">
-            {posts.map((post) => (
-              <Card key={post.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Автор: {post.author_name}</span>
-                        <span>Категория: {post.topic_type}</span>
-                        <span>{new Date(post.created_at).toLocaleString("ru")}</span>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="posts">
+                Темы
+                {posts.filter(p => p.status === 'pending').length > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {posts.filter(p => p.status === 'pending').length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="comments">
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Комментарии
+                {comments.filter(c => c.status === 'pending').length > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {comments.filter(c => c.status === 'pending').length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <TabsContent value="posts">
+            <div className="grid gap-4">
+              {posts.map((post) => (
+                <Card key={post.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>Автор: {post.author_name}</span>
+                          <span>Категория: {post.topic_type}</span>
+                          <span>{new Date(post.created_at).toLocaleString("ru")}</span>
+                        </div>
                       </div>
+                      {getStatusBadge(post.status)}
                     </div>
-                    {getStatusBadge(post.status)}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm mb-4 line-clamp-2">{post.content}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSelectedPost(post)}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Просмотр
-                    </Button>
-                    {post.status === "pending" && (
-                      <>
-                        <Button
-                          size="sm"
-                          onClick={() => updatePostStatus(post.id, "approved")}
-                        >
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Одобрить
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => updatePostStatus(post.id, "rejected")}
-                        >
-                          <XCircle className="mr-2 h-4 w-4" />
-                          Отклонить
-                        </Button>
-                      </>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startEditing(post)}
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Изменить
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deletePost(post.id)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Удалить
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-4 line-clamp-2">{post.content}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedPost(post)}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Просмотр
+                      </Button>
+                      {post.status === "pending" && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => updatePostStatus(post.id, "approved")}
+                          >
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Одобрить
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => updatePostStatus(post.id, "rejected")}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Отклонить
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startEditing(post)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Изменить
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deletePost(post.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Удалить
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="comments">
+            <div className="space-y-4">
+              {comments.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Нет комментариев</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                comments.map((comment) => (
+                  <Card key={comment.id}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant={comment.status === "approved" ? "default" : "secondary"}>
+                              {comment.status === "approved" ? "Одобрен" : "На модерации"}
+                            </Badge>
+                            <p className="text-sm text-muted-foreground">
+                              {comment.author_name}
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            К теме: {comment.post_title}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {comment.status !== "approved" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => approveComment(comment.id)}
+                            >
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Одобрить
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteComment(comment.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Удалить
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="whitespace-pre-wrap">{comment.content}</p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {new Date(comment.created_at).toLocaleString("ru-RU")}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </TabsContent>
         </div>
       </main>
       <Footer />

@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash, MessageSquare, CheckCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface BlogPost {
   id: string;
@@ -23,11 +25,24 @@ interface BlogPost {
   created_at: string;
 }
 
+interface BlogComment {
+  id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  post_id: string;
+  status: string;
+  author_name?: string;
+  post_title?: string;
+}
+
 const AdminBlogPage = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [comments, setComments] = useState<BlogComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
+  const [activeTab, setActiveTab] = useState("posts");
   const [formData, setFormData] = useState({
     title: "",
     content: "",
@@ -41,6 +56,7 @@ const AdminBlogPage = () => {
   useEffect(() => {
     checkAdmin();
     loadPosts();
+    loadComments();
   }, []);
 
   const checkAdmin = async () => {
@@ -76,13 +92,50 @@ const AdminBlogPage = () => {
     if (error) {
       toast({
         title: "Ошибка",
-        description: "Не удалось загрузить статьи",
+        description: "Не удалось загрузить посты",
         variant: "destructive",
       });
     } else {
       setPosts(data || []);
     }
     setLoading(false);
+  };
+
+  const loadComments = async () => {
+    const { data, error } = await supabase
+      .from("blog_comments")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading comments:", error);
+      return;
+    }
+
+    // Fetch author names and post titles
+    const commentsWithDetails = await Promise.all(
+      (data || []).map(async (comment) => {
+        const [profileResult, postResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", comment.user_id)
+            .single(),
+          supabase
+            .from("blog_posts")
+            .select("title")
+            .eq("id", comment.post_id)
+            .single()
+        ]);
+        
+        return {
+          ...comment,
+          author_name: profileResult.data?.full_name || "Неизвестный",
+          post_title: postResult.data?.title || "Удалённая статья",
+        };
+      })
+    );
+    setComments(commentsWithDetails);
   };
 
   const openCreateDialog = () => {
@@ -102,36 +155,45 @@ const AdminBlogPage = () => {
     setFormData({
       title: post.title,
       content: post.content,
-      excerpt: post.excerpt || "",
-      category: post.category || "",
+      excerpt: post.excerpt,
+      category: post.category,
       slug: post.slug,
     });
     setShowDialog(true);
   };
 
   const handleSubmit = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!formData.title || !formData.content || !formData.slug) {
+      toast({
+        title: "Ошибка",
+        description: "Заполните все обязательные поля",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const postData = {
+      ...formData,
+      status: "published",
+      published_at: new Date().toISOString(),
+    };
 
     if (editingPost) {
       const { error } = await supabase
         .from("blog_posts")
-        .update({
-          ...formData,
-          updated_at: new Date().toISOString(),
-        })
+        .update(postData)
         .eq("id", editingPost.id);
 
       if (error) {
         toast({
           title: "Ошибка",
-          description: "Не удалось обновить статью",
+          description: "Не удалось обновить пост",
           variant: "destructive",
         });
       } else {
         toast({
           title: "Успешно",
-          description: "Статья обновлена",
+          description: "Пост обновлён",
         });
         setShowDialog(false);
         loadPosts();
@@ -139,23 +201,18 @@ const AdminBlogPage = () => {
     } else {
       const { error } = await supabase
         .from("blog_posts")
-        .insert({
-          ...formData,
-          author_id: user.id,
-          status: "published",
-          published_at: new Date().toISOString(),
-        });
+        .insert(postData);
 
       if (error) {
         toast({
           title: "Ошибка",
-          description: "Не удалось создать статью",
+          description: error.message,
           variant: "destructive",
         });
       } else {
         toast({
           title: "Успешно",
-          description: "Статья создана",
+          description: "Пост создан",
         });
         setShowDialog(false);
         loadPosts();
@@ -164,8 +221,26 @@ const AdminBlogPage = () => {
   };
 
   const handleDelete = async (postId: string) => {
-    if (!confirm("Вы уверены, что хотите удалить эту статью?")) return;
+    if (!confirm("Вы уверены, что хотите удалить эту статью? Все комментарии к ней также будут удалены.")) {
+      return;
+    }
 
+    // First delete all comments for this post
+    const { error: commentsError } = await supabase
+      .from("blog_comments")
+      .delete()
+      .eq("post_id", postId);
+
+    if (commentsError) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить комментарии статьи",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Then delete the post
     const { error } = await supabase
       .from("blog_posts")
       .delete()
@@ -174,15 +249,62 @@ const AdminBlogPage = () => {
     if (error) {
       toast({
         title: "Ошибка",
-        description: "Не удалось удалить статью",
+        description: "Не удалось удалить пост",
         variant: "destructive",
       });
     } else {
       toast({
         title: "Успешно",
-        description: "Статья удалена",
+        description: "Пост и его комментарии удалены",
       });
       loadPosts();
+      loadComments();
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Вы уверены, что хотите удалить этот комментарий?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("blog_comments")
+      .delete()
+      .eq("id", commentId);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить комментарий",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Комментарий удален",
+      });
+      loadComments();
+    }
+  };
+
+  const approveComment = async (commentId: string) => {
+    const { error } = await supabase
+      .from("blog_comments")
+      .update({ status: "approved" })
+      .eq("id", commentId);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось одобрить комментарий",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Комментарий одобрен",
+      });
+      loadComments();
     }
   };
 
@@ -212,7 +334,7 @@ const AdminBlogPage = () => {
             <div className="flex gap-2">
               <Button onClick={openCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
-                Создать статью
+                Новая статья
               </Button>
               <Button variant="ghost" onClick={() => navigate("/dashboard")}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -221,44 +343,134 @@ const AdminBlogPage = () => {
             </div>
           </div>
 
-          <div className="grid gap-4">
-            {posts.map((post) => (
-              <Card key={post.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Категория: {post.category}</span>
-                        <span>{new Date(post.created_at).toLocaleString("ru")}</span>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="posts">
+                Статьи ({posts.length})
+              </TabsTrigger>
+              <TabsTrigger value="comments">
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Комментарии
+                {comments.filter(c => c.status === 'pending').length > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {comments.filter(c => c.status === 'pending').length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <TabsContent value="posts">
+            <div className="grid gap-4">
+              {posts.map((post) => (
+                <Card key={post.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>Категория: {post.category || "Без категории"}</span>
+                          <span>{new Date(post.created_at).toLocaleString("ru")}</span>
+                        </div>
                       </div>
+                      <Badge variant={post.status === "published" ? "default" : "secondary"}>
+                        {post.status === "published" ? "Опубликован" : "Черновик"}
+                      </Badge>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm mb-4 line-clamp-2">{post.excerpt}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openEditDialog(post)}
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Редактировать
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleDelete(post.id)}
-                    >
-                      <Trash className="mr-2 h-4 w-4" />
-                      Удалить
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-4 line-clamp-2">{post.excerpt || post.content}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEditDialog(post)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Редактировать
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDelete(post.id)}
+                      >
+                        <Trash className="mr-2 h-4 w-4" />
+                        Удалить
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {posts.length === 0 && (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <p className="text-muted-foreground">Нет статей</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="comments">
+            <div className="space-y-4">
+              {comments.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Нет комментариев</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                comments.map((comment) => (
+                  <Card key={comment.id}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant={comment.status === "approved" ? "default" : "secondary"}>
+                              {comment.status === "approved" ? "Одобрен" : "На модерации"}
+                            </Badge>
+                            <p className="text-sm text-muted-foreground">
+                              {comment.author_name}
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            К статье: {comment.post_title}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {comment.status !== "approved" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => approveComment(comment.id)}
+                            >
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Одобрить
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteComment(comment.id)}
+                          >
+                            <Trash className="mr-2 h-4 w-4" />
+                            Удалить
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="whitespace-pre-wrap">{comment.content}</p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {new Date(comment.created_at).toLocaleString("ru-RU")}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </TabsContent>
         </div>
       </main>
       <Footer />
@@ -277,6 +489,7 @@ const AdminBlogPage = () => {
                 id="title"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="Заголовок статьи"
               />
             </div>
             <div>
@@ -285,7 +498,7 @@ const AdminBlogPage = () => {
                 id="slug"
                 value={formData.slug}
                 onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                placeholder="my-article-url"
+                placeholder="url-statii"
               />
             </div>
             <div>
@@ -294,6 +507,7 @@ const AdminBlogPage = () => {
                 id="category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                placeholder="Категория"
               />
             </div>
             <div>
@@ -302,7 +516,8 @@ const AdminBlogPage = () => {
                 id="excerpt"
                 value={formData.excerpt}
                 onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
-                rows={2}
+                placeholder="Краткое описание для превью"
+                rows={3}
               />
             </div>
             <div>
@@ -311,12 +526,18 @@ const AdminBlogPage = () => {
                 id="content"
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                rows={10}
+                placeholder="Полный текст статьи"
+                rows={15}
               />
             </div>
-            <Button onClick={handleSubmit}>
-              {editingPost ? "Сохранить изменения" : "Создать статью"}
-            </Button>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowDialog(false)}>
+                Отмена
+              </Button>
+              <Button onClick={handleSubmit}>
+                {editingPost ? "Сохранить" : "Создать"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
