@@ -7,8 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle, XCircle, Eye, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Eye, Trash2, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 interface ForumPost {
   id: string;
@@ -25,6 +28,9 @@ const AdminForumPage = () => {
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
+  const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -163,6 +169,41 @@ const AdminForumPage = () => {
     }
   };
 
+  const startEditing = (post: ForumPost) => {
+    setEditingPost(post);
+    setEditTitle(post.title);
+    setEditContent(post.content);
+  };
+
+  const saveEdit = async () => {
+    if (!editingPost) return;
+
+    const { error } = await supabase
+      .from("forum_posts")
+      .update({ 
+        title: editTitle, 
+        content: editContent,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", editingPost.id);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить тему",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Тема обновлена",
+      });
+      loadPosts();
+      setEditingPost(null);
+      setSelectedPost(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
       pending: "secondary",
@@ -254,6 +295,14 @@ const AdminForumPage = () => {
                     )}
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => startEditing(post)}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Изменить
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="destructive"
                       onClick={() => deletePost(post.id)}
                     >
@@ -298,11 +347,58 @@ const AdminForumPage = () => {
                 </>
               )}
               <Button
+                variant="outline"
+                onClick={() => {
+                  startEditing(selectedPost!);
+                  setSelectedPost(null);
+                }}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Изменить
+              </Button>
+              <Button
                 variant="destructive"
                 onClick={() => deletePost(selectedPost!.id)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Удалить
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingPost} onOpenChange={() => setEditingPost(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Редактировать тему</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-title">Заголовок</Label>
+              <Input
+                id="edit-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Заголовок темы"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-content">Содержание</Label>
+              <Textarea
+                id="edit-content"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="Содержание темы"
+                rows={10}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditingPost(null)}>
+                Отмена
+              </Button>
+              <Button onClick={saveEdit}>
+                Сохранить
               </Button>
             </div>
           </div>
