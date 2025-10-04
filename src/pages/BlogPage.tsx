@@ -20,6 +20,7 @@ interface BlogPost {
   category: string | null;
   published_at: string | null;
   created_at: string;
+  image_url: string | null;
 }
 
 const BlogPage = () => {
@@ -68,6 +69,13 @@ const BlogPage = () => {
               ← Вернуться к списку
             </button>
             <article className="prose prose-lg max-w-none">
+              {selectedPost.image_url && (
+                <img 
+                  src={selectedPost.image_url} 
+                  alt={selectedPost.title}
+                  className="w-full h-96 object-cover rounded-lg mb-6"
+                />
+              )}
               <h1 className="text-4xl font-bold mb-4">{selectedPost.title}</h1>
               <div className="flex items-center gap-4 text-muted-foreground mb-8">
                 {selectedPost.category && (
@@ -114,9 +122,18 @@ const BlogPage = () => {
               posts.map((post) => (
                 <Card
                   key={post.id}
-                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
                   onClick={() => setSelectedPost(post)}
                 >
+                  {post.image_url && (
+                    <div className="w-full h-48 overflow-hidden">
+                      <img 
+                        src={post.image_url} 
+                        alt={post.title}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform"
+                      />
+                    </div>
+                  )}
                   <CardHeader>
                     <div className="flex items-center justify-between mb-2">
                       {post.category && (

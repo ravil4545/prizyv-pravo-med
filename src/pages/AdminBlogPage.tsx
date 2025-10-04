@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash, MessageSquare, CheckCircle } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash, MessageSquare, CheckCircle, Upload, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -23,6 +23,7 @@ interface BlogPost {
   slug: string;
   status: string;
   created_at: string;
+  image_url: string | null;
 }
 
 interface BlogComment {
@@ -49,7 +50,10 @@ const AdminBlogPage = () => {
     excerpt: "",
     category: "",
     slug: "",
+    image_url: "",
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -146,7 +150,9 @@ const AdminBlogPage = () => {
       excerpt: "",
       category: "",
       slug: "",
+      image_url: "",
     });
+    setImageFile(null);
     setShowDialog(true);
   };
 
@@ -158,8 +164,54 @@ const AdminBlogPage = () => {
       excerpt: post.excerpt,
       category: post.category,
       slug: post.slug,
+      image_url: post.image_url || "",
     });
+    setImageFile(null);
     setShowDialog(true);
+  };
+
+  const handleImageUpload = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('blog-images')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage
+        .from('blog-images')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить изображение",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const removeCurrentImage = async () => {
+    if (formData.image_url && editingPost) {
+      // Extract filename from URL
+      const fileName = formData.image_url.split('/').pop();
+      if (fileName) {
+        await supabase.storage
+          .from('blog-images')
+          .remove([fileName]);
+      }
+    }
+    setFormData({ ...formData, image_url: "" });
+    setImageFile(null);
   };
 
   const handleSubmit = async () => {
@@ -172,8 +224,22 @@ const AdminBlogPage = () => {
       return;
     }
 
+    let imageUrl = formData.image_url;
+
+    // Upload new image if selected
+    if (imageFile) {
+      setUploadingImage(true);
+      imageUrl = await handleImageUpload(imageFile);
+      setUploadingImage(false);
+      
+      if (!imageUrl) {
+        return;
+      }
+    }
+
     const postData = {
       ...formData,
+      image_url: imageUrl,
       status: "published",
       published_at: new Date().toISOString(),
     };
@@ -511,6 +577,50 @@ const AdminBlogPage = () => {
               />
             </div>
             <div>
+              <Label htmlFor="image">Изображение</Label>
+              <div className="space-y-2">
+                {formData.image_url && (
+                  <div className="relative">
+                    <img 
+                      src={formData.image_url} 
+                      alt="Preview" 
+                      className="w-full h-48 object-cover rounded-lg"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="absolute top-2 right-2"
+                      onClick={removeCurrentImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                {!formData.image_url && (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="image"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setImageFile(file);
+                        }
+                      }}
+                    />
+                    {imageFile && (
+                      <Badge variant="secondary">
+                        <Upload className="h-3 w-3 mr-1" />
+                        {imageFile.name}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
               <Label htmlFor="excerpt">Краткое описание</Label>
               <Textarea
                 id="excerpt"
@@ -534,8 +644,8 @@ const AdminBlogPage = () => {
               <Button variant="outline" onClick={() => setShowDialog(false)}>
                 Отмена
               </Button>
-              <Button onClick={handleSubmit}>
-                {editingPost ? "Сохранить" : "Создать"}
+              <Button onClick={handleSubmit} disabled={uploadingImage}>
+                {uploadingImage ? "Загрузка..." : editingPost ? "Сохранить" : "Создать"}
               </Button>
             </div>
           </div>
