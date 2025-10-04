@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          browser: string | null
+          city: string | null
+          country: string | null
+          created_at: string | null
+          device_type: string | null
+          duration_seconds: number | null
+          event_type: string
+          id: string
+          ip_address: unknown | null
+          os: string | null
+          page_title: string | null
+          page_url: string
+          referrer: string | null
+          session_id: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string | null
+          device_type?: string | null
+          duration_seconds?: number | null
+          event_type: string
+          id?: string
+          ip_address?: unknown | null
+          os?: string | null
+          page_title?: string | null
+          page_url: string
+          referrer?: string | null
+          session_id: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string | null
+          device_type?: string | null
+          duration_seconds?: number | null
+          event_type?: string
+          id?: string
+          ip_address?: unknown | null
+          os?: string | null
+          page_title?: string | null
+          page_url?: string
+          referrer?: string | null
+          session_id?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       blog_comments: {
         Row: {
           content: string
@@ -397,7 +454,17 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      analytics_summary: {
+        Row: {
+          avg_duration: number | null
+          date: string | null
+          page_views: number | null
+          total_events: number | null
+          unique_sessions: number | null
+          unique_users: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {

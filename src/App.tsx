@@ -17,7 +17,14 @@ import AIChatDashboardPage from "./pages/AIChatDashboardPage";
 import AdminForumPage from "./pages/AdminForumPage";
 import AdminBlogPage from "./pages/AdminBlogPage";
 import AdminTestimonialsPage from "./pages/AdminTestimonialsPage";
+import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import NotFound from "./pages/NotFound";
+import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
+
+const AnalyticsTracker = () => {
+  useAnalyticsTracking();
+  return null;
+};
 
 const queryClient = new QueryClient();
 
@@ -27,6 +34,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AnalyticsTracker />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
@@ -42,6 +50,7 @@ const App = () => (
           <Route path="/admin/forum" element={<AdminForumPage />} />
           <Route path="/admin/blog" element={<AdminBlogPage />} />
           <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
+          <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

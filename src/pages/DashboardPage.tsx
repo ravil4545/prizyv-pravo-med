@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const DashboardPage = () => {
@@ -183,6 +183,27 @@ const DashboardPage = () => {
             <div className="mt-8">
               <h2 className="text-2xl font-bold mb-4">Администрирование</h2>
               <div className="grid md:grid-cols-2 gap-6">
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/analytics")}>
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-destructive/10 rounded-lg">
+                        <BarChart3 className="h-6 w-6 text-destructive" />
+                      </div>
+                      <div>
+                        <CardTitle>Аналитика сайта</CardTitle>
+                        <CardDescription>
+                          Статистика посещений и активности
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">
+                      Полная аналитика посетителей, страниц и поведения пользователей
+                    </p>
+                  </CardContent>
+                </Card>
+
                 <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/forum")}>
                   <CardHeader>
                     <div className="flex items-center gap-3">
