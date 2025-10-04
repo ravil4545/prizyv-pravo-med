@@ -154,44 +154,67 @@ export default function MedicalDocumentsPage() {
   };
 
   const convertPdfToJpeg = async (file: File): Promise<Blob> => {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-    
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1); // Берем первую страницу
-    
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    
-    if (!context) {
-      throw new Error('Failed to get canvas context');
+    try {
+      // Используем worker из node_modules вместо CDN
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url
+      ).toString();
+      
+      console.log("Reading PDF file...");
+      const arrayBuffer = await file.arrayBuffer();
+      
+      console.log("Loading PDF document...");
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      console.log("Getting first page...");
+      const page = await pdf.getPage(1); // Берем первую страницу
+      
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      
+      if (!context) {
+        throw new Error('Не удалось создать контекст canvas');
+      }
+      
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      
+      console.log("Rendering PDF page...");
+      // @ts-ignore - RenderParameters type mismatch with pdfjs-dist
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+      
+      console.log("Converting to JPEG...");
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            console.log("PDF successfully converted to JPEG");
+            resolve(blob);
+          } else {
+            reject(new Error('Не удалось конвертировать PDF в JPEG'));
+          }
+        }, 'image/jpeg', 0.9);
+      });
+    } catch (error) {
+      console.error("Error converting PDF:", error);
+      throw new Error(`Ошибка при конвертации PDF: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
-    
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    
-    // @ts-ignore - RenderParameters type mismatch with pdfjs-dist
-    await page.render({
-      canvasContext: context,
-      viewport: viewport
-    }).promise;
-    
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to convert PDF to JPEG'));
-        }
-      }, 'image/jpeg', 0.9);
-    });
   };
 
   const compressImage = async (file: File): Promise<Blob> => {
     // Конвертация PDF в JPEG
     if (file.type === 'application/pdf') {
-      return await convertPdfToJpeg(file);
+      console.log("Converting PDF to JPEG...");
+      try {
+        return await convertPdfToJpeg(file);
+      } catch (error) {
+        console.error("PDF conversion failed:", error);
+        throw error;
+      }
     }
 
     return new Promise((resolve, reject) => {
@@ -261,9 +284,13 @@ export default function MedicalDocumentsPage() {
     try {
       // Компрессия изображения
       console.log("Starting file compression...");
+      const processingMessage = selectedFile.type === 'application/pdf' 
+        ? "Конвертация PDF в изображение..." 
+        : "Сжатие изображения...";
+      
       toast({
         title: "Обработка",
-        description: "Сжатие изображения...",
+        description: processingMessage,
       });
 
       const compressedBlob = await compressImage(selectedFile);
