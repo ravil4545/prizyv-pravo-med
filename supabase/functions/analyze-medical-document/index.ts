@@ -57,6 +57,11 @@ serve(async (req) => {
   ]
 }`;
 
+    // Extract base64 data without data URL prefix if present
+    const base64Data = imageBase64.includes('base64,') 
+      ? imageBase64.split('base64,')[1] 
+      : imageBase64;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -67,10 +72,6 @@ serve(async (req) => {
         model: "google/gemini-2.5-flash",
         messages: [
           {
-            role: "system",
-            content: "Ты медицинский эксперт, специализирующийся на анализе медицинских документов и военно-врачебной экспертизе. Отвечай в формате JSON."
-          },
-          {
             role: "user",
             content: [
               {
@@ -80,13 +81,12 @@ serve(async (req) => {
               {
                 type: "image_url",
                 image_url: {
-                  url: imageBase64
+                  url: `data:image/jpeg;base64,${base64Data}`
                 }
               }
             ]
           }
         ],
-        temperature: 0.2,
       }),
     });
 

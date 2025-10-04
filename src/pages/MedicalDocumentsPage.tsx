@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Calendar, Filter } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Calendar, Filter, Download, Eye } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 interface MedicalDocument {
   id: string;
@@ -443,30 +444,145 @@ export default function MedicalDocumentsPage() {
                   </Button>
                 </div>
 
-                {doc.ai_fitness_category && (
-                  <div className="bg-secondary/50 p-4 rounded-lg mb-4">
-                    <h4 className="font-semibold mb-2">Анализ ИИ</h4>
-                    <p className="mb-2">
-                      <strong>Категория годности:</strong> {doc.ai_fitness_category}
-                    </p>
-                    {doc.ai_recommendations && (
-                      <div>
-                        <strong>Рекомендации:</strong>
-                        <ScrollArea className="h-32 mt-2">
-                          <pre className="text-sm whitespace-pre-wrap">{doc.ai_recommendations}</pre>
-                        </ScrollArea>
+                <div className="flex gap-4 mb-4">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      const { data } = await supabase.storage
+                        .from("medical-documents")
+                        .download(doc.file_path);
+                      if (data) {
+                        const url = URL.createObjectURL(data);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = doc.file_name;
+                        a.click();
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Скачать JPEG
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      const { data } = await supabase.storage
+                        .from("medical-documents")
+                        .download(doc.file_path);
+                      if (data) {
+                        const url = URL.createObjectURL(data);
+                        window.open(url, '_blank');
+                      }
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Просмотр
+                  </Button>
+                </div>
+
+                {doc.ai_fitness_category && doc.ai_recommendations && (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button className="mb-4">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Резюме ИИ
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh]">
+                      <DialogHeader>
+                        <DialogTitle>Резюме анализа ИИ</DialogTitle>
+                      </DialogHeader>
+                      <ScrollArea className="h-[60vh] pr-4">
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="font-semibold mb-2">Категория годности:</h4>
+                            <p>{doc.ai_fitness_category}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold mb-2">Рекомендации:</h4>
+                            <pre className="text-sm whitespace-pre-wrap">{doc.ai_recommendations}</pre>
+                          </div>
+                        </div>
+                      </ScrollArea>
+                      <div className="flex gap-2 mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              `Категория годности: ${doc.ai_fitness_category}\n\nРекомендации:\n${doc.ai_recommendations}`
+                            );
+                            toast({
+                              title: "Скопировано",
+                              description: "Резюме скопировано в буфер обмена",
+                            });
+                          }}
+                        >
+                          Копировать
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const text = `Категория годности: ${doc.ai_fitness_category}\n\nРекомендации:\n${doc.ai_recommendations}`;
+                            const blob = new Blob([text], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `резюме-${doc.file_name}.txt`;
+                            a.click();
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Скачать
+                        </Button>
                       </div>
-                    )}
-                  </div>
+                    </DialogContent>
+                  </Dialog>
                 )}
 
                 {doc.extracted_text && (
-                  <div>
-                    <h4 className="font-semibold mb-2">Извлеченный текст</h4>
-                    <ScrollArea className="h-48 bg-secondary/30 p-4 rounded-lg">
-                      <pre className="text-sm whitespace-pre-wrap">{doc.extracted_text}</pre>
-                    </ScrollArea>
-                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Извлеченный текст
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh]">
+                      <DialogHeader>
+                        <DialogTitle>Извлеченный текст</DialogTitle>
+                      </DialogHeader>
+                      <ScrollArea className="h-[60vh] pr-4">
+                        <pre className="text-sm whitespace-pre-wrap">{doc.extracted_text}</pre>
+                      </ScrollArea>
+                      <div className="flex gap-2 mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(doc.extracted_text || '');
+                            toast({
+                              title: "Скопировано",
+                              description: "Текст скопирован в буфер обмена",
+                            });
+                          }}
+                        >
+                          Копировать
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const blob = new Blob([doc.extracted_text || ''], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `текст-${doc.file_name}.txt`;
+                            a.click();
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Скачать
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 )}
               </Card>
             ))
