@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, FileText, Loader2, Trash2, Calendar, Filter, Download, Eye } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import * as pdfjsLib from 'pdfjs-dist';
 
 interface MedicalDocument {
   id: string;
@@ -23,6 +24,70 @@ interface MedicalDocument {
   ai_fitness_category: string | null;
   ai_recommendations: string | null;
 }
+
+const DocumentViewer = ({ filePath, fileName }: { filePath: string; fileName: string }) => {
+  const [imageUrl, setImageUrl] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadImage = async () => {
+      try {
+        const { data, error } = await supabase.storage
+          .from("medical-documents")
+          .download(filePath);
+        
+        if (error) throw error;
+        
+        if (data) {
+          const url = URL.createObjectURL(data);
+          setImageUrl(url);
+        }
+      } catch (error) {
+        console.error("Error loading image:", error);
+        toast({
+          title: "Ошибка",
+          description: "Не удалось загрузить изображение",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadImage();
+
+    return () => {
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
+      }
+    };
+  }, [filePath]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!imageUrl) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        Не удалось загрузить изображение
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={imageUrl}
+      alt={fileName}
+      className="w-full h-auto"
+    />
+  );
+};
 
 export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
@@ -88,11 +153,45 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  const convertPdfToJpeg = async (file: File): Promise<Blob> => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1); // Берем первую страницу
+    
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    
+    if (!context) {
+      throw new Error('Failed to get canvas context');
+    }
+    
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    // @ts-ignore - RenderParameters type mismatch with pdfjs-dist
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+    
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to convert PDF to JPEG'));
+        }
+      }, 'image/jpeg', 0.9);
+    });
+  };
+
   const compressImage = async (file: File): Promise<Blob> => {
-    // Проверяем тип файла
+    // Конвертация PDF в JPEG
     if (file.type === 'application/pdf') {
-      // Для PDF возвращаем как есть
-      return file;
+      return await convertPdfToJpeg(file);
     }
 
     return new Promise((resolve, reject) => {
@@ -168,17 +267,16 @@ export default function MedicalDocumentsPage() {
       });
 
       const compressedBlob = await compressImage(selectedFile);
-      console.log("File compressed successfully");
+      console.log("File compressed/converted successfully");
       
-      // Загрузка в Supabase Storage
-      const fileExtension = selectedFile.type === 'application/pdf' ? 'pdf' : 'jpg';
-      const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
+      // Все файлы теперь в формате JPEG после компрессии/конвертации
+      const fileName = `${user.id}/${Date.now()}.jpg`;
       console.log("Uploading to storage:", fileName);
       
       const { error: uploadError } = await supabase.storage
         .from("medical-documents")
         .upload(fileName, compressedBlob, {
-          contentType: selectedFile.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg',
+          contentType: 'image/jpeg',
           cacheControl: "3600",
         });
 
@@ -216,8 +314,21 @@ export default function MedicalDocumentsPage() {
 
       if (analysisError) {
         console.error("Analysis error:", analysisError);
+        toast({
+          title: "Предупреждение",
+          description: "Документ загружен, но AI анализ не удался. Текст может быть извлечен позже.",
+        });
       } else {
         console.log("AI analysis completed:", analysisData);
+      }
+
+      // Создаем умное название файла на основе анализа
+      let smartFileName = selectedFile.name;
+      if (analysisData?.extractedText) {
+        const docTypeLabel = getDocumentTypeLabel(documentType);
+        const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const shortText = analysisData.extractedText.substring(0, 50).replace(/[^\wа-яА-Я\s]/g, '').trim();
+        smartFileName = `${docTypeLabel}_${dateStr}_${shortText.substring(0, 30)}.jpg`;
       }
 
       // Сохранение метаданных в базу данных
@@ -226,7 +337,7 @@ export default function MedicalDocumentsPage() {
         .from("medical_documents")
         .insert({
           user_id: user.id,
-          file_name: selectedFile.name,
+          file_name: smartFileName,
           file_path: fileName,
           document_type: documentType,
           extracted_text: analysisData?.extractedText || null,
@@ -495,11 +606,7 @@ export default function MedicalDocumentsPage() {
                         <DialogTitle>{doc.file_name}</DialogTitle>
                       </DialogHeader>
                       <ScrollArea className="h-[70vh] w-full">
-                        <img 
-                          src={`${supabase.storage.from("medical-documents").getPublicUrl(doc.file_path).data.publicUrl}`}
-                          alt={doc.file_name}
-                          className="w-full h-auto"
-                        />
+                        <DocumentViewer filePath={doc.file_path} fileName={doc.file_name} />
                       </ScrollArea>
                     </DialogContent>
                   </Dialog>

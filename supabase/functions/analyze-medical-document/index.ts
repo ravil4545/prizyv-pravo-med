@@ -87,12 +87,30 @@ serve(async (req) => {
             ]
           }
         ],
+        response_format: { type: "json_object" }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("AI API error:", response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Превышен лимит запросов. Попробуйте позже.",
+            extractedText: "Не удалось извлечь текст из-за превышения лимита API.",
+            fitnessCategory: "Требуется ручной анализ",
+            explanation: "Пожалуйста, попробуйте загрузить документ позже.",
+            recommendations: ["Дождитесь восстановления лимита API", "Попробуйте загрузить документ снова через несколько минут"]
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
       throw new Error(`AI API error: ${response.status}`);
     }
 
@@ -101,19 +119,34 @@ serve(async (req) => {
     
     let result;
     try {
+      // Пробуем распарсить JSON из ответа
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0]);
       } else {
         result = JSON.parse(content);
       }
+      
+      // Проверяем наличие обязательных полей
+      if (!result.extractedText || result.extractedText.length < 10) {
+        result.extractedText = "Не удалось извлечь достаточно текста из документа. Попробуйте загрузить более четкое изображение.";
+      }
+      
+      if (!result.fitnessCategory) {
+        result.fitnessCategory = "Требуется дополнительное обследование";
+      }
+      
+      if (!result.recommendations || result.recommendations.length === 0) {
+        result.recommendations = ["Консультация с военным врачом для уточнения категории годности"];
+      }
+      
     } catch (e) {
-      console.error("Failed to parse JSON:", e);
+      console.error("Failed to parse JSON:", e, "Content:", content);
       result = {
-        extractedText: "Не удалось извлечь текст из документа.",
+        extractedText: "Не удалось извлечь текст из документа. Возможно, изображение слишком размытое или текст нечитаем.",
         fitnessCategory: "Требуется дополнительное обследование",
         explanation: "Не удалось автоматически проанализировать документ. Обратитесь к специалисту.",
-        recommendations: ["Консультация с военным врачом для уточнения категории годности"]
+        recommendations: ["Загрузите более четкое изображение документа", "Консультация с военным врачом для уточнения категории годности"]
       };
     }
 
@@ -128,9 +161,15 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in analyze-medical-document:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : "Unknown error",
+        extractedText: "Произошла ошибка при анализе документа.",
+        fitnessCategory: "Ошибка анализа",
+        explanation: "Не удалось проанализировать документ из-за технической ошибки.",
+        recommendations: ["Попробуйте загрузить документ снова", "Обратитесь в техподдержку, если проблема повторяется"]
+      }),
       {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
