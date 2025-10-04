@@ -51,10 +51,6 @@ const AIChatDashboardPage = () => {
     }
   }, [currentConversationId]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -134,10 +130,6 @@ const AIChatDashboardPage = () => {
         title: "Диалог удален",
       });
     }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const saveMessage = async (message: Message) => {
