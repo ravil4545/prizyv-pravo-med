@@ -6,7 +6,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Star } from "lucide-react";
+import { Star, Trash2 } from "lucide-react";
 import { testimonialSchema } from "@/lib/validations";
 
 interface Testimonial {
@@ -26,6 +26,7 @@ const TestimonialsPage = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [authorName, setAuthorName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadTestimonials();
@@ -49,6 +50,13 @@ const TestimonialsPage = () => {
       } else {
         setAuthorName("Аноним");
       }
+
+      // Check if user is admin
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id);
+      setIsAdmin(roles?.some(r => r.role === "admin") || false);
     }
   };
 
@@ -56,6 +64,7 @@ const TestimonialsPage = () => {
     const { data, error } = await supabase
       .from("testimonials")
       .select("*")
+      .eq("status", "approved")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -128,6 +137,27 @@ const TestimonialsPage = () => {
     setLoading(false);
   };
 
+  const deleteTestimonial = async (id: string) => {
+    const { error } = await supabase
+      .from("testimonials")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить отзыв",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Удалено",
+        description: "Отзыв успешно удален",
+      });
+      loadTestimonials();
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -186,9 +216,20 @@ const TestimonialsPage = () => {
                         ))}
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(testimonial.created_at).toLocaleDateString("ru-RU")}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(testimonial.created_at).toLocaleDateString("ru-RU")}
+                      </p>
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteTestimonial(testimonial.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-foreground/90">{testimonial.content}</p>
                 </CardContent>

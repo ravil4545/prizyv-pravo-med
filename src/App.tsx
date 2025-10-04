@@ -16,6 +16,7 @@ import UserTemplatesPage from "./pages/UserTemplatesPage";
 import AIChatDashboardPage from "./pages/AIChatDashboardPage";
 import AdminForumPage from "./pages/AdminForumPage";
 import AdminBlogPage from "./pages/AdminBlogPage";
+import AdminTestimonialsPage from "./pages/AdminTestimonialsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
           <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
           <Route path="/admin/forum" element={<AdminForumPage />} />
           <Route path="/admin/blog" element={<AdminBlogPage />} />
+          <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
