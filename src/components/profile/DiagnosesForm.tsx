@@ -245,13 +245,14 @@ const DiagnosesForm = ({ userId }: DiagnosesFormProps) => {
                 />
               </div>
 
-              <div>
+              <div className="md:col-span-2">
                 <Label>AI категория годности</Label>
-                <Input
+                <Textarea
                   value={diagnosis.ai_fitness_category}
                   readOnly
                   placeholder="Будет заполнено AI"
                   className="bg-muted"
+                  rows={3}
                 />
               </div>
 
