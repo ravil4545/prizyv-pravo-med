@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import RichTextEditor from "@/components/RichTextEditor";
 
 interface ForumPost {
   id: string;
@@ -533,7 +534,20 @@ const AdminForumPage = () => {
               <span>Категория: {selectedPost?.topic_type}</span>
               {selectedPost && getStatusBadge(selectedPost.status)}
             </div>
-            <p className="whitespace-pre-wrap">{selectedPost?.content}</p>
+            <p className="prose prose-slate dark:prose-invert max-w-none 
+              prose-headings:font-bold prose-headings:text-foreground 
+              prose-p:text-base prose-p:leading-relaxed prose-p:text-foreground
+              prose-strong:font-semibold prose-strong:text-foreground
+              prose-li:text-base prose-li:leading-relaxed
+              prose-ul:my-2 prose-ol:my-2
+              prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+              prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic">
+              {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
+                <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+              ) : (
+                <span className="whitespace-pre-wrap">{selectedPost?.content}</span>
+              )}
+            </p>
             <div className="flex gap-2 pt-4 border-t">
               {selectedPost?.status === "pending" && (
                 <>
@@ -589,12 +603,10 @@ const AdminForumPage = () => {
             </div>
             <div>
               <Label htmlFor="edit-content">Содержание</Label>
-              <Textarea
-                id="edit-content"
+              <RichTextEditor
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                placeholder="Содержание темы"
-                rows={10}
+                onChange={setEditContent}
+                placeholder="Содержание темы с форматированием"
               />
             </div>
             <div className="flex gap-2 justify-end">

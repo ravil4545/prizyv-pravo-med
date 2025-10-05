@@ -111,9 +111,13 @@ const BlogPage = () => {
                 prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
                 prose-img:rounded-lg prose-img:shadow-lg
                 prose-hr:border-border prose-hr:my-8">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {enhanceTypography(textToMarkdown(selectedPost.content))}
-                </ReactMarkdown>
+                {selectedPost.content.includes('<p>') || selectedPost.content.includes('<h') ? (
+                  <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+                ) : (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {enhanceTypography(textToMarkdown(selectedPost.content))}
+                  </ReactMarkdown>
+                )}
               </div>
               <BlogComments postId={selectedPost.id} />
             </article>

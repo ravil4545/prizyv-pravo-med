@@ -14,6 +14,7 @@ import { ArrowLeft, Plus, Edit, Trash, MessageSquare, CheckCircle, Upload, X } f
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { enhanceTypography } from "@/lib/typography";
+import RichTextEditor from "@/components/RichTextEditor";
 
 interface BlogPost {
   id: string;
@@ -633,12 +634,10 @@ const AdminBlogPage = () => {
             </div>
             <div>
               <Label htmlFor="content">Содержание</Label>
-              <Textarea
-                id="content"
+              <RichTextEditor
                 value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                placeholder="Полный текст статьи"
-                rows={15}
+                onChange={(value) => setFormData({ ...formData, content: value })}
+                placeholder="Полный текст статьи с форматированием"
               />
             </div>
             <div className="flex gap-2 justify-end">

@@ -14,6 +14,7 @@ import { forumPostSchema } from "@/lib/validations";
 import ForumComments from "@/components/ForumComments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { enhanceTypography } from "@/lib/typography";
+import RichTextEditor from "@/components/RichTextEditor";
 
 interface ForumPost {
   id: string;
@@ -208,12 +209,10 @@ const ForumPage = () => {
                   {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Textarea
-                    placeholder="Содержание поста..."
+                  <RichTextEditor
                     value={newContent}
-                    onChange={(e) => setNewContent(e.target.value)}
-                    rows={5}
-                    maxLength={5000}
+                    onChange={setNewContent}
+                    placeholder="Содержание поста с форматированием..."
                   />
                   {errors.content && <p className="text-sm text-destructive">{errors.content}</p>}
                 </div>
@@ -248,7 +247,14 @@ const ForumPage = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-foreground/90 whitespace-pre-wrap line-clamp-3">{enhanceTypography(post.content)}</p>
+                  <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
+                    prose-p:text-foreground/90 prose-p:mb-2 prose-strong:text-foreground line-clamp-3">
+                    {post.content.includes('<p>') || post.content.includes('<h') ? (
+                      <div dangerouslySetInnerHTML={{ __html: post.content }} />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{enhanceTypography(post.content)}</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -281,7 +287,25 @@ const ForumPage = () => {
                 {selectedPost && new Date(selectedPost.created_at).toLocaleDateString("ru-RU")}
               </span>
             </div>
-            <p className="whitespace-pre-wrap">{selectedPost && enhanceTypography(selectedPost.content)}</p>
+            <div className="prose prose-slate dark:prose-invert max-w-none 
+              prose-headings:font-bold prose-headings:text-foreground prose-headings:mt-6 prose-headings:mb-3
+              prose-h2:text-2xl prose-h3:text-xl prose-h4:text-lg
+              prose-p:text-base prose-p:leading-relaxed prose-p:mb-4 prose-p:text-foreground
+              prose-strong:font-semibold prose-strong:text-foreground
+              prose-li:text-base prose-li:leading-relaxed prose-li:mb-2
+              prose-ul:my-4 prose-ol:my-4
+              prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+              prose-pre:bg-muted prose-pre:border prose-pre:p-4 prose-pre:rounded-lg
+              prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+              prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
+              prose-img:rounded-lg prose-img:shadow-lg
+              prose-hr:border-border prose-hr:my-6">
+              {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
+                <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+              ) : (
+                <p className="whitespace-pre-wrap">{selectedPost && enhanceTypography(selectedPost.content)}</p>
+              )}
+            </div>
             {selectedPost && <ForumComments postId={selectedPost.id} />}
           </div>
         </DialogContent>

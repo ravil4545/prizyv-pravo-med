@@ -171,7 +171,14 @@ const BlogComments = ({ postId }: BlogCommentsProps) => {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap">{enhanceTypography(comment.content)}</p>
+              <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
+                prose-p:text-foreground prose-strong:text-foreground">
+                {comment.content.includes('<p>') || comment.content.includes('<h') ? (
+                  <div dangerouslySetInnerHTML={{ __html: comment.content }} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{enhanceTypography(comment.content)}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
