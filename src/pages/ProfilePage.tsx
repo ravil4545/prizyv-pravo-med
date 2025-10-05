@@ -109,7 +109,7 @@ const ProfilePage = () => {
         </div>
 
         <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 mb-8 h-auto gap-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 mb-8 h-auto gap-1">
             <TabsTrigger value="personal" className="text-xs sm:text-sm">Личные данные</TabsTrigger>
             <TabsTrigger value="education" className="text-xs sm:text-sm">Образование</TabsTrigger>
             <TabsTrigger value="work" className="text-xs sm:text-sm">Работа</TabsTrigger>
@@ -117,7 +117,6 @@ const ProfilePage = () => {
             <TabsTrigger value="diagnoses" className="text-xs sm:text-sm">Диагнозы</TabsTrigger>
             <TabsTrigger value="medical-tests" className="text-xs sm:text-sm">Анализы</TabsTrigger>
             <TabsTrigger value="documents" className="text-xs sm:text-sm">Шаблоны</TabsTrigger>
-            <TabsTrigger value="medical-docs" className="text-xs sm:text-sm">Мед. документы</TabsTrigger>
           </TabsList>
 
           <TabsContent value="personal">
@@ -146,17 +145,6 @@ const ProfilePage = () => {
 
           <TabsContent value="documents">
             <DocumentsGenerator profile={profile} userId={user?.id} />
-          </TabsContent>
-
-          <TabsContent value="medical-docs">
-            <div className="text-center py-8">
-              <p className="mb-4 text-muted-foreground">
-                Управляйте своими медицинскими документами на отдельной странице
-              </p>
-              <Button onClick={() => navigate("/medical-documents")}>
-                Перейти к медицинским документам
-              </Button>
-            </div>
           </TabsContent>
         </Tabs>
       </div>
