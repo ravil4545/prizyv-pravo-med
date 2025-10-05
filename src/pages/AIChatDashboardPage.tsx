@@ -351,15 +351,15 @@ const AIChatDashboardPage = () => {
             </Button>
           </div>
 
-          <Card className="flex flex-col flex-1">
-            <CardHeader className="pb-3 sm:pb-4">
+          <Card className="flex flex-col h-[calc(100vh-200px)] md:h-[calc(100vh-180px)]">
+            <CardHeader className="pb-3 sm:pb-4 flex-shrink-0">
               <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
               <p className="text-xs sm:text-sm text-muted-foreground">
                 Консультация по вопросам призыва и воинского учёта
               </p>
             </CardHeader>
-            <CardContent className="flex flex-col flex-1 p-2 sm:p-6">
-              <ScrollArea className="flex-1 mb-4 pr-2 sm:pr-4" style={{ height: 'calc(100vh - 320px)' }}>
+            <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0">
+              <ScrollArea className="flex-1 mb-4 pr-2 sm:pr-4">
                 <div className="space-y-3 sm:space-y-4">
                   {messages.length === 0 && (
                     <div className="text-center text-muted-foreground py-8 sm:py-12 px-4">
