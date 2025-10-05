@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3 } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const DashboardPage = () => {
@@ -174,6 +174,27 @@ const DashboardPage = () => {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   Управление личными данными и настройками
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/dashboard/medical-documents")}>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <FileHeart className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Медицинские документы</CardTitle>
+                    <CardDescription>
+                      Загрузка и анализ медицинских документов
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  AI анализ медицинских документов и рекомендации
                 </p>
               </CardContent>
             </Card>
