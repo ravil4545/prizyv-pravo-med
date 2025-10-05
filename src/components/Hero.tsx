@@ -13,11 +13,13 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative bg-gradient-hero text-primary-foreground">
-      <div className="absolute inset-0 bg-black/20"></div>
+    <section className="relative bg-gradient-hero text-primary-foreground" aria-label="Главная информация о наших услугах">
+      <div className="absolute inset-0 bg-black/20" aria-hidden="true"></div>
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30"
         style={{ backgroundImage: `url(${heroImage})` }}
+        role="img"
+        aria-label="Фоновое изображение юридической помощи"
       ></div>
       
       <div className="relative container mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
@@ -32,14 +34,15 @@ const Hero = () => {
             правовое сопровождение и консультации по законному получению военного билета.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12" role="group" aria-label="Кнопки связи с нами">
             <Button 
               variant="hero" 
               size="lg"
               onClick={handlePhoneCall}
               className="w-full sm:w-auto text-lg px-8 py-4"
+              aria-label="Позвонить для бесплатной консультации"
             >
-              <Phone className="h-5 w-5" />
+              <Phone className="h-5 w-5" aria-hidden="true" />
               Бесплатная консультация
             </Button>
             <Button 
@@ -47,8 +50,9 @@ const Hero = () => {
               size="lg"
               onClick={handleWhatsApp}
               className="w-full sm:w-auto text-lg px-8 py-4 bg-white/10 border-white/30 text-white hover:bg-white/20"
+              aria-label="Написать в WhatsApp для консультации"
             >
-              <MessageCircle className="h-5 w-5" />
+              <MessageCircle className="h-5 w-5" aria-hidden="true" />
               Написать в WhatsApp
             </Button>
           </div>

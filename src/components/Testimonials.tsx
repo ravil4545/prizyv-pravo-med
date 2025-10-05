@@ -30,51 +30,53 @@ const Testimonials = () => {
   ];
 
   return (
-    <section className="py-20 bg-background">
+    <section className="py-20 bg-background" aria-labelledby="testimonials-heading">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <header className="text-center mb-16">
+          <h2 id="testimonials-heading" className="text-3xl md:text-4xl font-bold text-foreground mb-4">
             Отзывы наших клиентов
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Реальные истории успеха людей, которые получили профессиональную помощь
           </p>
-        </div>
+        </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" role="list" aria-label="Отзывы клиентов">
           {testimonials.map((testimonial, index) => (
-            <Card key={index} className="shadow-soft hover:shadow-medium transition-smooth border-0 bg-gradient-card">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-1">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    ))}
-                  </div>
-                  <Quote className="h-8 w-8 text-muted-foreground/30" />
-                </div>
-
-                <p className="text-foreground mb-6 leading-relaxed italic">
-                  "{testimonial.content}"
-                </p>
-
-                <div className="border-t border-border pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {testimonial.name}, {testimonial.age} лет
-                      </p>
-                      <p className="text-sm text-muted-foreground">{testimonial.city}</p>
+            <article key={index} role="listitem">
+              <Card className="shadow-soft hover:shadow-medium transition-smooth border-0 bg-gradient-card">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-1" role="img" aria-label={`Оценка ${testimonial.rating} из 5 звезд`}>
+                      {[...Array(testimonial.rating)].map((_, i) => (
+                        <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" aria-hidden="true" />
+                      ))}
                     </div>
-                    <div className="text-right">
-                      <span className="inline-block px-3 py-1 text-xs font-medium bg-accent/10 text-accent rounded-full">
-                        {testimonial.category}
-                      </span>
+                    <Quote className="h-8 w-8 text-muted-foreground/30" aria-hidden="true" />
+                  </div>
+
+                  <blockquote className="text-foreground mb-6 leading-relaxed italic">
+                    "{testimonial.content}"
+                  </blockquote>
+
+                  <div className="border-t border-border pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {testimonial.name}, {testimonial.age} лет
+                        </p>
+                        <p className="text-sm text-muted-foreground">{testimonial.city}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block px-3 py-1 text-xs font-medium bg-accent/10 text-accent rounded-full">
+                          {testimonial.category}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </article>
           ))}
         </div>
 

@@ -7,22 +7,26 @@ import Testimonials from "@/components/Testimonials";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
 import ChatWidget from "@/components/ChatWidget";
+import SEOHead from "@/components/SEOHead";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main>
-        <Hero />
-        <DashboardPromo />
-        <Services />
-        <BlogPreview />
-        <Testimonials />
-        <ContactForm />
-      </main>
-      <Footer />
-      <ChatWidget />
-    </div>
+    <>
+      <SEOHead />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main>
+          <Hero />
+          <DashboardPromo />
+          <Services />
+          <BlogPreview />
+          <Testimonials />
+          <ContactForm />
+        </main>
+        <Footer />
+        <ChatWidget />
+      </div>
+    </>
   );
 };
 

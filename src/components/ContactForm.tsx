@@ -119,16 +119,16 @@ const ContactForm = () => {
   };
 
   return (
-    <section className="py-20 bg-muted/30">
+    <section className="py-20 bg-muted/30" aria-labelledby="contact-heading">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <header className="text-center mb-16">
+          <h2 id="contact-heading" className="text-3xl md:text-4xl font-bold text-foreground mb-4">
             Свяжитесь с нами
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Получите бесплатную консультацию по вашему вопросу
           </p>
-        </div>
+        </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
           {/* Contact Form */}
@@ -140,7 +140,7 @@ const ContactForm = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6" aria-label="Форма обратной связи">
                 <div className="space-y-2">
                   <Label htmlFor="name">Ваше имя *</Label>
                   <Input
@@ -151,8 +151,11 @@ const ContactForm = () => {
                     placeholder="Введите ваше имя"
                     maxLength={100}
                     required
+                    aria-required="true"
+                    aria-invalid={!!errors.name}
+                    aria-describedby={errors.name ? "name-error" : undefined}
                   />
-                  {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                  {errors.name && <p id="name-error" className="text-sm text-destructive" role="alert">{errors.name}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -166,8 +169,11 @@ const ContactForm = () => {
                     placeholder="+7 (999) 123-45-67"
                     maxLength={18}
                     required
+                    aria-required="true"
+                    aria-invalid={!!errors.phone}
+                    aria-describedby={errors.phone ? "phone-error" : undefined}
                   />
-                  {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                  {errors.phone && <p id="phone-error" className="text-sm text-destructive" role="alert">{errors.phone}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -180,8 +186,10 @@ const ContactForm = () => {
                     onChange={handleInputChange}
                     placeholder="your@email.com"
                     maxLength={255}
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "email-error" : undefined}
                   />
-                  {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                  {errors.email && <p id="email-error" className="text-sm text-destructive" role="alert">{errors.email}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -195,8 +203,11 @@ const ContactForm = () => {
                     rows={5}
                     maxLength={2000}
                     required
+                    aria-required="true"
+                    aria-invalid={!!errors.message}
+                    aria-describedby={errors.message ? "message-error" : undefined}
                   />
-                  {errors.message && <p className="text-sm text-destructive">{errors.message}</p>}
+                  {errors.message && <p id="message-error" className="text-sm text-destructive" role="alert">{errors.message}</p>}
                 </div>
 
                 <Button 
@@ -205,8 +216,9 @@ const ContactForm = () => {
                   size="lg" 
                   disabled={isSubmitting}
                   className="w-full"
+                  aria-label={isSubmitting ? "Отправка формы" : "Отправить заявку"}
                 >
-                  <Mail className="h-5 w-5" />
+                  <Mail className="h-5 w-5" aria-hidden="true" />
                   {isSubmitting ? "Отправляем..." : "Отправить заявку"}
                 </Button>
               </form>
@@ -214,19 +226,20 @@ const ContactForm = () => {
           </Card>
 
           {/* Contact Methods */}
-          <div className="space-y-8">
+          <aside className="space-y-8" aria-label="Способы связи">
             <Card className="shadow-soft border-0 bg-gradient-primary text-primary-foreground">
               <CardContent className="p-8">
                 <h3 className="text-xl font-semibold mb-6">Свяжитесь с нами напрямую</h3>
                 
-                <div className="space-y-6">
+                <nav className="space-y-6" aria-label="Контактные способы связи">
                   <Button 
                     variant="contact"
                     size="lg"
                     onClick={handlePhoneCall}
                     className="w-full justify-start text-left"
+                    aria-label="Позвонить по телефону +7 925 350-05-33"
                   >
-                    <Phone className="h-5 w-5" />
+                    <Phone className="h-5 w-5" aria-hidden="true" />
                     <div>
                       <div className="font-semibold">Позвонить сейчас</div>
                       <div className="text-sm opacity-90">+7 (925) 350-05-33</div>
@@ -238,8 +251,9 @@ const ContactForm = () => {
                     size="lg"
                     onClick={handleWhatsApp}
                     className="w-full justify-start text-left"
+                    aria-label="Написать в WhatsApp"
                   >
-                    <MessageCircle className="h-5 w-5" />
+                    <MessageCircle className="h-5 w-5" aria-hidden="true" />
                     <div>
                       <div className="font-semibold">WhatsApp</div>
                       <div className="text-sm opacity-90">Быстрые ответы в чате</div>
@@ -251,14 +265,15 @@ const ContactForm = () => {
                     size="lg"
                     onClick={handleTelegram}
                     className="w-full justify-start text-left"
+                    aria-label="Перейти в Telegram канал"
                   >
-                    <Send className="h-5 w-5" />
+                    <Send className="h-5 w-5" aria-hidden="true" />
                     <div>
                       <div className="font-semibold">Telegram канал</div>
                       <div className="text-sm opacity-90">Полезная информация</div>
                     </div>
                   </Button>
-                </div>
+                </nav>
               </CardContent>
             </Card>
 
@@ -267,19 +282,28 @@ const ContactForm = () => {
                 <h3 className="text-xl font-semibold text-foreground mb-4">
                   Время работы
                 </h3>
-                <div className="space-y-2 text-muted-foreground">
-                  <p>Понедельник - Пятница: 9:00 - 20:00</p>
-                  <p>Суббота: 10:00 - 18:00</p>
-                  <p>Воскресенье: 12:00 - 16:00</p>
-                </div>
-                <div className="mt-6 p-4 bg-accent/10 rounded-lg">
+                <dl className="space-y-2 text-muted-foreground">
+                  <div>
+                    <dt className="inline">Понедельник - Пятница: </dt>
+                    <dd className="inline">9:00 - 20:00</dd>
+                  </div>
+                  <div>
+                    <dt className="inline">Суббота: </dt>
+                    <dd className="inline">10:00 - 18:00</dd>
+                  </div>
+                  <div>
+                    <dt className="inline">Воскресенье: </dt>
+                    <dd className="inline">12:00 - 16:00</dd>
+                  </div>
+                </dl>
+                <aside className="mt-6 p-4 bg-accent/10 rounded-lg" aria-label="Информация об экстренной консультации">
                   <p className="text-sm text-foreground">
                     <strong>Экстренная консультация:</strong> доступна 24/7 через WhatsApp
                   </p>
-                </div>
+                </aside>
               </CardContent>
             </Card>
-          </div>
+          </aside>
         </div>
       </div>
     </section>

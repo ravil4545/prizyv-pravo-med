@@ -48,62 +48,68 @@ const BlogPreview = () => {
   if (loading || posts.length === 0) return null;
 
   return (
-    <section className="py-20 bg-muted/30">
+    <section className="py-20 bg-muted/30" aria-labelledby="blog-heading">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Последние статьи</h2>
+        <header className="text-center mb-12">
+          <h2 id="blog-heading" className="text-3xl md:text-4xl font-bold mb-4">Последние статьи</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Актуальная информация о призыве и воинском учёте
           </p>
-        </div>
+        </header>
 
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8" role="list" aria-label="Список последних статей блога">
           {posts.map((post) => (
-            <Link to="/blog" key={post.id}>
-              <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
-                {post.image_url && (
-                  <div className="w-full h-48 overflow-hidden">
-                    <img 
-                      src={post.image_url} 
-                      alt={post.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  </div>
-                )}
-                <CardHeader>
-                  <div className="flex items-center justify-between mb-2">
-                    {post.category && (
-                      <Badge variant="secondary">{post.category}</Badge>
-                    )}
-                    {post.published_at && (
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {format(new Date(post.published_at), "dd.MM.yyyy")}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <CardTitle className="text-xl line-clamp-2">{post.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground line-clamp-3">
-                    {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
+            <article key={post.id} role="listitem">
+              <Link to="/blog">
+                <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
+                  {post.image_url && (
+                    <div className="w-full h-48 overflow-hidden">
+                      <img 
+                        src={post.image_url} 
+                        alt={`Изображение к статье: ${post.title}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                  <CardHeader>
+                    <div className="flex items-center justify-between mb-2">
+                      {post.category && (
+                        <Badge variant="secondary">{post.category}</Badge>
+                      )}
+                      {post.published_at && (
+                        <time 
+                          className="flex items-center gap-1 text-sm text-muted-foreground"
+                          dateTime={post.published_at}
+                        >
+                          <Calendar className="h-3 w-3" aria-hidden="true" />
+                          <span>
+                            {format(new Date(post.published_at), "dd.MM.yyyy")}
+                          </span>
+                        </time>
+                      )}
+                    </div>
+                    <CardTitle className="text-xl line-clamp-2">{post.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground line-clamp-3">
+                      {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            </article>
           ))}
         </div>
 
-        <div className="text-center">
+        <nav className="text-center" aria-label="Переход к странице блога">
           <Link to="/blog">
-            <Button size="lg" className="group">
+            <Button size="lg" className="group" aria-label="Перейти ко всем статьям блога">
               Все статьи
-              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </Button>
           </Link>
-        </div>
+        </nav>
       </div>
     </section>
   );

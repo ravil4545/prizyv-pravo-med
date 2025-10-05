@@ -54,25 +54,25 @@ const Services = () => {
   ];
 
   return (
-    <section className="py-20 bg-gradient-card">
+    <section className="py-20 bg-gradient-card" aria-labelledby="services-heading">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <header className="text-center mb-16">
+          <h2 id="services-heading" className="text-3xl md:text-4xl font-bold text-foreground mb-4">
             Наши услуги
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Профессиональная помощь на всех этапах призывной процедуры
           </p>
-        </div>
+        </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16" role="list" aria-label="Список наших услуг">
           {services.map((service, index) => {
             const Icon = service.icon;
             return (
-              <Card key={index} className="shadow-medium hover:shadow-strong transition-smooth border-0 bg-background">
+              <Card key={index} className="shadow-medium hover:shadow-strong transition-smooth border-0 bg-background" role="listitem">
                 <CardHeader className="pb-4">
                   <div className="flex items-center space-x-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary" aria-hidden="true">
                       <Icon className="h-6 w-6 text-primary-foreground" />
                     </div>
                     <div>
@@ -84,10 +84,10 @@ const Services = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ul className="space-y-3">
+                  <ul className="space-y-3" aria-label={`Особенности услуги ${service.title}`}>
                     {service.features.map((feature, idx) => (
                       <li key={idx} className="flex items-start space-x-3">
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/10 mt-0.5">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/10 mt-0.5" aria-hidden="true">
                           <div className="h-2 w-2 rounded-full bg-accent"></div>
                         </div>
                         <span className="text-sm text-foreground">{feature}</span>
@@ -115,17 +115,18 @@ const Services = () => {
           })}
         </div>
 
-        <div className="text-center">
+        <aside className="text-center" aria-label="Кнопка для получения консультации">
           <Button 
             variant="cta" 
             size="lg"
             onClick={handleConsultation}
             className="text-lg px-8 py-4"
+            aria-label="Получить бесплатную консультацию в WhatsApp"
           >
-            <FileText className="h-5 w-5" />
+            <FileText className="h-5 w-5" aria-hidden="true" />
             Получить консультацию
           </Button>
-        </div>
+        </aside>
       </div>
     </section>
   );
