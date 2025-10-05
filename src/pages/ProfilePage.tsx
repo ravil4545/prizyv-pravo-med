@@ -10,6 +10,7 @@ import WorkForm from "@/components/profile/WorkForm";
 import MilitaryForm from "@/components/profile/MilitaryForm";
 import DiagnosesForm from "@/components/profile/DiagnosesForm";
 import DocumentsGenerator from "@/components/profile/DocumentsGenerator";
+import MedicalTestsForm from "@/components/profile/MedicalTestsForm";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Loader2 } from "lucide-react";
@@ -108,12 +109,13 @@ const ProfilePage = () => {
         </div>
 
         <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 mb-8 h-auto gap-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 mb-8 h-auto gap-1">
             <TabsTrigger value="personal" className="text-xs sm:text-sm">Личные данные</TabsTrigger>
             <TabsTrigger value="education" className="text-xs sm:text-sm">Образование</TabsTrigger>
             <TabsTrigger value="work" className="text-xs sm:text-sm">Работа</TabsTrigger>
             <TabsTrigger value="military" className="text-xs sm:text-sm">Военкомат</TabsTrigger>
             <TabsTrigger value="diagnoses" className="text-xs sm:text-sm">Диагнозы</TabsTrigger>
+            <TabsTrigger value="medical-tests" className="text-xs sm:text-sm">Анализы</TabsTrigger>
             <TabsTrigger value="documents" className="text-xs sm:text-sm">Шаблоны</TabsTrigger>
             <TabsTrigger value="medical-docs" className="text-xs sm:text-sm">Мед. документы</TabsTrigger>
           </TabsList>
@@ -136,6 +138,10 @@ const ProfilePage = () => {
 
           <TabsContent value="diagnoses">
             <DiagnosesForm userId={user?.id} />
+          </TabsContent>
+
+          <TabsContent value="medical-tests">
+            <MedicalTestsForm userId={user?.id} />
           </TabsContent>
 
           <TabsContent value="documents">

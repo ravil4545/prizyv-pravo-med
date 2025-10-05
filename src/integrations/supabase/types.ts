@@ -422,6 +422,39 @@ export type Database = {
         }
         Relationships: []
       }
+      medical_tests: {
+        Row: {
+          ai_summary: string | null
+          created_at: string
+          id: string
+          test_date: string | null
+          test_name: string
+          updated_at: string
+          user_id: string
+          user_notes: string | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          created_at?: string
+          id?: string
+          test_date?: string | null
+          test_name: string
+          updated_at?: string
+          user_id: string
+          user_notes?: string | null
+        }
+        Update: {
+          ai_summary?: string | null
+          created_at?: string
+          id?: string
+          test_date?: string | null
+          test_name?: string
+          updated_at?: string
+          user_id?: string
+          user_notes?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           actual_address: string | null
