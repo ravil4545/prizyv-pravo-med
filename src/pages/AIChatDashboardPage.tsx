@@ -374,7 +374,7 @@ const AIChatDashboardPage = () => {
                       }`}
                     >
                       <div
-                        className={`max-w-[85%] sm:max-w-[80%] p-3 sm:p-4 rounded-lg ${
+                        className={`max-w-[85%] sm:max-w-[80%] p-3 sm:p-4 rounded-lg break-words ${
                           message.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
