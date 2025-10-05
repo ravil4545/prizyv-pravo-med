@@ -359,8 +359,8 @@ const AIChatDashboardPage = () => {
               </p>
             </CardHeader>
             <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0">
-              <ScrollArea className="flex-1 mb-4 pr-2 sm:pr-4">
-                <div className="space-y-3 sm:space-y-4">
+              <ScrollArea className="flex-1 mb-4">
+                <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
                   {messages.length === 0 && (
                     <div className="text-center text-muted-foreground py-8 sm:py-12 px-4">
                       <p className="text-sm sm:text-base">Задайте вопрос юридическому AI консультанту</p>
