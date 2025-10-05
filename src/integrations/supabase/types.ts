@@ -422,39 +422,6 @@ export type Database = {
         }
         Relationships: []
       }
-      medical_tests: {
-        Row: {
-          ai_summary: string | null
-          created_at: string
-          id: string
-          test_date: string | null
-          test_name: string
-          updated_at: string
-          user_id: string
-          user_notes: string | null
-        }
-        Insert: {
-          ai_summary?: string | null
-          created_at?: string
-          id?: string
-          test_date?: string | null
-          test_name: string
-          updated_at?: string
-          user_id: string
-          user_notes?: string | null
-        }
-        Update: {
-          ai_summary?: string | null
-          created_at?: string
-          id?: string
-          test_date?: string | null
-          test_name?: string
-          updated_at?: string
-          user_id?: string
-          user_notes?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           actual_address: string | null
@@ -569,6 +536,27 @@ export type Database = {
         }
         Relationships: []
       }
+      test_templates: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          test_name: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          test_name: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          test_name?: string
+        }
+        Relationships: []
+      }
       testimonials: {
         Row: {
           approved_at: string | null
@@ -669,6 +657,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_test_results: {
+        Row: {
+          ai_summary: string | null
+          created_at: string
+          file_path: string | null
+          id: string
+          template_id: string | null
+          test_date: string | null
+          updated_at: string
+          user_id: string
+          user_notes: string | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          template_id?: string | null
+          test_date?: string | null
+          updated_at?: string
+          user_id: string
+          user_notes?: string | null
+        }
+        Update: {
+          ai_summary?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          template_id?: string | null
+          test_date?: string | null
+          updated_at?: string
+          user_id?: string
+          user_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_test_results_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "test_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
