@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, Mail, MapPin, Clock } from "lucide-react";
+import { Phone, MessageCircle, Send, Mail, MapPin, Clock, Github } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Footer = () => {
@@ -122,11 +122,35 @@ const Footer = () => {
         </div>
 
         <div className="border-t border-background/20 mt-12 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <p className="text-background/70 text-sm">
-              © 2024 Юридическая помощь призывникам. Все права защищены.
-            </p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <p className="text-background/70 text-sm">
+                © 2024 Юридическая помощь призывникам. Все права защищены.
+              </p>
+              <div className="flex items-center gap-3">
+                <a 
+                  href="https://github.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-background/70 hover:text-background transition-smooth flex items-center gap-1"
+                  aria-label="GitHub"
+                >
+                  <Github className="h-5 w-5" />
+                </a>
+                <a 
+                  href="https://supabase.com/dashboard/project/kqbetheonxiclwgyatnm" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-background/70 hover:text-background transition-smooth flex items-center gap-1"
+                  aria-label="Supabase"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13.885 22.532c-.697.446-1.636-.118-1.636-.982V13.47h8.138c1.027 0 1.686 1.116 1.176 1.995l-7.678 13.067zm-3.77-22.532c.697-.446 1.636.118 1.636.982V10.53H3.613c-1.027 0-1.686-1.116-1.176-1.995L10.115.468z"/>
+                  </svg>
+                </a>
+              </div>
+            </div>
+            <div className="flex space-x-6">
               <a href="#" className="text-background/70 hover:text-background text-sm transition-smooth">
                 Политика конфиденциальности
               </a>
