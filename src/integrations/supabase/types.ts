@@ -24,7 +24,7 @@ export type Database = {
           duration_seconds: number | null
           event_type: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           os: string | null
           page_title: string | null
           page_url: string
@@ -42,7 +42,7 @@ export type Database = {
           duration_seconds?: number | null
           event_type: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           os?: string | null
           page_title?: string | null
           page_url: string
@@ -60,7 +60,7 @@ export type Database = {
           duration_seconds?: number | null
           event_type?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           os?: string | null
           page_title?: string | null
           page_url?: string
@@ -248,7 +248,7 @@ export type Database = {
           created_at: string | null
           email: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           message: string
           name: string
           phone: string
@@ -259,7 +259,7 @@ export type Database = {
           created_at?: string | null
           email: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           message: string
           name: string
           phone: string
@@ -270,7 +270,7 @@ export type Database = {
           created_at?: string | null
           email?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           message?: string
           name?: string
           phone?: string
