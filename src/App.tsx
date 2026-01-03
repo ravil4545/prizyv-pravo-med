@@ -7,6 +7,9 @@ import Index from "./pages/Index";
 import ServicesPage from "./pages/ServicesPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import AuthPage from "./pages/AuthPage";
+import RegisterPage from "./pages/RegisterPage";
+import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
 import DiagnosesPage from "./pages/DiagnosesPage";
 import ForumPage from "./pages/ForumPage";
@@ -40,6 +43,9 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/testimonials" element={<TestimonialsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
