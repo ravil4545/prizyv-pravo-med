@@ -71,6 +71,93 @@ export type Database = {
         }
         Relationships: []
       }
+      article_document_rules: {
+        Row: {
+          article_id: string
+          created_at: string | null
+          document_subtype_id: string | null
+          document_type_id: string | null
+          id: string
+          keywords: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          article_id: string
+          created_at?: string | null
+          document_subtype_id?: string | null
+          document_type_id?: string | null
+          id?: string
+          keywords?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          article_id?: string
+          created_at?: string | null
+          document_subtype_id?: string | null
+          document_type_id?: string | null
+          id?: string
+          keywords?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_document_rules_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "disease_articles_565"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_document_rules_document_subtype_id_fkey"
+            columns: ["document_subtype_id"]
+            isOneToOne: false
+            referencedRelation: "document_subtypes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_document_rules_document_type_id_fkey"
+            columns: ["document_type_id"]
+            isOneToOne: false
+            referencedRelation: "document_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_user_assessment: {
+        Row: {
+          article_id: string
+          created_at: string | null
+          id: string
+          score_v: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string | null
+          id?: string
+          score_v?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string | null
+          id?: string
+          score_v?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_user_assessment_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "disease_articles_565"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blog_comments: {
         Row: {
           content: string
@@ -306,6 +393,104 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      disease_articles_565: {
+        Row: {
+          article_number: string
+          body: string | null
+          category: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          article_number: string
+          body?: string | null
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          article_number?: string
+          body?: string | null
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      document_subtypes: {
+        Row: {
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          type_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          type_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          type_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_subtypes_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "document_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_types: {
+        Row: {
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
         }
         Relationships: []
       }
