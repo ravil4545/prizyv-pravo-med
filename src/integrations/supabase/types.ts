@@ -607,6 +607,69 @@ export type Database = {
         }
         Relationships: []
       }
+      medical_documents_v2: {
+        Row: {
+          created_at: string | null
+          document_date: string | null
+          document_subtype_id: string | null
+          document_type_id: string | null
+          file_url: string
+          id: string
+          is_classified: boolean | null
+          meta: Json | null
+          raw_text: string | null
+          title: string | null
+          updated_at: string | null
+          uploaded_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          document_date?: string | null
+          document_subtype_id?: string | null
+          document_type_id?: string | null
+          file_url: string
+          id?: string
+          is_classified?: boolean | null
+          meta?: Json | null
+          raw_text?: string | null
+          title?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          document_date?: string | null
+          document_subtype_id?: string | null
+          document_type_id?: string | null
+          file_url?: string
+          id?: string
+          is_classified?: boolean | null
+          meta?: Json | null
+          raw_text?: string | null
+          title?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_documents_v2_document_subtype_id_fkey"
+            columns: ["document_subtype_id"]
+            isOneToOne: false
+            referencedRelation: "document_subtypes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_documents_v2_document_type_id_fkey"
+            columns: ["document_type_id"]
+            isOneToOne: false
+            referencedRelation: "document_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           actual_address: string | null
