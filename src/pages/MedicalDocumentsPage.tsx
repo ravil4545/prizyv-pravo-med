@@ -1,88 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Calendar, Filter, Download, Eye } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import * as pdfjsLib from 'pdfjs-dist';
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
+
+interface DocumentType {
+  id: string;
+  code: string;
+  name: string;
+}
 
 interface MedicalDocument {
   id: string;
-  file_name: string;
-  file_path: string;
-  document_type: string;
-  upload_date: string;
-  extracted_text: string | null;
-  ai_fitness_category: string | null;
-  ai_recommendations: string | null;
+  title: string | null;
+  file_url: string;
+  document_date: string | null;
+  uploaded_at: string;
+  is_classified: boolean;
+  document_type_id: string | null;
+  raw_text: string | null;
+  document_types?: DocumentType | null;
 }
 
-const DocumentViewer = ({ filePath, fileName }: { filePath: string; fileName: string }) => {
-  const [imageUrl, setImageUrl] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+type SortField = "uploaded_at" | "document_date" | "title";
+type SortDirection = "asc" | "desc";
 
-  useEffect(() => {
-    const loadImage = async () => {
-      try {
-        const { data, error } = await supabase.storage
-          .from("medical-documents")
-          .download(filePath);
-        
-        if (error) throw error;
-        
-        if (data) {
-          const url = URL.createObjectURL(data);
-          setImageUrl(url);
-        }
-      } catch (error) {
-        console.error("Error loading image:", error);
-        toast({
-          title: "Ошибка",
-          description: "Не удалось загрузить изображение",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadImage();
-
-    return () => {
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
-      }
-    };
-  }, [filePath]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!imageUrl) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Не удалось загрузить изображение
-      </div>
-    );
-  }
-
+const DocumentViewer = ({ fileUrl, fileName }: { fileUrl: string; fileName: string }) => {
   return (
     <img 
-      src={imageUrl}
+      src={fileUrl}
       alt={fileName}
       className="w-full h-auto"
     />
@@ -94,12 +52,16 @@ export default function MedicalDocumentsPage() {
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [documentType, setDocumentType] = useState<string>("");
-  const [sortBy, setSortBy] = useState<string>("date");
+  const [isDragOver, setIsDragOver] = useState(false);
+  
+  // Filters & Sorting
   const [filterType, setFilterType] = useState<string>("all");
+  const [sortField, setSortField] = useState<SortField>("uploaded_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     checkUser();
@@ -108,758 +70,469 @@ export default function MedicalDocumentsPage() {
   useEffect(() => {
     if (user) {
       loadDocuments();
+      loadDocumentTypes();
     }
   }, [user]);
 
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
         navigate("/auth");
         return;
       }
-      
       setUser(session.user);
     } catch (error) {
       console.error("Error checking user:", error);
-      toast({
-        title: "Ошибка",
-        description: "Не удалось проверить авторизацию",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
   };
 
+  const loadDocumentTypes = async () => {
+    const { data, error } = await supabase
+      .from("document_types")
+      .select("id, code, name")
+      .eq("is_active", true);
+
+    if (!error && data) {
+      setDocumentTypes(data);
+    }
+  };
+
   const loadDocuments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("medical_documents")
-        .select("*")
-        .order("upload_date", { ascending: false });
+    const { data, error } = await supabase
+      .from("medical_documents_v2")
+      .select(`
+        id,
+        title,
+        file_url,
+        document_date,
+        uploaded_at,
+        is_classified,
+        document_type_id,
+        raw_text,
+        document_types (id, code, name)
+      `)
+      .eq("user_id", user.id)
+      .order("uploaded_at", { ascending: false });
 
-      if (error) throw error;
+    if (!error && data) {
+      setDocuments(data as unknown as MedicalDocument[]);
+    }
+  };
 
-      setDocuments(data || []);
-    } catch (error) {
-      console.error("Error loading documents:", error);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    await uploadFiles(files);
+  }, [user]);
+
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      await uploadFiles(files);
+    }
+  };
+
+  const uploadFiles = async (files: File[]) => {
+    if (!user) return;
+
+    const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    const validFiles = files.filter(f => validTypes.includes(f.type));
+
+    if (validFiles.length === 0) {
       toast({
-        title: "Ошибка",
-        description: "Не удалось загрузить документы",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const convertPdfToJpeg = async (file: File): Promise<Blob> => {
-    try {
-      // Используем worker из node_modules вместо CDN
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url
-      ).toString();
-      
-      console.log("Reading PDF file...");
-      const arrayBuffer = await file.arrayBuffer();
-      
-      console.log("Loading PDF document...");
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      console.log("Getting first page...");
-      const page = await pdf.getPage(1); // Берем первую страницу
-      
-      const viewport = page.getViewport({ scale: 2.0 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      
-      if (!context) {
-        throw new Error('Не удалось создать контекст canvas');
-      }
-      
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      
-      console.log("Rendering PDF page...");
-      // @ts-ignore - RenderParameters type mismatch with pdfjs-dist
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
-      
-      console.log("Converting to JPEG...");
-      return new Promise((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            console.log("PDF successfully converted to JPEG");
-            resolve(blob);
-          } else {
-            reject(new Error('Не удалось конвертировать PDF в JPEG'));
-          }
-        }, 'image/jpeg', 0.9);
-      });
-    } catch (error) {
-      console.error("Error converting PDF:", error);
-      throw new Error(`Ошибка при конвертации PDF: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
-    }
-  };
-
-  const mergeImagesVertically = async (imageBlobs: Blob[]): Promise<Blob> => {
-    console.log(`Merging ${imageBlobs.length} images...`);
-    
-    // Загружаем все изображения
-    const images = await Promise.all(
-      imageBlobs.map(blob => {
-        return new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = URL.createObjectURL(blob);
-        });
-      })
-    );
-
-    // Вычисляем размеры итогового изображения
-    const maxWidth = Math.max(...images.map(img => img.width));
-    const totalHeight = images.reduce((sum, img) => sum + img.height, 0);
-
-    // Создаем canvas для объединенного изображения
-    const canvas = document.createElement('canvas');
-    canvas.width = maxWidth;
-    canvas.height = totalHeight;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      throw new Error('Не удалось создать контекст canvas');
-    }
-
-    // Рисуем все изображения друг под другом
-    let currentY = 0;
-    for (const img of images) {
-      const x = (maxWidth - img.width) / 2; // Центрируем изображение
-      ctx.drawImage(img, x, currentY);
-      currentY += img.height;
-    }
-
-    // Освобождаем память
-    images.forEach(img => URL.revokeObjectURL(img.src));
-
-    // Конвертируем в blob
-    return new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            console.log("Images merged successfully");
-            resolve(blob);
-          } else {
-            reject(new Error('Не удалось создать объединенное изображение'));
-          }
-        },
-        'image/jpeg',
-        0.85
-      );
-    });
-  };
-
-  const compressImage = async (file: File): Promise<Blob> => {
-    // Конвертация PDF в JPEG
-    if (file.type === 'application/pdf') {
-      console.log("Converting PDF to JPEG...");
-      try {
-        return await convertPdfToJpeg(file);
-      } catch (error) {
-        console.error("PDF conversion failed:", error);
-        throw error;
-      }
-    }
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx) {
-            reject(new Error('Failed to get canvas context'));
-            return;
-          }
-
-          let width = img.width;
-          let height = img.height;
-          const maxSize = 1920;
-
-          if (width > maxSize || height > maxSize) {
-            if (width > height) {
-              height = (height / width) * maxSize;
-              width = maxSize;
-            } else {
-              width = (width / height) * maxSize;
-              height = maxSize;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          ctx.drawImage(img, 0, 0, width, height);
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob);
-              } else {
-                reject(new Error('Failed to compress image'));
-              }
-            },
-            'image/jpeg',
-            0.85
-          );
-        };
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleFileUpload = async () => {
-    if (selectedFiles.length === 0 || !documentType || !user) {
-      toast({
-        title: "Ошибка",
-        description: "Выберите файл(ы) и тип документа",
+        title: "Неподдерживаемый формат",
+        description: "Загружайте PDF или изображения (JPEG, PNG, WebP)",
         variant: "destructive",
       });
       return;
     }
 
     setUploading(true);
-    
-    try {
-      console.log(`Processing ${selectedFiles.length} file(s)...`);
-      
-      toast({
-        title: "Обработка",
-        description: `Обработка ${selectedFiles.length} файл(ов)...`,
-      });
 
-      // Конвертируем и сжимаем все файлы
-      const processedBlobs = await Promise.all(
-        selectedFiles.map(file => compressImage(file))
-      );
-      console.log("All files compressed/converted successfully");
+    for (const file of validFiles) {
+      try {
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      // Объединяем изображения, если файлов больше одного
-      let finalBlob: Blob;
-      let fileName: string;
-      let smartFileName: string;
+        const { error: uploadError } = await supabase.storage
+          .from("medical-documents")
+          .upload(fileName, file);
 
-      if (processedBlobs.length > 1) {
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("medical-documents")
+          .getPublicUrl(fileName);
+
+        const { error: insertError } = await supabase
+          .from("medical_documents_v2")
+          .insert({
+            user_id: user.id,
+            title: file.name,
+            file_url: publicUrl,
+            is_classified: false,
+          });
+
+        if (insertError) throw insertError;
+
         toast({
-          title: "Объединение",
-          description: "Объединение файлов в один документ...",
+          title: "Документ загружен",
+          description: file.name,
         });
-        finalBlob = await mergeImagesVertically(processedBlobs);
-        fileName = `${user.id}/${Date.now()}_merged.jpg`;
-        smartFileName = `${getDocumentTypeLabel(documentType)}_${selectedFiles.length}файлов_${new Date().toLocaleDateString('ru-RU')}.jpg`;
-      } else {
-        finalBlob = processedBlobs[0];
-        fileName = `${user.id}/${Date.now()}.jpg`;
-        smartFileName = selectedFiles[0].name.replace(/\.[^/.]+$/, "") + '.jpg';
-      }
-
-      console.log("Final blob size:", finalBlob.size);
-      console.log("Uploading to storage:", fileName);
-      
-      // Загрузка в Supabase Storage
-      toast({
-        title: "Загрузка",
-        description: "Загрузка в хранилище...",
-      });
-
-      const { error: uploadError } = await supabase.storage
-        .from("medical-documents")
-        .upload(fileName, finalBlob, {
-          contentType: 'image/jpeg',
-          cacheControl: "3600",
-        });
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
-        throw uploadError;
-      }
-      console.log("File uploaded successfully");
-
-      // Конвертация в base64 для отправки в AI
-      console.log("Converting to base64...");
-      const base64Image = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(finalBlob);
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to convert to base64'));
-      });
-
-      console.log("Starting AI analysis...");
-      // Анализ документа с помощью AI
-      toast({
-        title: "Анализ",
-        description: "ИИ анализирует документ...",
-      });
-
-      const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
-        "analyze-medical-document",
-        {
-          body: {
-            imageBase64: base64Image,
-            documentType: documentType,
-          },
-        }
-      );
-
-      if (analysisError) {
-        console.error("Analysis error:", analysisError);
+      } catch (error: any) {
         toast({
-          title: "Предупреждение",
-          description: "Документ загружен, но AI анализ не удался.",
+          title: "Ошибка загрузки",
+          description: error.message,
+          variant: "destructive",
         });
-      } else {
-        console.log("AI analysis completed:", analysisData);
       }
-
-      // Обновляем имя файла если есть извлеченный текст
-      if (analysisData?.extractedText && processedBlobs.length === 1) {
-        const docTypeLabel = getDocumentTypeLabel(documentType);
-        const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const shortText = analysisData.extractedText.substring(0, 50).replace(/[^\wа-яА-Я\s]/g, '').trim();
-        smartFileName = `${docTypeLabel}_${dateStr}_${shortText.substring(0, 30)}.jpg`;
-      }
-
-      // Сохранение метаданных в базу данных
-      console.log("Saving to database...");
-      const { error: dbError } = await supabase
-        .from("medical_documents")
-        .insert({
-          user_id: user.id,
-          file_name: smartFileName,
-          file_path: fileName,
-          document_type: documentType,
-          extracted_text: analysisData?.extractedText || null,
-          ai_fitness_category: analysisData?.fitnessCategory || null,
-          ai_recommendations: analysisData?.recommendations?.join('\n') || null,
-        });
-
-      if (dbError) {
-        console.error("Database error:", dbError);
-        throw dbError;
-      }
-
-      console.log("Document saved successfully");
-      toast({
-        title: "Успех",
-        description: selectedFiles.length > 1 
-          ? `${selectedFiles.length} файл(ов) объединены и загружены` 
-          : "Документ успешно загружен и проанализирован",
-      });
-
-      setSelectedFiles([]);
-      setDocumentType("");
-      await loadDocuments();
-
-    } catch (error: any) {
-      console.error("Error uploading document:", error);
-      toast({
-        title: "Ошибка",
-        description: error.message || "Не удалось загрузить документ",
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
     }
+
+    setUploading(false);
+    loadDocuments();
   };
 
-  const handleDeleteDocument = async (id: string, filePath: string) => {
+  const handleDeleteDocument = async (doc: MedicalDocument) => {
     try {
-      // Удаление файла из Storage
-      const { error: storageError } = await supabase.storage
+      // Extract file path from URL for storage deletion
+      const urlParts = doc.file_url.split("/");
+      const filePath = urlParts.slice(-2).join("/");
+
+      await supabase.storage
         .from("medical-documents")
         .remove([filePath]);
 
-      if (storageError) throw storageError;
-
-      // Удаление записи из базы данных
-      const { error: dbError } = await supabase
-        .from("medical_documents")
+      const { error } = await supabase
+        .from("medical_documents_v2")
         .delete()
-        .eq("id", id);
+        .eq("id", doc.id);
 
-      if (dbError) throw dbError;
+      if (error) throw error;
 
       toast({
-        title: "Успех",
-        description: "Документ удален",
+        title: "Документ удалён",
+        description: doc.title || "Без названия",
       });
 
       loadDocuments();
-    } catch (error) {
-      console.error("Error deleting document:", error);
+    } catch (error: any) {
       toast({
-        title: "Ошибка",
-        description: "Не удалось удалить документ",
+        title: "Ошибка удаления",
+        description: error.message,
         variant: "destructive",
       });
     }
   };
 
-  const getDocumentTypeLabel = (type: string) => {
-    switch (type) {
-      case "analysis": return "Анализ";
-      case "examination": return "Обследование";
-      case "consultation": return "Консультация врача";
-      default: return type;
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
     }
   };
 
-  const sortedAndFilteredDocuments = documents
-    .filter(doc => filterType === "all" || doc.document_type === filterType)
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-4 w-4 ml-1" />;
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-4 w-4 ml-1" /> 
+      : <ArrowDown className="h-4 w-4 ml-1" />;
+  };
+
+  // Filter and sort documents
+  const filteredDocuments = documents
+    .filter(doc => {
+      if (filterType !== "all" && doc.document_type_id !== filterType) return false;
+      if (searchQuery && doc.title && !doc.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    })
     .sort((a, b) => {
-      if (sortBy === "date") {
-        return new Date(b.upload_date).getTime() - new Date(a.upload_date).getTime();
-      } else if (sortBy === "type") {
-        return a.document_type.localeCompare(b.document_type);
+      let aVal: string | null = null;
+      let bVal: string | null = null;
+
+      switch (sortField) {
+        case "uploaded_at":
+          aVal = a.uploaded_at;
+          bVal = b.uploaded_at;
+          break;
+        case "document_date":
+          aVal = a.document_date;
+          bVal = b.document_date;
+          break;
+        case "title":
+          aVal = a.title;
+          bVal = b.title;
+          break;
       }
-      return 0;
+
+      if (!aVal && !bVal) return 0;
+      if (!aVal) return 1;
+      if (!bVal) return -1;
+
+      const comparison = aVal.localeCompare(bVal);
+      return sortDirection === "asc" ? comparison : -comparison;
     });
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 py-8 mt-20">
-        <div className="mb-8">
-          <Button
-            variant="outline"
-            onClick={() => navigate("/profile")}
-            className="mb-4"
-          >
-            ← Назад в профиль
-          </Button>
-          <h1 className="text-4xl font-bold mb-2">Медицинские документы</h1>
-          <p className="text-muted-foreground">
-            Загружайте и управляйте своими медицинскими документами
-          </p>
-        </div>
-
-        {/* Форма загрузки */}
-        <Card className="p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Загрузить документ</h2>
-          <div className="grid gap-4">
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
             <div>
-              <Label htmlFor="file">
-                Файл(ы) (фото или PDF)
-                {selectedFiles.length > 0 && (
-                  <span className="ml-2 text-sm text-muted-foreground">
-                    ({selectedFiles.length} выбрано)
-                  </span>
-                )}
-              </Label>
-              <Input
-                id="file"
-                type="file"
-                accept="image/*,.pdf"
-                multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  if (files.length > 0) setSelectedFiles(files);
-                }}
-                disabled={uploading}
-              />
-              {selectedFiles.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {selectedFiles.map((file, index) => (
-                    <div 
-                      key={index} 
-                      className="flex items-center justify-between text-sm bg-secondary/30 px-3 py-2 rounded"
-                    >
-                      <span className="truncate flex-1 mr-2">{file.name}</span>
-                      <button
-                        onClick={() => setSelectedFiles(files => files.filter((_, i) => i !== index))}
-                        className="text-destructive hover:text-destructive/80 font-semibold"
-                        disabled={uploading}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <h1 className="text-3xl font-bold mb-2">Медицинские документы</h1>
+              <p className="text-muted-foreground">
+                Загружайте и управляйте вашими медицинскими документами
+              </p>
             </div>
-            <div>
-              <Label htmlFor="type">Тип документа</Label>
-              <Select value={documentType} onValueChange={setDocumentType} disabled={uploading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите тип документа" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="analysis">Анализ</SelectItem>
-                  <SelectItem value="examination">Обследование</SelectItem>
-                  <SelectItem value="consultation">Консультация врача</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              onClick={handleFileUpload}
-              disabled={selectedFiles.length === 0 || !documentType || uploading}
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Обработка...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  {selectedFiles.length > 1 ? `Загрузить и объединить (${selectedFiles.length})` : "Загрузить"}
-                </>
-              )}
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              Назад в кабинет
             </Button>
           </div>
-        </Card>
 
-        {/* Фильтры и сортировка */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">По дате</SelectItem>
-                <SelectItem value="type">По типу</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все типы</SelectItem>
-                <SelectItem value="analysis">Анализы</SelectItem>
-                <SelectItem value="examination">Обследования</SelectItem>
-                <SelectItem value="consultation">Консультации</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Список документов */}
-        <div className="grid gap-4">
-          {sortedAndFilteredDocuments.length === 0 ? (
-            <Card className="p-8 text-center">
-              <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Документы не найдены</p>
-            </Card>
-          ) : (
-            sortedAndFilteredDocuments.map((doc) => (
-              <Card key={doc.id} className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">{doc.file_name}</h3>
-                    <div className="flex gap-4 text-sm text-muted-foreground">
-                      <span>{getDocumentTypeLabel(doc.document_type)}</span>
-                      <span>{new Date(doc.upload_date).toLocaleDateString('ru-RU')}</span>
-                    </div>
+          {/* Drag & Drop Zone */}
+          <Card className="mb-8">
+            <CardContent className="p-0">
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`
+                  relative border-2 border-dashed rounded-lg p-12 text-center transition-all
+                  ${isDragOver 
+                    ? "border-primary bg-primary/5" 
+                    : "border-muted-foreground/25 hover:border-primary/50"
+                  }
+                `}
+              >
+                {uploading ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                    <p className="text-lg font-medium">Загрузка документов...</p>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => handleDeleteDocument(doc.id, doc.file_path)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                ) : (
+                  <>
+                    <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                    <p className="text-lg font-medium mb-2">
+                      Перетащите файлы сюда
+                    </p>
+                    <p className="text-muted-foreground mb-4">
+                      или нажмите для выбора файлов
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Поддерживаемые форматы: PDF, JPEG, PNG, WebP
+                    </p>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={handleFileInput}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Filters */}
+          <Card className="mb-6">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Фильтры:</span>
+                </div>
+                
+                <div className="flex-1 min-w-[200px] max-w-xs">
+                  <Input
+                    placeholder="Поиск по названию..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9"
+                  />
                 </div>
 
-                <div className="flex gap-4 mb-4">
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        const { data, error } = await supabase.storage
-                          .from("medical-documents")
-                          .download(doc.file_path);
-                        
-                        if (error) throw error;
-                        
-                        if (data) {
-                          const url = URL.createObjectURL(data);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = doc.file_name;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-                          toast({
-                            title: "Успех",
-                            description: "Документ скачан",
-                          });
-                        }
-                      } catch (error) {
-                        console.error("Download error:", error);
-                        toast({
-                          title: "Ошибка",
-                          description: "Не удалось скачать документ",
-                          variant: "destructive",
-                        });
-                      }
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[200px] h-9">
+                    <SelectValue placeholder="Тип документа" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Все типы</SelectItem>
+                    {documentTypes.map(type => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {(filterType !== "all" || searchQuery) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      setFilterType("all");
+                      setSearchQuery("");
                     }}
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Скачать
+                    <X className="h-4 w-4 mr-1" />
+                    Сбросить
                   </Button>
-                  
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">
-                        <Eye className="h-4 w-4 mr-2" />
-                        Просмотр
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl max-h-[90vh]">
-                      <DialogHeader>
-                        <DialogTitle>{doc.file_name}</DialogTitle>
-                      </DialogHeader>
-                      <ScrollArea className="h-[70vh] w-full">
-                        <DocumentViewer filePath={doc.file_path} fileName={doc.file_name} />
-                      </ScrollArea>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button className="mb-4">
-                      <FileText className="h-4 w-4 mr-2" />
-                      Резюме ИИ
-                    </Button>
-                  </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[80vh]">
-                      <DialogHeader>
-                        <DialogTitle>Резюме анализа ИИ</DialogTitle>
-                      </DialogHeader>
-                      <ScrollArea className="h-[60vh] pr-4">
-                        <div className="space-y-4">
-                          {doc.ai_fitness_category && (
-                            <div>
-                              <h4 className="font-semibold mb-2">Категория годности:</h4>
-                              <p>{doc.ai_fitness_category}</p>
-                            </div>
-                          )}
-                          {doc.ai_recommendations && (
-                            <div>
-                              <h4 className="font-semibold mb-2">Рекомендации:</h4>
-                              <pre className="text-sm whitespace-pre-wrap">{doc.ai_recommendations}</pre>
-                            </div>
-                          )}
-                          {!doc.ai_fitness_category && !doc.ai_recommendations && (
-                            <p className="text-muted-foreground">Резюме ИИ пока недоступно. Попробуйте загрузить документ заново.</p>
-                          )}
-                        </div>
-                      </ScrollArea>
-                      <div className="flex gap-2 mt-4">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            navigator.clipboard.writeText(
-                              `Категория годности: ${doc.ai_fitness_category}\n\nРекомендации:\n${doc.ai_recommendations}`
-                            );
-                            toast({
-                              title: "Скопировано",
-                              description: "Резюме скопировано в буфер обмена",
-                            });
-                          }}
-                        >
-                          Копировать
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const text = `Категория годности: ${doc.ai_fitness_category}\n\nРекомендации:\n${doc.ai_recommendations}`;
-                            const blob = new Blob([text], { type: 'text/plain' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `резюме-${doc.file_name}.txt`;
-                            a.click();
-                          }}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Скачать
-                        </Button>
-                      </div>
-                    </DialogContent>
-                </Dialog>
-
-                {doc.extracted_text && (
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Извлеченный текст
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[80vh]">
-                      <DialogHeader>
-                        <DialogTitle>Извлеченный текст</DialogTitle>
-                      </DialogHeader>
-                      <ScrollArea className="h-[60vh] pr-4">
-                        <pre className="text-sm whitespace-pre-wrap">{doc.extracted_text}</pre>
-                      </ScrollArea>
-                      <div className="flex gap-2 mt-4">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            navigator.clipboard.writeText(doc.extracted_text || '');
-                            toast({
-                              title: "Скопировано",
-                              description: "Текст скопирован в буфер обмена",
-                            });
-                          }}
-                        >
-                          Копировать
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const blob = new Blob([doc.extracted_text || ''], { type: 'text/plain' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `текст-${doc.file_name}.txt`;
-                            a.click();
-                          }}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Скачать
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
                 )}
-              </Card>
-            ))
-          )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Documents Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Загруженные документы ({filteredDocuments.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredDocuments.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  {documents.length === 0 
+                    ? "Нет загруженных документов. Перетащите файлы в зону выше." 
+                    : "Документы не найдены по заданным фильтрам"
+                  }
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted"
+                          onClick={() => toggleSort("title")}
+                        >
+                          <div className="flex items-center">
+                            Название {getSortIcon("title")}
+                          </div>
+                        </TableHead>
+                        <TableHead>Тип</TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted"
+                          onClick={() => toggleSort("document_date")}
+                        >
+                          <div className="flex items-center">
+                            Дата документа {getSortIcon("document_date")}
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted"
+                          onClick={() => toggleSort("uploaded_at")}
+                        >
+                          <div className="flex items-center">
+                            Загружен {getSortIcon("uploaded_at")}
+                          </div>
+                        </TableHead>
+                        <TableHead>Статус</TableHead>
+                        <TableHead className="text-right">Действия</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredDocuments.map((doc) => (
+                        <TableRow key={doc.id}>
+                          <TableCell className="font-medium max-w-[300px] truncate">
+                            {doc.title || "Без названия"}
+                          </TableCell>
+                          <TableCell>
+                            {doc.document_types ? (
+                              <Badge variant="secondary">
+                                {doc.document_types.name}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {doc.document_date 
+                              ? format(new Date(doc.document_date), "dd MMM yyyy", { locale: ru })
+                              : <span className="text-muted-foreground">—</span>
+                            }
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(doc.uploaded_at), "dd MMM yyyy, HH:mm", { locale: ru })}
+                          </TableCell>
+                          <TableCell>
+                            {doc.is_classified ? (
+                              <Badge variant="default">Классифицирован</Badge>
+                            ) : (
+                              <Badge variant="outline">Не обработан</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-4xl max-h-[90vh]">
+                                  <DialogHeader>
+                                    <DialogTitle>{doc.title}</DialogTitle>
+                                  </DialogHeader>
+                                  <ScrollArea className="h-[70vh] w-full">
+                                    <DocumentViewer fileUrl={doc.file_url} fileName={doc.title || "document"} />
+                                  </ScrollArea>
+                                </DialogContent>
+                              </Dialog>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                asChild
+                              >
+                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer" download>
+                                  <Download className="h-4 w-4" />
+                                </a>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteDocument(doc)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </main>
 
