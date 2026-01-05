@@ -23,6 +23,7 @@ import AdminTestimonialsPage from "./pages/AdminTestimonialsPage";
 import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import ProfilePage from "./pages/ProfilePage";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage";
+import MedicalHistoryPage from "./pages/MedicalHistoryPage";
 import NotFound from "./pages/NotFound";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
@@ -57,6 +58,7 @@ const App = () => (
           <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
           <Route path="/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
           <Route path="/medical-documents" element={<MedicalDocumentsPage />} />
+          <Route path="/medical-history" element={<MedicalHistoryPage />} />
           <Route path="/admin/forum" element={<AdminForumPage />} />
           <Route path="/admin/blog" element={<AdminBlogPage />} />
           <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />

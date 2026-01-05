@@ -198,6 +198,46 @@ const DashboardPage = () => {
                 </p>
               </CardContent>
             </Card>
+
+            <Card 
+              className="cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl group overflow-hidden"
+              onClick={() => navigate("/medical-history")}
+              style={{
+                background: "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1))",
+              }}
+            >
+              <div 
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                style={{
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(236, 72, 153, 0.15))",
+                }}
+              />
+              <CardHeader className="relative">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="p-3 rounded-lg shadow-lg"
+                    style={{
+                      background: "linear-gradient(135deg, #6366f1, #ec4899)",
+                    }}
+                  >
+                    <BookOpen className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="bg-gradient-to-r from-indigo-500 to-pink-500 bg-clip-text text-transparent">
+                      История болезни (AI)
+                    </CardTitle>
+                    <CardDescription>
+                      Постановление №565 с AI анализом
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="relative">
+                <p className="text-sm text-muted-foreground">
+                  Расписание болезней, шансы на категорию В и персональные рекомендации
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {isAdmin && (
