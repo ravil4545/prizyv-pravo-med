@@ -275,34 +275,51 @@ export default function MedicalDocumentsPage() {
     });
   };
 
-  // Улучшение изображения через AI
-  const enhanceImage = async (base64: string): Promise<string> => {
-    try {
-      setUploadProgress("Улучшение качества изображения...");
-      
-      const { data, error } = await supabase.functions.invoke('enhance-document', {
-        body: { imageBase64: base64 }
-      });
-
-      if (error) {
-        console.error("Enhancement error:", error);
-        return base64; // Возвращаем оригинал при ошибке
-      }
-
-      if (data?.enhancedBase64 && data?.wasEnhanced) {
-        console.log("Image enhanced successfully");
-        // Извлекаем base64 из data URL
-        const enhancedBase64 = data.enhancedBase64.includes(',') 
-          ? data.enhancedBase64.split(',')[1] 
-          : data.enhancedBase64;
-        return enhancedBase64;
-      }
-
-      return base64;
-    } catch (error) {
-      console.error("Enhancement failed:", error);
-      return base64;
-    }
+  // Сжатие изображения для уменьшения размера файла (без изменения содержимого)
+  const compressImage = async (base64: string, maxWidth: number = 2000): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        
+        // Уменьшаем если слишком большое
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Сжимаем с качеством 0.85 для уменьшения размера
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = (reader.result as string).split(",")[1];
+                resolve(result);
+              };
+              reader.readAsDataURL(blob);
+            } else {
+              resolve(base64);
+            }
+          },
+          "image/jpeg",
+          0.85
+        );
+      };
+      img.onerror = () => resolve(base64);
+      img.src = `data:image/jpeg;base64,${base64}`;
+    });
   };
 
   // Создание PDF из изображений
@@ -389,11 +406,11 @@ export default function MedicalDocumentsPage() {
           // Конвертируем в JPEG
           const { base64 } = await convertToJpeg(file);
           
-          // Улучшаем качество через AI
-          const enhancedBase64 = await enhanceImage(base64);
-          const dimensions = await getImageDimensions(enhancedBase64);
+          // Сжимаем для уменьшения размера (без изменения содержимого)
+          const compressedBase64 = await compressImage(base64);
+          const dimensions = await getImageDimensions(compressedBase64);
           
-          enhancedImages.push({ base64: enhancedBase64, ...dimensions });
+          enhancedImages.push({ base64: compressedBase64, ...dimensions });
         }
         
         setUploadProgress("Создание PDF документа...");
@@ -449,14 +466,14 @@ export default function MedicalDocumentsPage() {
             // Конвертируем в JPEG
             const { base64 } = await convertToJpeg(file);
             
-            // Улучшаем качество через AI
-            const enhancedBase64 = await enhanceImage(base64);
+            // Сжимаем для уменьшения размера (без изменения содержимого)
+            const compressedBase64 = await compressImage(base64);
             
             setUploadProgress("Создание PDF...");
             
             // Создаём одностраничный PDF
-            const dimensions = await getImageDimensions(enhancedBase64);
-            const pdfBlob = await createPdfFromImages([{ base64: enhancedBase64, ...dimensions }]);
+            const dimensions = await getImageDimensions(compressedBase64);
+            const pdfBlob = await createPdfFromImages([{ base64: compressedBase64, ...dimensions }]);
             
             const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
@@ -494,7 +511,7 @@ export default function MedicalDocumentsPage() {
 
             // Запускаем AI анализ
             if (insertedDoc) {
-              analyzeDocument(insertedDoc.id, enhancedBase64);
+              analyzeDocument(insertedDoc.id, compressedBase64);
             }
           } catch (error: any) {
             toast({
