@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
@@ -58,6 +59,7 @@ export default function MedicalDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<MedicalDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
@@ -389,9 +391,11 @@ export default function MedicalDocumentsPage() {
     }
   };
 
-  const handleDeleteDocument = async (doc: MedicalDocument) => {
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+    
     try {
-      const urlParts = doc.file_url.split("/");
+      const urlParts = documentToDelete.file_url.split("/");
       const filePath = urlParts.slice(-2).join("/");
 
       await supabase.storage
@@ -401,13 +405,13 @@ export default function MedicalDocumentsPage() {
       const { error } = await supabase
         .from("medical_documents_v2")
         .delete()
-        .eq("id", doc.id);
+        .eq("id", documentToDelete.id);
 
       if (error) throw error;
 
       toast({
         title: "Документ удалён",
-        description: doc.title || "Без названия",
+        description: documentToDelete.title || "Без названия",
       });
 
       loadDocuments();
@@ -417,6 +421,8 @@ export default function MedicalDocumentsPage() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setDocumentToDelete(null);
     }
   };
 
@@ -1079,7 +1085,7 @@ export default function MedicalDocumentsPage() {
                                 variant="ghost" 
                                 size="icon"
                                 className="h-9 w-9"
-                                onClick={() => handleDeleteDocument(doc)}
+                                onClick={() => setDocumentToDelete(doc)}
                               >
                                 <Trash2 className="h-5 w-5 text-destructive" />
                               </Button>
@@ -1097,6 +1103,28 @@ export default function MedicalDocumentsPage() {
       </main>
 
       <Footer />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить документ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить документ "{documentToDelete?.title || 'Без названия'}"? 
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteDocument}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
