@@ -175,7 +175,7 @@ const ChatWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 right-2 sm:right-4 z-50">
+    <div className="fixed bottom-20 sm:bottom-6 right-2 sm:right-4 z-50">
       {isOpen && (
         <Card className="mb-4 w-[calc(100vw-1rem)] sm:w-96 h-[80vh] sm:h-[500px] max-h-[600px] shadow-strong border-0 bg-background flex flex-col overflow-hidden">
           <CardHeader className="pb-2 sm:pb-3 border-b flex-shrink-0 px-3 sm:px-6">
