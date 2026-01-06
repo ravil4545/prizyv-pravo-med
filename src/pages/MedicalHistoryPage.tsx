@@ -274,18 +274,13 @@ export default function MedicalHistoryPage() {
     });
   }, [articleScores]);
 
-  // Set initial selected article to the one with highest chance
+  // Set initial selected article to the first article by number
   useEffect(() => {
-    if (sortedArticles.length > 0 && !selectedArticle) {
-      // Find first article with documents
-      const articleWithDocs = sortedArticles.find(s => s.maxChance > 0);
-      if (articleWithDocs) {
-        setSelectedArticle(articleWithDocs.article);
-      } else {
-        setSelectedArticle(sortedArticles[0].article);
-      }
+    if (articles.length > 0 && !selectedArticle) {
+      // Always select the first article (sorted by article_number)
+      setSelectedArticle(articles[0]);
     }
-  }, [sortedArticles, selectedArticle]);
+  }, [articles, selectedArticle]);
 
   // Filter articles by search
   const filteredArticles = useMemo(() => {
