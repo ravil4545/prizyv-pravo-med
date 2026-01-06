@@ -97,10 +97,10 @@ const categoryBKeywords: Record<string, string[]> = {
   trauma: ["перелом", "травма", "контузия", "чмт"],
 };
 
-// Calculate Category B chance based on document analysis
+// Calculate Category B chance based on AI analysis from documents
 function calculateCategoryBChance(
   article: Article,
-  documents: UserDocument[],
+  relevantDocs: UserDocument[],
   assessments: ArticleAssessment[]
 ): { categoryB: number; categoryA: number; noData: number; hasRelevantDocs: boolean; relevantDocsCount: number } {
   // Check if there's a saved assessment for this article
@@ -112,11 +112,11 @@ function calculateCategoryBChance(
       categoryA: Math.max(0, 100 - score - 5),
       noData: 5,
       hasRelevantDocs: true,
-      relevantDocsCount: documents.length,
+      relevantDocsCount: relevantDocs.length,
     };
   }
 
-  if (documents.length === 0) {
+  if (relevantDocs.length === 0) {
     return {
       categoryB: 0,
       categoryA: 0,
@@ -126,83 +126,49 @@ function calculateCategoryBChance(
     };
   }
 
-  const keywords = categoryBKeywords[article.category] || [];
-  let relevantDocsCount = 0;
-  let totalScore = 0;
+  // Use AI-calculated chances from documents
+  const docsWithChance = relevantDocs.filter(doc => doc.ai_category_chance !== null && doc.ai_category_chance > 0);
+  
+  if (docsWithChance.length === 0) {
+    return {
+      categoryB: 0,
+      categoryA: 70,
+      noData: 30,
+      hasRelevantDocs: true,
+      relevantDocsCount: relevantDocs.length,
+    };
+  }
 
-  documents.forEach((doc) => {
+  // Take the maximum AI-calculated chance from relevant documents
+  const maxChance = Math.max(...docsWithChance.map(doc => doc.ai_category_chance || 0));
+
+  return {
+    categoryB: maxChance,
+    categoryA: Math.max(0, 100 - maxChance - 5),
+    noData: 5,
+    hasRelevantDocs: true,
+    relevantDocsCount: relevantDocs.length,
+  };
+}
+
+// Get documents relevant to a specific article
+function getRelevantDocuments(article: Article, documents: UserDocument[]): UserDocument[] {
+  if (!article || documents.length === 0) return [];
+  
+  const keywords = categoryBKeywords[article.category] || [];
+  
+  return documents.filter((doc) => {
+    // Check if document is directly linked to this article
+    if (doc.linked_article_id === article.id) return true;
+    
     const textToSearch = [
       doc.title?.toLowerCase() || "",
       doc.raw_text?.toLowerCase() || "",
       JSON.stringify(doc.meta || {}).toLowerCase(),
     ].join(" ");
 
-    let docScore = 0;
-    let keywordMatches = 0;
-
-    keywords.forEach((keyword) => {
-      const regex = new RegExp(keyword.toLowerCase(), "gi");
-      const matches = textToSearch.match(regex);
-      if (matches) {
-        keywordMatches += matches.length;
-      }
-    });
-
-    if (keywordMatches > 0) {
-      relevantDocsCount++;
-      
-      // Base score from keyword matches
-      docScore = Math.min(30, keywordMatches * 5);
-
-      // Bonus for having raw_text (OCR processed)
-      if (doc.raw_text && doc.raw_text.length > 100) {
-        docScore += 10;
-      }
-
-      // Bonus for document age (older = more established diagnosis)
-      const uploadDate = new Date(doc.uploaded_at);
-      const monthsAgo = (Date.now() - uploadDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
-      if (monthsAgo >= 12) {
-        docScore += 20; // More than a year of documented history
-      } else if (monthsAgo >= 6) {
-        docScore += 15;
-      } else if (monthsAgo >= 3) {
-        docScore += 10;
-      } else {
-        docScore += 5;
-      }
-
-      totalScore += docScore;
-    }
+    return keywords.some((keyword) => textToSearch.includes(keyword.toLowerCase()));
   });
-
-  if (relevantDocsCount === 0) {
-    return {
-      categoryB: 0,
-      categoryA: 70,
-      noData: 30,
-      hasRelevantDocs: false,
-      relevantDocsCount: 0,
-    };
-  }
-
-  // Normalize score
-  let categoryBScore = Math.min(85, Math.round(totalScore / relevantDocsCount));
-  
-  // Bonus for multiple relevant documents (shows pattern of medical history)
-  if (relevantDocsCount >= 3) {
-    categoryBScore = Math.min(90, categoryBScore + 15);
-  } else if (relevantDocsCount >= 2) {
-    categoryBScore = Math.min(85, categoryBScore + 10);
-  }
-
-  return {
-    categoryB: categoryBScore,
-    categoryA: Math.max(0, 100 - categoryBScore - 5),
-    noData: 5,
-    hasRelevantDocs: true,
-    relevantDocsCount,
-  };
 }
 
 export default function MedicalHistoryPage() {
@@ -245,16 +211,14 @@ export default function MedicalHistoryPage() {
       .order("article_number");
 
     if (!error && data) {
-      // Sort by numeric article number
+      // Sort by numeric article number initially
       const sorted = data.sort((a, b) => {
         const numA = parseInt(a.article_number);
         const numB = parseInt(b.article_number);
         return numA - numB;
       });
       setArticles(sorted);
-      if (sorted.length > 0) {
-        setSelectedArticle(sorted[0]);
-      }
+      // Don't set selectedArticle here - let the sortedArticles effect handle it
     }
   };
 
@@ -281,19 +245,62 @@ export default function MedicalHistoryPage() {
     }
   };
 
+  // Calculate article scores with their relevant documents
+  const articleScores = useMemo(() => {
+    const scores: { article: Article; relevantDocs: UserDocument[]; maxChance: number }[] = [];
+    
+    articles.forEach((article) => {
+      const relevantDocs = getRelevantDocuments(article, userDocuments);
+      const docsWithChance = relevantDocs.filter(doc => doc.ai_category_chance !== null && doc.ai_category_chance > 0);
+      const maxChance = docsWithChance.length > 0 
+        ? Math.max(...docsWithChance.map(doc => doc.ai_category_chance || 0))
+        : 0;
+      
+      scores.push({ article, relevantDocs, maxChance });
+    });
+    
+    return scores;
+  }, [articles, userDocuments]);
+
+  // Sort articles by chance (highest first), then by article number
+  const sortedArticles = useMemo(() => {
+    return [...articleScores].sort((a, b) => {
+      // First by chance (descending)
+      if (b.maxChance !== a.maxChance) {
+        return b.maxChance - a.maxChance;
+      }
+      // Then by article number (ascending)
+      return parseInt(a.article.article_number) - parseInt(b.article.article_number);
+    });
+  }, [articleScores]);
+
+  // Set initial selected article to the one with highest chance
+  useEffect(() => {
+    if (sortedArticles.length > 0 && !selectedArticle) {
+      // Find first article with documents
+      const articleWithDocs = sortedArticles.find(s => s.maxChance > 0);
+      if (articleWithDocs) {
+        setSelectedArticle(articleWithDocs.article);
+      } else {
+        setSelectedArticle(sortedArticles[0].article);
+      }
+    }
+  }, [sortedArticles, selectedArticle]);
+
   // Filter articles by search
   const filteredArticles = useMemo(() => {
-    if (!searchQuery.trim()) return articles;
+    const articlesToFilter = sortedArticles.map(s => s.article);
+    if (!searchQuery.trim()) return articlesToFilter;
     const query = searchQuery.toLowerCase();
-    return articles.filter(
+    return articlesToFilter.filter(
       (article) =>
         article.article_number.toLowerCase().includes(query) ||
         article.title.toLowerCase().includes(query) ||
         (categoryLabels[article.category] || "").toLowerCase().includes(query)
     );
-  }, [articles, searchQuery]);
+  }, [sortedArticles, searchQuery]);
 
-  // Group articles by category
+  // Group articles by category (preserving sort order within groups)
   const groupedArticles = useMemo(() => {
     const groups: Record<string, Article[]> = {};
     filteredArticles.forEach((article) => {
@@ -304,31 +311,17 @@ export default function MedicalHistoryPage() {
     return groups;
   }, [filteredArticles]);
 
-  // Calculate chance data for selected article
-  const chanceData = useMemo(() => {
-    if (!selectedArticle) return null;
-    return calculateCategoryBChance(selectedArticle, userDocuments, assessments);
-  }, [selectedArticle, userDocuments, assessments]);
-
   // Get relevant documents for selected article
   const relevantDocuments = useMemo(() => {
-    if (!selectedArticle || userDocuments.length === 0) return [];
-    
-    const keywords = categoryBKeywords[selectedArticle.category] || [];
-    
-    return userDocuments.filter((doc) => {
-      // Check if document is linked to this article
-      if (doc.linked_article_id === selectedArticle.id) return true;
-      
-      const textToSearch = [
-        doc.title?.toLowerCase() || "",
-        doc.raw_text?.toLowerCase() || "",
-        JSON.stringify(doc.meta || {}).toLowerCase(),
-      ].join(" ");
-
-      return keywords.some((keyword) => textToSearch.includes(keyword.toLowerCase()));
-    });
+    if (!selectedArticle) return [];
+    return getRelevantDocuments(selectedArticle, userDocuments);
   }, [selectedArticle, userDocuments]);
+
+  // Calculate chance data for selected article using only its relevant documents
+  const chanceData = useMemo(() => {
+    if (!selectedArticle) return null;
+    return calculateCategoryBChance(selectedArticle, relevantDocuments, assessments);
+  }, [selectedArticle, relevantDocuments, assessments]);
 
   // Get all AI recommendations for relevant documents
   const allRecommendations = useMemo(() => {
