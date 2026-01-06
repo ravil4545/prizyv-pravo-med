@@ -384,12 +384,25 @@ export default function MedicalDocumentsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadDocument = (doc: MedicalDocument) => {
-    const a = document.createElement('a');
-    a.href = doc.file_url;
-    a.download = `${doc.title || 'document'}.jpg`;
-    a.target = '_blank';
-    a.click();
+  const downloadDocument = async (doc: MedicalDocument) => {
+    try {
+      const response = await fetch(doc.file_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${doc.title || 'document'}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Ошибка скачивания",
+        description: "Не удалось скачать документ",
+        variant: "destructive",
+      });
+    }
   };
 
   const printDocument = (doc: MedicalDocument) => {
@@ -409,23 +422,39 @@ export default function MedicalDocumentsPage() {
         <head>
           <title>${doc.title || 'Медицинский документ'}</title>
           <style>
-            body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
-            .header { margin-bottom: 20px; text-align: center; }
-            .header h1 { font-size: 18px; margin: 0; }
-            .header p { color: #666; margin: 5px 0 0; font-size: 12px; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; }
+            .container { padding: 20px; }
+            .header { margin-bottom: 20px; text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 15px; }
+            .header h1 { font-size: 16px; margin: 0 0 5px; }
+            .header p { color: #666; font-size: 12px; }
+            .image-container { text-align: center; }
             img { max-width: 100%; height: auto; }
+            .no-print { margin: 20px; text-align: center; }
+            .no-print button { padding: 10px 30px; font-size: 16px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; margin-right: 10px; }
+            .no-print button:hover { background: #2563eb; }
+            .no-print .close-btn { background: #6b7280; }
+            .no-print .close-btn:hover { background: #4b5563; }
             @media print {
-              body { padding: 0; }
-              .header { margin-bottom: 10px; }
+              .no-print { display: none; }
+              .container { padding: 0; }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>${doc.title || 'Медицинский документ'}</h1>
-            ${doc.document_date ? `<p>Дата: ${format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })}</p>` : ''}
+          <div class="no-print">
+            <button onclick="window.print()">🖨️ Печать</button>
+            <button class="close-btn" onclick="window.close()">Закрыть</button>
           </div>
-          <img src="${doc.file_url}" alt="${doc.title || 'Документ'}" onload="setTimeout(() => { window.print(); window.close(); }, 500);" />
+          <div class="container">
+            <div class="header">
+              <h1>${doc.title || 'Медицинский документ'}</h1>
+              ${doc.document_date ? `<p>Дата документа: ${format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })}</p>` : ''}
+            </div>
+            <div class="image-container">
+              <img src="${doc.file_url}" alt="${doc.title || 'Документ'}" />
+            </div>
+          </div>
         </body>
       </html>
     `);
@@ -667,8 +696,8 @@ export default function MedicalDocumentsPage() {
                     <TableBody>
                       {filteredDocuments.map((doc) => (
                         <TableRow key={doc.id} className="group">
-                          <TableCell className="font-medium max-w-[250px]">
-                            <div className="truncate">{doc.title || "Без названия"}</div>
+                          <TableCell className="font-medium min-w-[200px]">
+                            <div className="whitespace-normal break-words">{doc.title || "Без названия"}</div>
                             {doc.disease_articles_565 && (
                               <div className="text-xs text-primary mt-1">
                                 Статья {doc.disease_articles_565.article_number}
@@ -748,13 +777,18 @@ export default function MedicalDocumentsPage() {
                                   </DialogHeader>
                                   <ScrollArea className="max-h-[calc(90vh-100px)]">
                                     <div className="space-y-6 pr-4">
-                                      {/* Document Image */}
-                                      <div className="rounded-lg overflow-hidden border">
-                                        <img 
-                                          src={doc.file_url} 
-                                          alt={doc.title || "Документ"} 
-                                          className="w-full"
-                                        />
+                                      {/* Document Image - Full size viewer */}
+                                      <div className="rounded-lg overflow-hidden border bg-muted/20">
+                                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="block">
+                                          <img 
+                                            src={doc.file_url} 
+                                            alt={doc.title || "Документ"} 
+                                            className="w-full cursor-zoom-in hover:opacity-90 transition-opacity"
+                                          />
+                                        </a>
+                                        <div className="p-2 bg-muted/50 text-center text-xs text-muted-foreground">
+                                          Нажмите на изображение для просмотра в полном размере
+                                        </div>
                                       </div>
 
                                       {/* AI Analysis Results */}
