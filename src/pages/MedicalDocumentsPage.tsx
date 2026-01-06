@@ -813,16 +813,17 @@ export default function MedicalDocumentsPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center justify-end gap-1.5">
                               {/* View Details */}
                               <Dialog>
                                 <DialogTrigger asChild>
                                   <Button 
                                     variant="ghost" 
                                     size="icon"
+                                    className="h-9 w-9"
                                     onClick={() => setSelectedDocument(doc)}
                                   >
-                                    <Eye className="h-4 w-4" />
+                                    <Eye className="h-5 w-5" />
                                   </Button>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
@@ -1040,11 +1041,12 @@ export default function MedicalDocumentsPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-9 w-9"
                                   onClick={() => analyzeDocument(doc.id)}
                                   disabled={analyzingId === doc.id}
                                   title="Повторить анализ"
                                 >
-                                  <Brain className="h-4 w-4" />
+                                  <Brain className="h-5 w-5" />
                                 </Button>
                               )}
 
@@ -1052,29 +1054,32 @@ export default function MedicalDocumentsPage() {
                               <Button 
                                 variant="ghost" 
                                 size="icon"
+                                className="h-9 w-9"
                                 onClick={() => downloadDocument(doc)}
                                 title="Скачать"
                               >
-                                <Download className="h-4 w-4" />
+                                <Download className="h-5 w-5" />
                               </Button>
 
                               {/* Print */}
                               <Button 
                                 variant="ghost" 
                                 size="icon"
+                                className="h-9 w-9"
                                 onClick={() => printDocument(doc)}
                                 title="Печать"
                               >
-                                <Printer className="h-4 w-4" />
+                                <Printer className="h-5 w-5" />
                               </Button>
 
                               {/* Delete */}
                               <Button 
                                 variant="ghost" 
                                 size="icon"
+                                className="h-9 w-9"
                                 onClick={() => handleDeleteDocument(doc)}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <Trash2 className="h-5 w-5 text-destructive" />
                               </Button>
                             </div>
                           </TableCell>
