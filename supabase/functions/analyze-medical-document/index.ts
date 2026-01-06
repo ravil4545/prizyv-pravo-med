@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,49 +13,109 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, documentType } = await req.json();
+    const { imageBase64, documentId, userId } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log('Starting medical document analysis with Lovable AI');
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    const prompt = `Ты медицинский эксперт, который анализирует медицинские документы.
+    console.log('Starting comprehensive medical document analysis with Lovable AI');
 
-Проанализируй этот медицинский документ (${documentType === 'analysis' ? 'анализ' : documentType === 'examination' ? 'обследование' : 'консультация врача'}) и выполни следующие задачи:
+    // Получаем список типов документов для классификации
+    const { data: documentTypes } = await supabase
+      .from("document_types")
+      .select("id, code, name")
+      .eq("is_active", true);
 
-1. Извлеки весь текст из документа, включая:
+    // Получаем список статей для связывания
+    const { data: articles } = await supabase
+      .from("disease_articles_565")
+      .select("id, article_number, title, category")
+      .eq("is_active", true);
+
+    const documentTypesStr = documentTypes?.map(t => `${t.code}: ${t.name}`).join(", ") || "";
+    const articlesStr = articles?.map(a => `Статья ${a.article_number}: ${a.title}`).join("\n") || "";
+
+    const prompt = `Ты медицинский эксперт-документовед, который анализирует медицинские документы для определения годности к военной службе по Постановлению №565.
+
+ЗАДАЧА: Проанализируй этот медицинский документ и выполни следующие действия:
+
+1. ИЗВЛЕЧЕНИЕ ТЕКСТА (OCR):
+   Извлеки ВЕСЬ текст из документа максимально точно, включая:
    - Название медицинского учреждения
-   - Дата проведения
-   - ФИО пациента (если есть)
-   - Результаты анализов/обследований
+   - Дата документа (в формате YYYY-MM-DD если возможно определить)
+   - ФИО пациента
+   - Все результаты анализов/обследований с числовыми значениями
+   - Диагнозы (коды МКБ-10 если есть)
    - Заключения врачей
    - Рекомендации
+   - Подписи и печати
 
-2. Проанализируй содержание и определи:
-   - Предварительную категорию годности к военной службе (А, Б, В, Г, Д)
-   - Краткое обоснование выбранной категории
-   - Список дополнительных обследований и консультаций, необходимых для уточнения диагноза (по пунктам)
+2. ОПРЕДЕЛЕНИЕ ТИПА ДОКУМЕНТА:
+   Выбери наиболее подходящий тип из списка:
+   ${documentTypesStr}
+   
+   Если не подходит ни один - выбери "other" или "unknown"
 
-Категории годности:
-- А - годен к военной службе
-- Б - годен к военной службе с незначительными ограничениями
-- В - ограниченно годен (призыву не подлежит в мирное время)
-- Г - временно не годен
-- Д - не годен к военной службе
+3. ОПРЕДЕЛЕНИЕ ДАТЫ ДОКУМЕНТА:
+   Найди дату создания/выдачи документа и верни в формате YYYY-MM-DD
 
-Верни результат в формате JSON:
+4. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ:
+   Определи, к какой статье Постановления №565 относится документ:
+   ${articlesStr}
+   
+   Верни номер наиболее релевантной статьи (только число)
+
+5. КАТЕГОРИЯ ГОДНОСТИ:
+   Определи предварительную категорию годности к военной службе:
+   - А - годен к военной службе
+   - Б - годен с незначительными ограничениями  
+   - В - ограниченно годен (НЕ подлежит призыву в мирное время)
+   - Г - временно не годен
+   - Д - не годен к военной службе
+
+6. ШАНС НЕПРИЗЫВНОЙ КАТЕГОРИИ (В):
+   Оцени вероятность получения категории В в процентах (0-100) на основе:
+   - Хроничность заболевания (длительность более 3-5 лет увеличивает шанс)
+   - Частота обращений к врачам
+   - Наличие стационарного лечения
+   - Тяжесть состояния
+   - Соответствие критериям статьи Постановления №565
+   
+   0% - если документ не содержит информации о заболеваниях или заболевания полностью излечимы
+   10-30% - начальные стадии хронических заболеваний
+   40-60% - умеренные хронические заболевания с регулярным лечением
+   70-90% - серьёзные хронические заболевания, частые обострения
+   90-100% - тяжёлые заболевания, явно подходящие под категорию В или Д
+
+7. РЕКОМЕНДАЦИИ:
+   Дай конкретные рекомендации:
+   - Какие дополнительные обследования нужны
+   - К каким специалистам нужно обратиться
+   - Какие документы ещё нужно собрать
+   - Нужны ли повторные консультации
+
+Верни результат СТРОГО в формате JSON:
 {
-  "extractedText": "полный текст из документа",
-  "fitnessCategory": "буква категории",
-  "explanation": "краткое обоснование категории (2-3 предложения)",
+  "extractedText": "полный извлечённый текст документа",
+  "documentDate": "YYYY-MM-DD или null если не определена",
+  "documentTypeCode": "код типа документа",
+  "linkedArticleNumber": "номер статьи (только число) или null",
+  "fitnessCategory": "А, Б, В, Г или Д",
+  "categoryBChance": число от 0 до 100,
+  "explanation": "подробное обоснование выбранной категории и шанса (3-5 предложений)",
   "recommendations": [
-    "Пункт 1: какое обследование или консультация",
-    "Пункт 2: какое обследование или консультация",
-    ...
-  ]
+    "Конкретная рекомендация 1",
+    "Конкретная рекомендация 2",
+    "Конкретная рекомендация 3"
+  ],
+  "suggestedTitle": "предложенное название документа на основе содержания"
 }`;
 
     // Extract base64 data without data URL prefix if present
@@ -98,14 +159,24 @@ serve(async (req) => {
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ 
-            error: "Превышен лимит запросов. Попробуйте позже.",
-            extractedText: "Не удалось извлечь текст из-за превышения лимита API.",
-            fitnessCategory: "Требуется ручной анализ",
-            explanation: "Пожалуйста, попробуйте загрузить документ позже.",
-            recommendations: ["Дождитесь восстановления лимита API", "Попробуйте загрузить документ снова через несколько минут"]
+            error: "rate_limit",
+            message: "Превышен лимит запросов. Попробуйте позже."
           }),
           {
-            status: 200,
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ 
+            error: "payment_required",
+            message: "Требуется пополнение баланса AI."
+          }),
+          {
+            status: 402,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           }
         );
@@ -119,41 +190,84 @@ serve(async (req) => {
     
     let result;
     try {
-      // Пробуем распарсить JSON из ответа
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0]);
       } else {
         result = JSON.parse(content);
       }
-      
-      // Проверяем наличие обязательных полей
-      if (!result.extractedText || result.extractedText.length < 10) {
-        result.extractedText = "Не удалось извлечь достаточно текста из документа. Попробуйте загрузить более четкое изображение.";
-      }
-      
-      if (!result.fitnessCategory) {
-        result.fitnessCategory = "Требуется дополнительное обследование";
-      }
-      
-      if (!result.recommendations || result.recommendations.length === 0) {
-        result.recommendations = ["Консультация с военным врачом для уточнения категории годности"];
-      }
-      
     } catch (e) {
       console.error("Failed to parse JSON:", e, "Content:", content);
       result = {
-        extractedText: "Не удалось извлечь текст из документа. Возможно, изображение слишком размытое или текст нечитаем.",
-        fitnessCategory: "Требуется дополнительное обследование",
-        explanation: "Не удалось автоматически проанализировать документ. Обратитесь к специалисту.",
-        recommendations: ["Загрузите более четкое изображение документа", "Консультация с военным врачом для уточнения категории годности"]
+        extractedText: "Не удалось извлечь текст из документа.",
+        documentDate: null,
+        documentTypeCode: "unknown",
+        linkedArticleNumber: null,
+        fitnessCategory: "Требуется анализ",
+        categoryBChance: 0,
+        explanation: "Не удалось автоматически проанализировать документ.",
+        recommendations: ["Загрузите более чёткое изображение документа"],
+        suggestedTitle: "Медицинский документ"
       };
+    }
+
+    // Находим ID типа документа по коду
+    let documentTypeId = null;
+    if (result.documentTypeCode && documentTypes) {
+      const foundType = documentTypes.find(t => t.code === result.documentTypeCode);
+      documentTypeId = foundType?.id || null;
+    }
+
+    // Находим ID статьи по номеру
+    let linkedArticleId = null;
+    if (result.linkedArticleNumber && articles) {
+      const foundArticle = articles.find(a => a.article_number === String(result.linkedArticleNumber));
+      linkedArticleId = foundArticle?.id || null;
+    }
+
+    // Обновляем документ в базе данных если есть documentId
+    if (documentId) {
+      const updateData: Record<string, any> = {
+        raw_text: result.extractedText,
+        is_classified: true,
+        ai_fitness_category: result.fitnessCategory,
+        ai_category_chance: result.categoryBChance || 0,
+        ai_recommendations: result.recommendations || [],
+        ai_explanation: result.explanation,
+        updated_at: new Date().toISOString()
+      };
+
+      if (result.documentDate) {
+        updateData.document_date = result.documentDate;
+      }
+      if (documentTypeId) {
+        updateData.document_type_id = documentTypeId;
+      }
+      if (linkedArticleId) {
+        updateData.linked_article_id = linkedArticleId;
+      }
+      if (result.suggestedTitle) {
+        updateData.title = result.suggestedTitle;
+      }
+
+      const { error: updateError } = await supabase
+        .from("medical_documents_v2")
+        .update(updateData)
+        .eq("id", documentId);
+
+      if (updateError) {
+        console.error("Error updating document:", updateError);
+      }
     }
 
     console.log('Medical document analysis completed successfully');
 
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({
+        ...result,
+        documentTypeId,
+        linkedArticleId
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
@@ -162,14 +276,11 @@ serve(async (req) => {
     console.error("Error in analyze-medical-document:", error);
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Unknown error",
-        extractedText: "Произошла ошибка при анализе документа.",
-        fitnessCategory: "Ошибка анализа",
-        explanation: "Не удалось проанализировать документ из-за технической ошибки.",
-        recommendations: ["Попробуйте загрузить документ снова", "Обратитесь в техподдержку, если проблема повторяется"]
+        error: "server_error",
+        message: error instanceof Error ? error.message : "Неизвестная ошибка"
       }),
       {
-        status: 200,
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
