@@ -31,6 +31,16 @@ interface DocumentType {
   name: string;
 }
 
+interface DocumentPart {
+  name: string;
+  type_id?: string;
+  type_name?: string;
+}
+
+interface DocumentMeta {
+  parts?: DocumentPart[];
+}
+
 interface MedicalDocument {
   id: string;
   title: string | null;
@@ -45,6 +55,7 @@ interface MedicalDocument {
   ai_recommendations: string[] | null;
   ai_explanation: string | null;
   linked_article_id: string | null;
+  meta: DocumentMeta | null;
   document_types?: DocumentType | null;
   disease_articles_565?: { article_number: string; title: string } | null;
 }
@@ -149,6 +160,7 @@ export default function MedicalDocumentsPage() {
         ai_recommendations,
         ai_explanation,
         linked_article_id,
+        meta,
         document_types (id, code, name),
         disease_articles_565 (article_number, title)
       `)
@@ -989,14 +1001,33 @@ export default function MedicalDocumentsPage() {
 
       // Обновляем запись в БД
       const totalPages = existingPageCount + addPagesFiles.length;
-      const newTitle = documentToAddPages.title?.replace(/_\d+_стр/, '') || 'Документ';
+      
+      // Получаем существующие части из meta или создаём первую часть из текущего документа
+      const existingMeta = (documentToAddPages.meta as DocumentMeta) || {};
+      const existingParts: DocumentPart[] = existingMeta.parts || [{
+        name: documentToAddPages.title?.replace(/_\d+_стр/, '').replace(/\.pdf$/, '') || 'Документ',
+        type_id: documentToAddPages.document_type_id || undefined,
+        type_name: documentToAddPages.document_types?.name || undefined,
+      }];
+      
+      // Добавляем новые части
+      const newParts: DocumentPart[] = addPagesFiles.map(file => ({
+        name: file.name.replace(/\.[^/.]+$/, '').substring(0, 30),
+      }));
+      
+      const allParts = [...existingParts, ...newParts];
+      
+      // Формируем составное название через "+"
+      const shortenName = (name: string) => name.length > 20 ? name.substring(0, 20) + '…' : name;
+      const combinedTitle = allParts.map(p => shortenName(p.name)).join(' + ');
       
       const { error: updateError } = await supabase
         .from("medical_documents_v2")
         .update({
           file_url: publicUrl,
-          title: `${newTitle}_${totalPages}_стр`,
-          is_classified: false, // Сбрасываем для повторного анализа
+          title: combinedTitle,
+          is_classified: false,
+          meta: JSON.parse(JSON.stringify({ parts: allParts })),
         })
         .eq("id", documentToAddPages.id);
 
@@ -1605,15 +1636,33 @@ export default function MedicalDocumentsPage() {
                             </Button>
                           </TableCell>
                           <TableCell className="font-medium w-[180px] max-w-[180px]">
-                            <div className="whitespace-normal break-words text-sm leading-tight">{doc.title || "Без названия"}</div>
+                            <div className="whitespace-normal break-words text-sm leading-tight">
+                              {doc.meta?.parts && doc.meta.parts.length > 1
+                                ? doc.meta.parts.map(p => p.name).join(' + ')
+                                : doc.title || "Без названия"
+                              }
+                            </div>
                             {doc.disease_articles_565 && (
                               <div className="text-xs text-primary mt-1">
                                 Статья {doc.disease_articles_565.article_number}
                               </div>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {doc.document_types ? (
+                          <TableCell className="max-w-[150px]">
+                            {doc.meta?.parts && doc.meta.parts.length > 1 ? (
+                              <div className="flex flex-col gap-1">
+                                {doc.meta.parts.map((part, idx) => (
+                                  part.type_name && (
+                                    <Badge key={idx} variant="secondary" className="text-xs w-fit">
+                                      {part.type_name}
+                                    </Badge>
+                                  )
+                                ))}
+                                {doc.meta.parts.every(p => !p.type_name) && (
+                                  <span className="text-muted-foreground text-sm">—</span>
+                                )}
+                              </div>
+                            ) : doc.document_types ? (
                               <Badge variant="secondary" className="text-xs">
                                 {doc.document_types.name}
                               </Badge>
