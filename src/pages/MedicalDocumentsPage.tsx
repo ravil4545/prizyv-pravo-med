@@ -69,7 +69,7 @@ export default function MedicalDocumentsPage() {
   const [enhancing, setEnhancing] = useState(false);
   
   // Handwritten document form state
-  const [handwrittenFile, setHandwrittenFile] = useState<File | null>(null);
+  const [handwrittenFiles, setHandwrittenFiles] = useState<File[]>([]);
   const [handwrittenForm, setHandwrittenForm] = useState({
     documentType: "",
     examination: "",
@@ -173,8 +173,8 @@ export default function MedicalDocumentsPage() {
     if (e.target.files) {
       const files = Array.from(e.target.files);
       if (mode === "handwritten") {
-        // Для рукописного - только один файл, сохраняем в state
-        setHandwrittenFile(files[0]);
+        // Для рукописного - добавляем файлы к существующим
+        setHandwrittenFiles(prev => [...prev, ...files]);
         return;
       }
       if (mode === "single") {
@@ -188,9 +188,14 @@ export default function MedicalDocumentsPage() {
     setUploadMode(null);
   };
 
+  // Удаление файла из списка рукописных
+  const removeHandwrittenFile = (index: number) => {
+    setHandwrittenFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Upload handwritten document with manual text input
   const uploadHandwrittenDocument = async () => {
-    if (!user || !handwrittenFile) return;
+    if (!user || handwrittenFiles.length === 0) return;
     
     const { documentType, examination, conclusion, diagnosis } = handwrittenForm;
     if (!documentType && !examination && !conclusion && !diagnosis) {
@@ -203,18 +208,24 @@ export default function MedicalDocumentsPage() {
     }
 
     setUploading(true);
-    setUploadProgress("Сжатие изображения...");
 
     try {
-      // Конвертируем и сжимаем изображение
-      const { base64 } = await convertToJpeg(handwrittenFile);
-      const compressedBase64 = await compressImage(base64);
+      // Обрабатываем все файлы
+      const processedImages: { base64: string; width: number; height: number }[] = [];
+      
+      for (let i = 0; i < handwrittenFiles.length; i++) {
+        setUploadProgress(`Обработка страницы ${i + 1} из ${handwrittenFiles.length}...`);
+        const file = handwrittenFiles[i];
+        const { base64 } = await convertToJpeg(file);
+        const compressedBase64 = await compressImage(base64);
+        const dimensions = await getImageDimensions(compressedBase64);
+        processedImages.push({ base64: compressedBase64, ...dimensions });
+      }
       
       setUploadProgress("Создание PDF...");
       
-      // Создаём одностраничный PDF
-      const dimensions = await getImageDimensions(compressedBase64);
-      const pdfBlob = await createPdfFromImages([{ base64: compressedBase64, ...dimensions }]);
+      // Создаём PDF из всех страниц
+      const pdfBlob = await createPdfFromImages(processedImages);
       
       const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
@@ -240,11 +251,12 @@ export default function MedicalDocumentsPage() {
       ].filter(Boolean).join("\n");
 
       // Создаём запись в базе
+      const pagesText = handwrittenFiles.length > 1 ? `_${handwrittenFiles.length}_стр` : "";
       const { data: insertedDoc, error: insertError } = await supabase
         .from("medical_documents_v2")
         .insert({
           user_id: user.id,
-          title: `Рукописный_${format(new Date(), 'dd.MM.yyyy_HH-mm')}`,
+          title: `Рукописный${pagesText}_${format(new Date(), 'dd.MM.yyyy_HH-mm')}`,
           file_url: publicUrl,
           is_classified: false,
           raw_text: manualText, // Сохраняем введённый пользователем текст
@@ -256,7 +268,7 @@ export default function MedicalDocumentsPage() {
 
       toast({
         title: "Документ загружен",
-        description: "Запускаем AI-анализ введённого текста...",
+        description: `${handwrittenFiles.length} стр. Запускаем AI-анализ введённого текста...`,
       });
 
       // Запускаем AI анализ на введённом тексте
@@ -265,7 +277,7 @@ export default function MedicalDocumentsPage() {
       }
 
       // Сбрасываем форму
-      setHandwrittenFile(null);
+      setHandwrittenFiles([]);
       setHandwrittenForm({ documentType: "", examination: "", conclusion: "", diagnosis: "" });
       setUploadMode(null);
     } catch (error: any) {
@@ -980,38 +992,49 @@ export default function MedicalDocumentsPage() {
                     </p>
                   </div>
                   
-                  {/* Фото документа */}
-                  {!handwrittenFile ? (
+                  {/* Фото документов */}
+                  <div className="mb-4">
                     <div
-                      className="relative border-2 border-dashed rounded-lg p-8 text-center transition-all mb-4 border-muted-foreground/25 hover:border-primary/50"
+                      className="relative border-2 border-dashed rounded-lg p-6 text-center transition-all border-muted-foreground/25 hover:border-primary/50"
                     >
-                      <PenLine className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-base font-medium mb-1">Выберите фото документа</p>
-                      <p className="text-sm text-muted-foreground">Рукописный документ для сохранения</p>
+                      <PenLine className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-base font-medium mb-1">
+                        {handwrittenFiles.length === 0 ? "Выберите фото документа" : "Добавить ещё страницы"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Можно загрузить несколько страниц</p>
                       <input
                         type="file"
-                        accept=".jpg,.jpeg,.png,.webp"
+                        multiple
+                        accept=".jpg,.jpeg,.png,.webp,.pdf"
                         onChange={(e) => handleFileInput(e, "handwritten")}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
                     </div>
-                  ) : (
-                    <div className="mb-4 p-4 border rounded-lg bg-muted/30">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Check className="h-5 w-5 text-green-500" />
-                          <span className="font-medium">{handwrittenFile.name}</span>
+                    
+                    {handwrittenFiles.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-sm font-medium">Загруженные страницы ({handwrittenFiles.length}):</p>
+                        <div className="max-h-32 overflow-y-auto space-y-1">
+                          {handwrittenFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 border rounded bg-muted/30">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-xs text-muted-foreground flex-shrink-0">{index + 1}.</span>
+                                <span className="text-sm truncate">{file.name}</span>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                className="h-6 w-6 p-0 flex-shrink-0"
+                                onClick={() => removeHandwrittenFile(index)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => setHandwrittenFile(null)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                   
                   {/* Форма ручного ввода */}
                   <div className="space-y-4 mb-6">
@@ -1060,7 +1083,7 @@ export default function MedicalDocumentsPage() {
                       className="flex-1"
                       onClick={() => {
                         setUploadMode(null);
-                        setHandwrittenFile(null);
+                        setHandwrittenFiles([]);
                         setHandwrittenForm({ documentType: "", examination: "", conclusion: "", diagnosis: "" });
                       }}
                     >
@@ -1068,7 +1091,7 @@ export default function MedicalDocumentsPage() {
                     </Button>
                     <Button 
                       className="flex-1"
-                      disabled={!handwrittenFile || uploading}
+                      disabled={handwrittenFiles.length === 0 || uploading}
                       onClick={uploadHandwrittenDocument}
                     >
                       {uploading ? (
