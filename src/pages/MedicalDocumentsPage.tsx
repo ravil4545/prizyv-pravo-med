@@ -588,17 +588,17 @@ export default function MedicalDocumentsPage() {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Медицинские документы</h1>
-              <p className="text-muted-foreground">
-                Загружайте документы — ИИ автоматически извлечёт текст, определит тип и оценит категорию годности
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Медицинские документы</h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                ИИ автоматически извлечёт текст и оценит категорию годности
               </p>
             </div>
-            <Button variant="outline" onClick={() => navigate("/dashboard")}>
-              Назад в кабинет
+            <Button variant="outline" size="sm" className="self-start sm:self-auto flex-shrink-0" onClick={() => navigate("/dashboard")}>
+              Назад
             </Button>
           </div>
 

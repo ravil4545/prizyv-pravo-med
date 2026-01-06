@@ -350,36 +350,36 @@ export default function MedicalHistoryPage() {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2 sm:gap-3">
               <div 
-                className="p-3 rounded-xl animate-gradient-shift"
+                className="p-2 sm:p-3 rounded-xl flex-shrink-0 animate-gradient-shift"
                 style={{
                   background: "linear-gradient(135deg, #6366f1, #ec4899)",
                   backgroundSize: "200% 200%",
                 }}
               >
-                <BookOpen className="h-6 w-6 text-white" />
+                <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              История болезни (Постановление №565)
+              <span className="truncate">История болезни</span>
             </h1>
-            <p className="text-muted-foreground">
-              Расписание болезней для военно-врачебной экспертизы • {articles.length} статей
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Расписание болезней • {articles.length} статей
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>
-            Назад в кабинет
+          <Button variant="outline" size="sm" className="self-start sm:self-auto flex-shrink-0" onClick={() => navigate("/dashboard")}>
+            Назад
           </Button>
         </div>
 
-        <div className="grid lg:grid-cols-[350px_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-4 sm:gap-6">
           {/* Sidebar - Articles List */}
           <Card className="h-fit lg:sticky lg:top-24">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="h-5 w-5" />
+            <CardHeader className="pb-3 px-3 sm:px-6">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
                 Оглавление
               </CardTitle>
               <div className="relative mt-2">
@@ -388,12 +388,12 @@ export default function MedicalHistoryPage() {
                   placeholder="Поиск статей..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 text-sm"
                 />
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[calc(100vh-380px)] max-h-[550px]">
+              <ScrollArea className="h-[300px] sm:h-[calc(100vh-380px)] sm:max-h-[550px]">
                 <div className="p-2 space-y-4">
                   {Object.entries(groupedArticles).map(([category, categoryArticles]) => (
                     <div key={category}>
@@ -455,27 +455,27 @@ export default function MedicalHistoryPage() {
               <>
                 {/* Article Content */}
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
+                  <CardHeader className="px-3 sm:px-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
+                      <div className="min-w-0">
                         <Badge 
                           style={{ 
                             backgroundColor: categoryColors[selectedArticle.category] || "#94a3b8",
                             color: "white"
                           }}
-                          className="mb-2"
+                          className="mb-2 text-xs"
                         >
                           {categoryLabels[selectedArticle.category] || selectedArticle.category}
                         </Badge>
-                        <CardTitle className="text-2xl">
+                        <CardTitle className="text-lg sm:text-xl md:text-2xl break-words">
                           Статья {selectedArticle.article_number}: {selectedArticle.title}
                         </CardTitle>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-3 sm:px-6">
                     <div className="prose prose-sm dark:prose-invert max-w-none">
-                      <pre className="whitespace-pre-wrap font-sans text-foreground bg-transparent p-0 border-0 text-sm leading-relaxed">
+                      <pre className="whitespace-pre-wrap font-sans text-foreground bg-transparent p-0 border-0 text-xs sm:text-sm leading-relaxed overflow-x-auto">
                         {selectedArticle.body}
                       </pre>
                     </div>
@@ -484,35 +484,35 @@ export default function MedicalHistoryPage() {
 
                 {/* Category B Chances Chart - Dynamic */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      📊 Вероятность получения категории «В» (ограниченно годен)
+                  <CardHeader className="px-3 sm:px-6">
+                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                      📊 Вероятность категории «В»
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-3 sm:px-6">
                     {chanceData?.noData === 100 ? (
-                      <div className="text-center py-8">
-                        <AlertCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                        <h3 className="text-lg font-medium mb-2">Нет данных для анализа</h3>
-                        <p className="text-muted-foreground mb-4">
-                          Загрузите медицинские документы, чтобы рассчитать вероятность получения категории «В»
+                      <div className="text-center py-6 sm:py-8">
+                        <AlertCircle className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-muted-foreground" />
+                        <h3 className="text-base sm:text-lg font-medium mb-2">Нет данных для анализа</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Загрузите документы для расчёта вероятности
                         </p>
-                        <Button onClick={() => navigate("/medical-documents")}>
+                        <Button size="sm" onClick={() => navigate("/medical-documents")}>
                           Загрузить документы
                         </Button>
                       </div>
                     ) : (
                       <>
-                        <div className="grid md:grid-cols-2 gap-6">
-                          <div className="h-[250px]">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                          <div className="h-[200px] sm:h-[250px]">
                             <ResponsiveContainer width="100%" height="100%">
                               <PieChart>
                                 <Pie
                                   data={pieChartData}
                                   cx="50%"
                                   cy="50%"
-                                  innerRadius={60}
-                                  outerRadius={90}
+                                  innerRadius={40}
+                                  outerRadius={70}
                                   paddingAngle={3}
                                   dataKey="value"
                                   animationBegin={0}
@@ -525,25 +525,25 @@ export default function MedicalHistoryPage() {
                                 <Tooltip 
                                   formatter={(value: number) => [`${value}%`, "Вероятность"]}
                                 />
-                                <Legend />
+                                <Legend wrapperStyle={{ fontSize: '12px' }} />
                               </PieChart>
                             </ResponsiveContainer>
                           </div>
                           
-                          <div className="space-y-4">
-                            <div className="p-4 rounded-lg bg-muted/50">
+                          <div className="space-y-3 sm:space-y-4">
+                            <div className="p-3 sm:p-4 rounded-lg bg-muted/50">
                               <div className="flex items-center gap-3 mb-2">
                                 {chanceData && chanceData.categoryB >= 50 ? (
-                                  <CheckCircle2 className="h-6 w-6 text-green-500" />
+                                  <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
                                 ) : (
-                                  <AlertCircle className="h-6 w-6 text-amber-500" />
+                                  <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
                                 )}
-                                <span className="text-2xl font-bold">
+                                <span className="text-xl sm:text-2xl font-bold">
                                   {chanceData?.categoryB || 0}%
                                 </span>
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                Вероятность получения категории «В» на основе ваших документов
+                              <p className="text-xs sm:text-sm text-muted-foreground">
+                                Вероятность категории «В» на основе документов
                               </p>
                             </div>
 
@@ -577,16 +577,16 @@ export default function MedicalHistoryPage() {
                 {/* AI Recommendations */}
                 {allRecommendations.length > 0 && (
                   <Card className="border-primary/50">
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                        <AlertCircle className="h-5 w-5" />
-                        Рекомендации ИИ по статье {selectedArticle.article_number}
+                    <CardHeader className="px-3 sm:px-6">
+                      <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-primary">
+                        <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                        Рекомендации ИИ
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-3 sm:px-6">
                       <ul className="space-y-2">
                         {allRecommendations.map((rec, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm">
+                          <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
                             <span className="text-primary font-bold">{idx + 1}.</span>
                             <span>{rec}</span>
                           </li>
@@ -598,22 +598,23 @@ export default function MedicalHistoryPage() {
 
                 {/* Relevant Documents */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileCheck className="h-5 w-5" />
-                      Ваши релевантные документы по статье {selectedArticle.article_number}
+                  <CardHeader className="px-3 sm:px-6">
+                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                      <FileCheck className="h-4 w-4 sm:h-5 sm:w-5" />
+                      Релевантные документы
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-3 sm:px-6">
                     {relevantDocuments.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="mb-2">Нет документов, соответствующих данной статье</p>
-                        <p className="text-sm">
-                          Загрузите медицинские документы по теме: <strong>{selectedArticle.title}</strong>
+                      <div className="text-center py-6 sm:py-8 text-muted-foreground">
+                        <FileText className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-4 opacity-50" />
+                        <p className="mb-2 text-sm">Нет документов по данной статье</p>
+                        <p className="text-xs sm:text-sm">
+                          Загрузите документы: <strong className="break-words">{selectedArticle.title}</strong>
                         </p>
                         <Button 
                           variant="outline" 
+                          size="sm"
                           className="mt-4"
                           onClick={() => navigate("/medical-documents")}
                         >
@@ -621,26 +622,23 @@ export default function MedicalHistoryPage() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2 sm:space-y-3">
                         {relevantDocuments.slice(0, 10).map((doc) => (
                           <div 
                             key={doc.id}
-                            className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                            className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                           >
-                            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{doc.title || "Без названия"}</p>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="font-medium truncate text-sm">{doc.title || "Без названия"}</p>
+                              <p className="text-xs text-muted-foreground">
                                 {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
                                 {doc.ai_category_chance !== null && (
-                                  <span className="ml-2 text-primary">• Шанс В: {doc.ai_category_chance}%</span>
-                                )}
-                                {doc.raw_text && (
-                                  <span className="ml-2 text-green-600">• OCR</span>
+                                  <span className="ml-2 text-primary">• {doc.ai_category_chance}%</span>
                                 )}
                               </p>
                             </div>
-                            <Button variant="ghost" size="sm" asChild>
+                            <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" asChild>
                               <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
                                 Открыть
                               </a>
@@ -648,12 +646,13 @@ export default function MedicalHistoryPage() {
                           </div>
                         ))}
                         {relevantDocuments.length > 10 && (
-                          <p className="text-sm text-muted-foreground text-center">
+                          <p className="text-xs text-muted-foreground text-center">
                             И ещё {relevantDocuments.length - 10} документов...
                           </p>
                         )}
                         <Button 
                           variant="outline" 
+                          size="sm"
                           className="w-full"
                           onClick={() => navigate("/medical-documents")}
                         >

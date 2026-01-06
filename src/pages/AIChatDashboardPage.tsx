@@ -310,7 +310,7 @@ const AIChatDashboardPage = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 gap-4">
+      <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 pb-24 md:pb-8 gap-4 overflow-hidden">
         {/* Desktop Sidebar */}
         {!isMobile && (
           <div className="hidden md:block w-64 flex-shrink-0">
@@ -351,7 +351,7 @@ const AIChatDashboardPage = () => {
             </Button>
           </div>
 
-          <Card className="flex flex-col h-[calc(100vh-200px)] md:h-[calc(100vh-180px)]">
+          <Card className="flex flex-col h-[calc(100vh-240px)] md:h-[calc(100vh-180px)]">
             <CardHeader className="pb-3 sm:pb-4 flex-shrink-0">
               <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
               <p className="text-xs sm:text-sm text-muted-foreground">
