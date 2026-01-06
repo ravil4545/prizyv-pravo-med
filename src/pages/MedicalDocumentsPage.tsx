@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -382,6 +382,54 @@ export default function MedicalDocumentsPage() {
     a.download = `${doc.title || 'document'}_text.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadDocument = (doc: MedicalDocument) => {
+    const a = document.createElement('a');
+    a.href = doc.file_url;
+    a.download = `${doc.title || 'document'}.jpg`;
+    a.target = '_blank';
+    a.click();
+  };
+
+  const printDocument = (doc: MedicalDocument) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast({
+        title: "Ошибка",
+        description: "Разрешите всплывающие окна для печати",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${doc.title || 'Медицинский документ'}</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+            .header { margin-bottom: 20px; text-align: center; }
+            .header h1 { font-size: 18px; margin: 0; }
+            .header p { color: #666; margin: 5px 0 0; font-size: 12px; }
+            img { max-width: 100%; height: auto; }
+            @media print {
+              body { padding: 0; }
+              .header { margin-bottom: 10px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${doc.title || 'Медицинский документ'}</h1>
+            ${doc.document_date ? `<p>Дата: ${format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })}</p>` : ''}
+          </div>
+          <img src="${doc.file_url}" alt="${doc.title || 'Документ'}" onload="setTimeout(() => { window.print(); window.close(); }, 500);" />
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const toggleSort = (field: SortField) => {
@@ -839,14 +887,22 @@ export default function MedicalDocumentsPage() {
                                       )}
 
                                       {/* Actions */}
-                                      <div className="flex gap-2">
+                                      <div className="flex gap-2 flex-wrap">
                                         <Button
                                           variant="outline"
                                           className="flex-1"
-                                          onClick={() => window.open(doc.file_url, '_blank')}
+                                          onClick={() => downloadDocument(doc)}
                                         >
                                           <Download className="h-4 w-4 mr-2" />
-                                          Скачать документ
+                                          Скачать
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          className="flex-1"
+                                          onClick={() => printDocument(doc)}
+                                        >
+                                          <Printer className="h-4 w-4 mr-2" />
+                                          Печать
                                         </Button>
                                         {!doc.is_classified && (
                                           <Button
@@ -885,9 +941,20 @@ export default function MedicalDocumentsPage() {
                               <Button 
                                 variant="ghost" 
                                 size="icon"
-                                onClick={() => window.open(doc.file_url, '_blank')}
+                                onClick={() => downloadDocument(doc)}
+                                title="Скачать"
                               >
                                 <Download className="h-4 w-4" />
+                              </Button>
+
+                              {/* Print */}
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => printDocument(doc)}
+                                title="Печать"
+                              >
+                                <Printer className="h-4 w-4" />
                               </Button>
 
                               {/* Delete */}
