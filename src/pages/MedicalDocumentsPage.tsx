@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer, FileStack, File, PenLine } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer, FileStack, File, PenLine, Plus, CheckSquare, Square } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -85,6 +85,15 @@ export default function MedicalDocumentsPage() {
 
   // Selected document for details view
   const [selectedDocument, setSelectedDocument] = useState<MedicalDocument | null>(null);
+
+  // Multi-select for deletion
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [showMultiDeleteConfirm, setShowMultiDeleteConfirm] = useState(false);
+
+  // Add pages to existing document
+  const [documentToAddPages, setDocumentToAddPages] = useState<MedicalDocument | null>(null);
+  const [addPagesFiles, setAddPagesFiles] = useState<File[]>([]);
+  const [addingPages, setAddingPages] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -764,6 +773,12 @@ export default function MedicalDocumentsPage() {
         .from("medical-documents")
         .remove([filePath]);
 
+      // Удаляем связи из document_article_links
+      await supabase
+        .from("document_article_links")
+        .delete()
+        .eq("document_id", documentToDelete.id);
+
       const { error } = await supabase
         .from("medical_documents_v2")
         .delete()
@@ -785,6 +800,237 @@ export default function MedicalDocumentsPage() {
       });
     } finally {
       setDocumentToDelete(null);
+    }
+  };
+
+  // Multi-delete selected documents
+  const confirmDeleteMultiple = async () => {
+    if (selectedDocIds.size === 0) return;
+
+    try {
+      const docsToDelete = documents.filter(d => selectedDocIds.has(d.id));
+      
+      // Удаляем файлы из хранилища
+      const filePaths = docsToDelete.map(doc => {
+        const urlParts = doc.file_url.split("/");
+        return urlParts.slice(-2).join("/");
+      });
+
+      await supabase.storage
+        .from("medical-documents")
+        .remove(filePaths);
+
+      // Удаляем связи
+      for (const docId of selectedDocIds) {
+        await supabase
+          .from("document_article_links")
+          .delete()
+          .eq("document_id", docId);
+      }
+
+      // Удаляем записи из БД
+      const { error } = await supabase
+        .from("medical_documents_v2")
+        .delete()
+        .in("id", Array.from(selectedDocIds));
+
+      if (error) throw error;
+
+      toast({
+        title: "Документы удалены",
+        description: `Удалено ${selectedDocIds.size} документов`,
+      });
+
+      setSelectedDocIds(new Set());
+      loadDocuments();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка удаления",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setShowMultiDeleteConfirm(false);
+    }
+  };
+
+  // Toggle document selection
+  const toggleDocumentSelection = (docId: string) => {
+    setSelectedDocIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(docId)) {
+        newSet.delete(docId);
+      } else {
+        newSet.add(docId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select all / deselect all
+  const toggleSelectAll = () => {
+    if (selectedDocIds.size === filteredDocuments.length) {
+      setSelectedDocIds(new Set());
+    } else {
+      setSelectedDocIds(new Set(filteredDocuments.map(d => d.id)));
+    }
+  };
+
+  // Add pages to existing document
+  const handleAddPagesFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setAddPagesFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const addPagesToDocument = async () => {
+    if (!documentToAddPages || addPagesFiles.length === 0 || !user) return;
+
+    setAddingPages(true);
+    setUploadProgress("Загрузка исходного документа...");
+
+    try {
+      // Загружаем исходный PDF и извлекаем все страницы как изображения
+      const existingImages: { base64: string; width: number; height: number }[] = [];
+      
+      const response = await fetch(documentToAddPages.file_url);
+      const existingPdfBlob = await response.blob();
+      const existingPdfData = await existingPdfBlob.arrayBuffer();
+      
+      const existingPdf = await pdfjsLib.getDocument({ data: existingPdfData }).promise;
+      const existingPageCount = existingPdf.numPages;
+
+      for (let i = 1; i <= existingPageCount; i++) {
+        setUploadProgress(`Извлечение страницы ${i} из ${existingPageCount}...`);
+        const page = await existingPdf.getPage(i);
+        const originalViewport = page.getViewport({ scale: 1.0 });
+        
+        const maxDimension = 2000;
+        const maxOriginal = Math.max(originalViewport.width, originalViewport.height);
+        const scale = maxOriginal > maxDimension ? maxDimension / maxOriginal : 1.5;
+        
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        const context = canvas.getContext("2d")!;
+        context.fillStyle = "#FFFFFF";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport,
+          canvas: canvas,
+        }).promise;
+
+        const base64 = await new Promise<string>((resolve, reject) => {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  resolve((reader.result as string).split(",")[1]);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              } else {
+                reject(new Error("Failed to convert page"));
+              }
+            },
+            "image/jpeg",
+            0.9
+          );
+        });
+
+        existingImages.push({ base64, width: viewport.width, height: viewport.height });
+      }
+
+      // Обрабатываем новые файлы
+      const newImages: { base64: string; width: number; height: number }[] = [];
+      
+      for (let i = 0; i < addPagesFiles.length; i++) {
+        const file = addPagesFiles[i];
+        setUploadProgress(`Обработка нового файла ${i + 1} из ${addPagesFiles.length}...`);
+        
+        const { base64 } = await convertToJpeg(file);
+        const compressedBase64 = await compressImage(base64);
+        const dimensions = await getImageDimensions(compressedBase64);
+        newImages.push({ base64: compressedBase64, ...dimensions });
+      }
+
+      // Объединяем все страницы
+      const allImages = [...existingImages, ...newImages];
+      
+      setUploadProgress("Создание объединённого PDF...");
+      const combinedPdfBlob = await createPdfFromImages(allImages);
+      
+      // Удаляем старый файл из хранилища
+      const urlParts = documentToAddPages.file_url.split("/");
+      const oldFilePath = urlParts.slice(-2).join("/");
+      await supabase.storage
+        .from("medical-documents")
+        .remove([oldFilePath]);
+
+      // Загружаем новый PDF
+      const newFileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from("medical-documents")
+        .upload(newFileName, combinedPdfBlob, {
+          contentType: 'application/pdf'
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("medical-documents")
+        .getPublicUrl(newFileName);
+
+      // Обновляем запись в БД
+      const totalPages = existingPageCount + addPagesFiles.length;
+      const newTitle = documentToAddPages.title?.replace(/_\d+_стр/, '') || 'Документ';
+      
+      const { error: updateError } = await supabase
+        .from("medical_documents_v2")
+        .update({
+          file_url: publicUrl,
+          title: `${newTitle}_${totalPages}_стр`,
+          is_classified: false, // Сбрасываем для повторного анализа
+        })
+        .eq("id", documentToAddPages.id);
+
+      if (updateError) throw updateError;
+
+      // Удаляем старые связи для повторного анализа
+      await supabase
+        .from("document_article_links")
+        .delete()
+        .eq("document_id", documentToAddPages.id);
+
+      toast({
+        title: "Страницы добавлены",
+        description: `Теперь ${totalPages} страниц. Запускаем AI-анализ...`,
+      });
+
+      // Запускаем анализ на первой странице нового контента
+      if (newImages.length > 0) {
+        analyzeDocument(documentToAddPages.id, newImages[0].base64);
+      }
+
+      setDocumentToAddPages(null);
+      setAddPagesFiles([]);
+      loadDocuments();
+    } catch (error: any) {
+      console.error("Add pages error:", error);
+      toast({
+        title: "Ошибка добавления страниц",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAddingPages(false);
+      setUploadProgress("");
     }
   };
 
@@ -1269,10 +1515,22 @@ export default function MedicalDocumentsPage() {
           {/* Documents Table */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Загруженные документы ({filteredDocuments.length})
-              </CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Загруженные документы ({filteredDocuments.length})
+                </CardTitle>
+                {selectedDocIds.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowMultiDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Удалить выбранные ({selectedDocIds.size})
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {filteredDocuments.length === 0 ? (
@@ -1288,6 +1546,21 @@ export default function MedicalDocumentsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
+                        <TableHead className="w-10">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={toggleSelectAll}
+                            title={selectedDocIds.size === filteredDocuments.length ? "Снять выделение" : "Выделить все"}
+                          >
+                            {selectedDocIds.size === filteredDocuments.length && filteredDocuments.length > 0 ? (
+                              <CheckSquare className="h-4 w-4" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-muted"
                           onClick={() => toggleSort("title")}
@@ -1313,7 +1586,24 @@ export default function MedicalDocumentsPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredDocuments.map((doc) => (
-                        <TableRow key={doc.id} className="group">
+                        <TableRow 
+                          key={doc.id} 
+                          className={`group ${selectedDocIds.has(doc.id) ? "bg-muted/50" : ""}`}
+                        >
+                          <TableCell className="w-10">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => toggleDocumentSelection(doc.id)}
+                            >
+                              {selectedDocIds.has(doc.id) ? (
+                                <CheckSquare className="h-4 w-4 text-primary" />
+                              ) : (
+                                <Square className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="font-medium w-[180px] max-w-[180px]">
                             <div className="whitespace-normal break-words text-sm leading-tight">{doc.title || "Без названия"}</div>
                             {doc.disease_articles_565 && (
@@ -1568,6 +1858,17 @@ export default function MedicalDocumentsPage() {
                                 </DialogContent>
                               </Dialog>
 
+                              {/* Add Pages */}
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-9 w-9"
+                                onClick={() => setDocumentToAddPages(doc)}
+                                title="Добавить страницы"
+                              >
+                                <Plus className="h-5 w-5" />
+                              </Button>
+
                               {/* Re-analyze */}
                               {doc.is_classified && (
                                 <Button
@@ -1649,6 +1950,119 @@ export default function MedicalDocumentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Multi-Delete Confirmation Dialog */}
+      <AlertDialog open={showMultiDeleteConfirm} onOpenChange={setShowMultiDeleteConfirm}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить {selectedDocIds.size} документов?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить выбранные документы? 
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteMultiple}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Удалить все
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Pages Dialog */}
+      <Dialog open={!!documentToAddPages} onOpenChange={(open) => {
+        if (!open) {
+          setDocumentToAddPages(null);
+          setAddPagesFiles([]);
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Добавить страницы к документу</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm font-medium">{documentToAddPages?.title || "Документ"}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Новые страницы будут добавлены в конец документа с повторным AI-анализом
+              </p>
+            </div>
+
+            {addingPages ? (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                <p className="text-sm text-muted-foreground">{uploadProgress}</p>
+              </div>
+            ) : (
+              <>
+                <div className="relative border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                  <FileStack className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm font-medium mb-1">
+                    {addPagesFiles.length === 0 ? "Выберите файлы" : "Добавить ещё"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">PDF, JPEG, PNG, WebP</p>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={handleAddPagesFiles}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
+
+                {addPagesFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Файлы для добавления ({addPagesFiles.length}):</p>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {addPagesFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 border rounded bg-muted/30">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs text-muted-foreground flex-shrink-0">{index + 1}.</span>
+                            <span className="text-sm truncate">{file.name}</span>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="h-6 w-6 p-0 flex-shrink-0"
+                            onClick={() => setAddPagesFiles(prev => prev.filter((_, i) => i !== index))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      setDocumentToAddPages(null);
+                      setAddPagesFiles([]);
+                    }}
+                  >
+                    Отмена
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    disabled={addPagesFiles.length === 0}
+                    onClick={addPagesToDocument}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Добавить ({addPagesFiles.length})
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
