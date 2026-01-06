@@ -118,6 +118,10 @@
     @apply border-border;
   }
 
+  html, body, #root {
+    @apply overflow-x-hidden max-w-[100vw];
+  }
+
   body {
     @apply bg-background text-foreground font-sans;
   }
