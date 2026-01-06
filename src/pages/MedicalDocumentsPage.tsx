@@ -826,12 +826,12 @@ export default function MedicalDocumentsPage() {
                                     <Eye className="h-5 w-5" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden w-[95vw] sm:w-full">
                                   <DialogHeader>
-                                    <DialogTitle>{doc.title || "Документ"}</DialogTitle>
+                                    <DialogTitle className="break-words pr-8">{doc.title || "Документ"}</DialogTitle>
                                   </DialogHeader>
                                   <ScrollArea className="max-h-[calc(90vh-100px)]">
-                                    <div className="space-y-6 pr-4">
+                                    <div className="space-y-4 sm:space-y-6 pr-4 overflow-hidden">
                                       {/* Document Viewer */}
                                       <div className="rounded-lg overflow-hidden border bg-muted/20">
                                         {doc.file_url.endsWith('.pdf') ? (
@@ -873,31 +873,31 @@ export default function MedicalDocumentsPage() {
                                       {doc.is_classified && (
                                         <>
                                           {/* Category and Chance */}
-                                          <div className="grid grid-cols-2 gap-4">
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                             <Card>
-                                              <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm">Категория годности</CardTitle>
+                                              <CardHeader className="pb-2 px-3 sm:px-6">
+                                                <CardTitle className="text-xs sm:text-sm">Категория годности</CardTitle>
                                               </CardHeader>
-                                              <CardContent>
+                                              <CardContent className="px-3 sm:px-6">
                                                 <Badge 
                                                   variant={getCategoryColor(doc.ai_fitness_category)} 
-                                                  className="text-lg px-4 py-2"
+                                                  className="text-base sm:text-lg px-3 sm:px-4 py-1.5 sm:py-2"
                                                 >
                                                   Категория {doc.ai_fitness_category}
                                                 </Badge>
                                               </CardContent>
                                             </Card>
                                             <Card>
-                                              <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm">Шанс категории В</CardTitle>
+                                              <CardHeader className="pb-2 px-3 sm:px-6">
+                                                <CardTitle className="text-xs sm:text-sm">Шанс категории В</CardTitle>
                                               </CardHeader>
-                                              <CardContent>
-                                                <div className="flex items-center gap-3">
+                                              <CardContent className="px-3 sm:px-6">
+                                                <div className="flex items-center gap-2 sm:gap-3">
                                                   <Progress 
                                                     value={doc.ai_category_chance || 0} 
-                                                    className="flex-1 h-4"
+                                                    className="flex-1 h-3 sm:h-4"
                                                   />
-                                                  <span className="text-2xl font-bold">
+                                                  <span className="text-xl sm:text-2xl font-bold whitespace-nowrap">
                                                     {doc.ai_category_chance || 0}%
                                                   </span>
                                                 </div>
@@ -908,14 +908,14 @@ export default function MedicalDocumentsPage() {
                                           {/* Explanation */}
                                           {doc.ai_explanation && (
                                             <Card>
-                                              <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm flex items-center gap-2">
-                                                  <Brain className="h-4 w-4" />
+                                              <CardHeader className="pb-2 px-3 sm:px-6">
+                                                <CardTitle className="text-xs sm:text-sm flex items-center gap-2">
+                                                  <Brain className="h-4 w-4 flex-shrink-0" />
                                                   Обоснование ИИ
                                                 </CardTitle>
                                               </CardHeader>
-                                              <CardContent>
-                                                <p className="text-sm text-muted-foreground">
+                                              <CardContent className="px-3 sm:px-6">
+                                                <p className="text-xs sm:text-sm text-muted-foreground break-words whitespace-pre-wrap">
                                                   {doc.ai_explanation}
                                                 </p>
                                               </CardContent>
@@ -925,18 +925,18 @@ export default function MedicalDocumentsPage() {
                                           {/* Recommendations */}
                                           {doc.ai_recommendations && doc.ai_recommendations.length > 0 && (
                                             <Card className="border-primary/50">
-                                              <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm flex items-center gap-2 text-primary">
-                                                  <AlertCircle className="h-4 w-4" />
+                                              <CardHeader className="pb-2 px-3 sm:px-6">
+                                                <CardTitle className="text-xs sm:text-sm flex items-center gap-2 text-primary">
+                                                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
                                                   Рекомендации ИИ
                                                 </CardTitle>
                                               </CardHeader>
-                                              <CardContent>
+                                              <CardContent className="px-3 sm:px-6">
                                                 <ul className="space-y-2">
                                                   {doc.ai_recommendations.map((rec, idx) => (
-                                                    <li key={idx} className="flex items-start gap-2 text-sm">
-                                                      <span className="text-primary font-bold">{idx + 1}.</span>
-                                                      <span>{rec}</span>
+                                                    <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
+                                                      <span className="text-primary font-bold flex-shrink-0">{idx + 1}.</span>
+                                                      <span className="break-words">{rec}</span>
                                                     </li>
                                                   ))}
                                                 </ul>
@@ -947,38 +947,40 @@ export default function MedicalDocumentsPage() {
                                           {/* Extracted Text */}
                                           {doc.raw_text && (
                                             <Card>
-                                              <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm flex items-center justify-between">
+                                              <CardHeader className="pb-2 px-3 sm:px-6">
+                                                <CardTitle className="text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                                   <span>Извлечённый текст</span>
-                                                  <div className="flex gap-2">
+                                                  <div className="flex gap-1 sm:gap-2">
                                                     <Button
                                                       variant="ghost"
                                                       size="sm"
+                                                      className="h-8 px-2 sm:px-3 text-xs"
                                                       onClick={() => copyExtractedText(doc.raw_text!, doc.id)}
                                                     >
                                                       {copiedId === doc.id ? (
-                                                        <Check className="h-4 w-4 mr-1" />
+                                                        <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
                                                       ) : (
-                                                        <Copy className="h-4 w-4 mr-1" />
+                                                        <Copy className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
                                                       )}
-                                                      Копировать
+                                                      <span className="hidden sm:inline">Копировать</span>
                                                     </Button>
                                                     <Button
                                                       variant="ghost"
                                                       size="sm"
+                                                      className="h-8 px-2 sm:px-3 text-xs"
                                                       onClick={() => downloadAsText(doc)}
                                                     >
-                                                      <Download className="h-4 w-4 mr-1" />
-                                                      Скачать .txt
+                                                      <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                                      <span className="hidden sm:inline">Скачать .txt</span>
                                                     </Button>
                                                   </div>
                                                 </CardTitle>
                                               </CardHeader>
-                                              <CardContent>
+                                              <CardContent className="px-3 sm:px-6">
                                                 <Textarea
                                                   value={doc.raw_text}
                                                   readOnly
-                                                  className="min-h-[200px] text-sm font-mono"
+                                                  className="min-h-[150px] sm:min-h-[200px] text-xs sm:text-sm font-mono"
                                                 />
                                               </CardContent>
                                             </Card>
@@ -988,11 +990,11 @@ export default function MedicalDocumentsPage() {
                                           {doc.linked_article_id && (
                                             <Button
                                               variant="outline"
-                                              className="w-full"
+                                              className="w-full text-xs sm:text-sm"
                                               onClick={() => navigate(`/medical-history?article=${doc.disease_articles_565?.article_number}`)}
                                             >
-                                              <ExternalLink className="h-4 w-4 mr-2" />
-                                              Открыть в Истории болезни (Статья {doc.disease_articles_565?.article_number})
+                                              <ExternalLink className="h-4 w-4 mr-2 flex-shrink-0" />
+                                              <span className="truncate">Открыть в Истории болезни (Статья {doc.disease_articles_565?.article_number})</span>
                                             </Button>
                                           )}
                                         </>
