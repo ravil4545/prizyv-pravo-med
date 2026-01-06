@@ -168,9 +168,17 @@ export default function MedicalDocumentsPage() {
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);
         
-        // Увеличиваем масштаб для лучшего качества
-        const scale = 2.0;
+        // Get original viewport
+        const originalViewport = page.getViewport({ scale: 1.0 });
+        
+        // Calculate scale to limit max dimension to 2000px for API compatibility
+        const maxDimension = 2000;
+        const maxOriginal = Math.max(originalViewport.width, originalViewport.height);
+        const scale = maxOriginal > maxDimension ? maxDimension / maxOriginal : 1.5;
+        
         const viewport = page.getViewport({ scale });
+        
+        console.log(`PDF page size: ${Math.round(viewport.width)}x${Math.round(viewport.height)}`);
         
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
