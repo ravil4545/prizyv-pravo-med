@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -31,21 +33,17 @@ interface MedicalDocument {
   is_classified: boolean;
   document_type_id: string | null;
   raw_text: string | null;
+  ai_fitness_category: string | null;
+  ai_category_chance: number | null;
+  ai_recommendations: string[] | null;
+  ai_explanation: string | null;
+  linked_article_id: string | null;
   document_types?: DocumentType | null;
+  disease_articles_565?: { article_number: string; title: string } | null;
 }
 
 type SortField = "uploaded_at" | "document_date" | "title";
 type SortDirection = "asc" | "desc";
-
-const DocumentViewer = ({ fileUrl, fileName }: { fileUrl: string; fileName: string }) => {
-  return (
-    <img 
-      src={fileUrl}
-      alt={fileName}
-      className="w-full h-auto"
-    />
-  );
-};
 
 export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
@@ -55,13 +53,18 @@ export default function MedicalDocumentsPage() {
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Filters & Sorting
   const [filterType, setFilterType] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("uploaded_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Selected document for details view
+  const [selectedDocument, setSelectedDocument] = useState<MedicalDocument | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -112,7 +115,13 @@ export default function MedicalDocumentsPage() {
         is_classified,
         document_type_id,
         raw_text,
-        document_types (id, code, name)
+        ai_fitness_category,
+        ai_category_chance,
+        ai_recommendations,
+        ai_explanation,
+        linked_article_id,
+        document_types (id, code, name),
+        disease_articles_565 (article_number, title)
       `)
       .eq("user_id", user.id)
       .order("uploaded_at", { ascending: false });
@@ -146,6 +155,57 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  // Конвертация файла в JPEG с максимальным качеством
+  const convertToJpeg = async (file: File): Promise<{ blob: Blob; base64: string }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const result = e.target?.result as string;
+        
+        // Если это PDF, используем оригинальный файл и конвертируем первую страницу
+        if (file.type === "application/pdf") {
+          // Для PDF возвращаем base64 напрямую - AI обработает
+          const base64 = result.split(',')[1];
+          resolve({ blob: file, base64 });
+          return;
+        }
+        
+        // Для изображений конвертируем в JPEG
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const jpegReader = new FileReader();
+                jpegReader.onload = () => {
+                  const base64 = (jpegReader.result as string).split(',')[1];
+                  resolve({ blob, base64 });
+                };
+                jpegReader.readAsDataURL(blob);
+              } else {
+                reject(new Error("Failed to convert image"));
+              }
+            },
+            'image/jpeg',
+            0.95 // Высокое качество
+          );
+        };
+        img.onerror = reject;
+        img.src = result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const uploadFiles = async (files: File[]) => {
     if (!user) return;
 
@@ -165,12 +225,17 @@ export default function MedicalDocumentsPage() {
 
     for (const file of validFiles) {
       try {
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        // Конвертируем в JPEG
+        const { blob: jpegBlob, base64 } = await convertToJpeg(file);
+        
+        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
+        // Загружаем JPEG версию
         const { error: uploadError } = await supabase.storage
           .from("medical-documents")
-          .upload(fileName, file);
+          .upload(fileName, jpegBlob, {
+            contentType: 'image/jpeg'
+          });
 
         if (uploadError) throw uploadError;
 
@@ -178,21 +243,29 @@ export default function MedicalDocumentsPage() {
           .from("medical-documents")
           .getPublicUrl(fileName);
 
-        const { error: insertError } = await supabase
+        // Создаём запись в базе
+        const { data: insertedDoc, error: insertError } = await supabase
           .from("medical_documents_v2")
           .insert({
             user_id: user.id,
             title: file.name,
             file_url: publicUrl,
             is_classified: false,
-          });
+          })
+          .select()
+          .single();
 
         if (insertError) throw insertError;
 
         toast({
           title: "Документ загружен",
-          description: file.name,
+          description: "Запускаем AI-анализ...",
         });
+
+        // Запускаем AI анализ автоматически
+        if (insertedDoc) {
+          analyzeDocument(insertedDoc.id, base64);
+        }
       } catch (error: any) {
         toast({
           title: "Ошибка загрузки",
@@ -206,9 +279,64 @@ export default function MedicalDocumentsPage() {
     loadDocuments();
   };
 
+  const analyzeDocument = async (documentId: string, imageBase64?: string) => {
+    setAnalyzingId(documentId);
+    
+    try {
+      let base64 = imageBase64;
+      
+      // Если base64 не передан, загружаем из URL
+      if (!base64) {
+        const doc = documents.find(d => d.id === documentId);
+        if (!doc) throw new Error("Документ не найден");
+        
+        const response = await fetch(doc.file_url);
+        const blob = await response.blob();
+        base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      const { data, error } = await supabase.functions.invoke('analyze-medical-document', {
+        body: { imageBase64: base64, documentId, userId: user.id }
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast({
+          title: "Ошибка анализа",
+          description: data.message || "Попробуйте позже",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Анализ завершён",
+          description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+        });
+      }
+
+      loadDocuments();
+    } catch (error: any) {
+      console.error("Analysis error:", error);
+      toast({
+        title: "Ошибка анализа",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
+
   const handleDeleteDocument = async (doc: MedicalDocument) => {
     try {
-      // Extract file path from URL for storage deletion
       const urlParts = doc.file_url.split("/");
       const filePath = urlParts.slice(-2).join("/");
 
@@ -238,6 +366,24 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  const copyExtractedText = async (text: string, docId: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedId(docId);
+    setTimeout(() => setCopiedId(null), 2000);
+    toast({ title: "Текст скопирован" });
+  };
+
+  const downloadAsText = (doc: MedicalDocument) => {
+    if (!doc.raw_text) return;
+    const blob = new Blob([doc.raw_text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${doc.title || 'document'}_text.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(prev => prev === "asc" ? "desc" : "asc");
@@ -254,7 +400,18 @@ export default function MedicalDocumentsPage() {
       : <ArrowDown className="h-4 w-4 ml-1" />;
   };
 
-  // Filter and sort documents
+  const getCategoryColor = (category: string | null) => {
+    if (!category) return "secondary";
+    switch (category.toUpperCase()) {
+      case "А": return "default";
+      case "Б": return "secondary";
+      case "В": return "destructive";
+      case "Г": return "outline";
+      case "Д": return "destructive";
+      default: return "secondary";
+    }
+  };
+
   const filteredDocuments = documents
     .filter(doc => {
       if (filterType !== "all" && doc.document_type_id !== filterType) return false;
@@ -301,12 +458,12 @@ export default function MedicalDocumentsPage() {
       <Header />
       
       <main className="container mx-auto px-4 py-12">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Медицинские документы</h1>
               <p className="text-muted-foreground">
-                Загружайте и управляйте вашими медицинскими документами
+                Загружайте документы — ИИ автоматически извлечёт текст, определит тип и оценит категорию годности
               </p>
             </div>
             <Button variant="outline" onClick={() => navigate("/dashboard")}>
@@ -332,19 +489,25 @@ export default function MedicalDocumentsPage() {
                 {uploading ? (
                   <div className="flex flex-col items-center gap-4">
                     <Loader2 className="h-12 w-12 text-primary animate-spin" />
-                    <p className="text-lg font-medium">Загрузка документов...</p>
+                    <p className="text-lg font-medium">Загрузка и конвертация...</p>
                   </div>
                 ) : (
                   <>
-                    <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <Upload className={`h-12 w-12 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                      <Sparkles className="h-8 w-8 text-primary" />
+                    </div>
                     <p className="text-lg font-medium mb-2">
                       Перетащите файлы сюда
                     </p>
                     <p className="text-muted-foreground mb-4">
                       или нажмите для выбора файлов
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mb-2">
                       Поддерживаемые форматы: PDF, JPEG, PNG, WebP
+                    </p>
+                    <p className="text-xs text-primary">
+                      ИИ автоматически: извлечёт текст • определит тип и дату • оценит категорию годности
                     </p>
                     <input
                       type="file"
@@ -444,30 +607,29 @@ export default function MedicalDocumentsPage() {
                           onClick={() => toggleSort("document_date")}
                         >
                           <div className="flex items-center">
-                            Дата документа {getSortIcon("document_date")}
+                            Дата {getSortIcon("document_date")}
                           </div>
                         </TableHead>
-                        <TableHead 
-                          className="cursor-pointer hover:bg-muted"
-                          onClick={() => toggleSort("uploaded_at")}
-                        >
-                          <div className="flex items-center">
-                            Загружен {getSortIcon("uploaded_at")}
-                          </div>
-                        </TableHead>
+                        <TableHead>Категория</TableHead>
+                        <TableHead>Шанс В</TableHead>
                         <TableHead>Статус</TableHead>
                         <TableHead className="text-right">Действия</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredDocuments.map((doc) => (
-                        <TableRow key={doc.id}>
-                          <TableCell className="font-medium max-w-[300px] truncate">
-                            {doc.title || "Без названия"}
+                        <TableRow key={doc.id} className="group">
+                          <TableCell className="font-medium max-w-[250px]">
+                            <div className="truncate">{doc.title || "Без названия"}</div>
+                            {doc.disease_articles_565 && (
+                              <div className="text-xs text-primary mt-1">
+                                Статья {doc.disease_articles_565.article_number}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             {doc.document_types ? (
-                              <Badge variant="secondary">
+                              <Badge variant="secondary" className="text-xs">
                                 {doc.document_types.name}
                               </Badge>
                             ) : (
@@ -476,48 +638,261 @@ export default function MedicalDocumentsPage() {
                           </TableCell>
                           <TableCell>
                             {doc.document_date 
-                              ? format(new Date(doc.document_date), "dd MMM yyyy", { locale: ru })
+                              ? format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })
                               : <span className="text-muted-foreground">—</span>
                             }
                           </TableCell>
                           <TableCell>
-                            {format(new Date(doc.uploaded_at), "dd MMM yyyy, HH:mm", { locale: ru })}
+                            {doc.ai_fitness_category ? (
+                              <Badge variant={getCategoryColor(doc.ai_fitness_category)}>
+                                {doc.ai_fitness_category}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
-                            {doc.is_classified ? (
-                              <Badge variant="default">Классифицирован</Badge>
+                            {doc.ai_category_chance !== null ? (
+                              <div className="flex items-center gap-2">
+                                <Progress 
+                                  value={doc.ai_category_chance} 
+                                  className="w-16 h-2"
+                                />
+                                <span className="text-sm font-medium">
+                                  {doc.ai_category_chance}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {analyzingId === doc.id ? (
+                              <Badge variant="outline" className="animate-pulse">
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Анализ...
+                              </Badge>
+                            ) : doc.is_classified ? (
+                              <Badge variant="default">
+                                <Check className="h-3 w-3 mr-1" />
+                                Обработан
+                              </Badge>
                             ) : (
                               <Badge variant="outline">Не обработан</Badge>
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {/* View Details */}
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="ghost" size="icon">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    onClick={() => setSelectedDocument(doc)}
+                                  >
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-4xl max-h-[90vh]">
+                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                                   <DialogHeader>
-                                    <DialogTitle>{doc.title}</DialogTitle>
+                                    <DialogTitle>{doc.title || "Документ"}</DialogTitle>
                                   </DialogHeader>
-                                  <ScrollArea className="h-[70vh] w-full">
-                                    <DocumentViewer fileUrl={doc.file_url} fileName={doc.title || "document"} />
+                                  <ScrollArea className="max-h-[calc(90vh-100px)]">
+                                    <div className="space-y-6 pr-4">
+                                      {/* Document Image */}
+                                      <div className="rounded-lg overflow-hidden border">
+                                        <img 
+                                          src={doc.file_url} 
+                                          alt={doc.title || "Документ"} 
+                                          className="w-full"
+                                        />
+                                      </div>
+
+                                      {/* AI Analysis Results */}
+                                      {doc.is_classified && (
+                                        <>
+                                          {/* Category and Chance */}
+                                          <div className="grid grid-cols-2 gap-4">
+                                            <Card>
+                                              <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm">Категория годности</CardTitle>
+                                              </CardHeader>
+                                              <CardContent>
+                                                <Badge 
+                                                  variant={getCategoryColor(doc.ai_fitness_category)} 
+                                                  className="text-lg px-4 py-2"
+                                                >
+                                                  Категория {doc.ai_fitness_category}
+                                                </Badge>
+                                              </CardContent>
+                                            </Card>
+                                            <Card>
+                                              <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm">Шанс категории В</CardTitle>
+                                              </CardHeader>
+                                              <CardContent>
+                                                <div className="flex items-center gap-3">
+                                                  <Progress 
+                                                    value={doc.ai_category_chance || 0} 
+                                                    className="flex-1 h-4"
+                                                  />
+                                                  <span className="text-2xl font-bold">
+                                                    {doc.ai_category_chance || 0}%
+                                                  </span>
+                                                </div>
+                                              </CardContent>
+                                            </Card>
+                                          </div>
+
+                                          {/* Explanation */}
+                                          {doc.ai_explanation && (
+                                            <Card>
+                                              <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                  <Brain className="h-4 w-4" />
+                                                  Обоснование ИИ
+                                                </CardTitle>
+                                              </CardHeader>
+                                              <CardContent>
+                                                <p className="text-sm text-muted-foreground">
+                                                  {doc.ai_explanation}
+                                                </p>
+                                              </CardContent>
+                                            </Card>
+                                          )}
+
+                                          {/* Recommendations */}
+                                          {doc.ai_recommendations && doc.ai_recommendations.length > 0 && (
+                                            <Card className="border-primary/50">
+                                              <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2 text-primary">
+                                                  <AlertCircle className="h-4 w-4" />
+                                                  Рекомендации ИИ
+                                                </CardTitle>
+                                              </CardHeader>
+                                              <CardContent>
+                                                <ul className="space-y-2">
+                                                  {doc.ai_recommendations.map((rec, idx) => (
+                                                    <li key={idx} className="flex items-start gap-2 text-sm">
+                                                      <span className="text-primary font-bold">{idx + 1}.</span>
+                                                      <span>{rec}</span>
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              </CardContent>
+                                            </Card>
+                                          )}
+
+                                          {/* Extracted Text */}
+                                          {doc.raw_text && (
+                                            <Card>
+                                              <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center justify-between">
+                                                  <span>Извлечённый текст</span>
+                                                  <div className="flex gap-2">
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={() => copyExtractedText(doc.raw_text!, doc.id)}
+                                                    >
+                                                      {copiedId === doc.id ? (
+                                                        <Check className="h-4 w-4 mr-1" />
+                                                      ) : (
+                                                        <Copy className="h-4 w-4 mr-1" />
+                                                      )}
+                                                      Копировать
+                                                    </Button>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={() => downloadAsText(doc)}
+                                                    >
+                                                      <Download className="h-4 w-4 mr-1" />
+                                                      Скачать .txt
+                                                    </Button>
+                                                  </div>
+                                                </CardTitle>
+                                              </CardHeader>
+                                              <CardContent>
+                                                <Textarea
+                                                  value={doc.raw_text}
+                                                  readOnly
+                                                  className="min-h-[200px] text-sm font-mono"
+                                                />
+                                              </CardContent>
+                                            </Card>
+                                          )}
+
+                                          {/* Link to Medical History */}
+                                          {doc.linked_article_id && (
+                                            <Button
+                                              variant="outline"
+                                              className="w-full"
+                                              onClick={() => navigate(`/medical-history?article=${doc.disease_articles_565?.article_number}`)}
+                                            >
+                                              <ExternalLink className="h-4 w-4 mr-2" />
+                                              Открыть в Истории болезни (Статья {doc.disease_articles_565?.article_number})
+                                            </Button>
+                                          )}
+                                        </>
+                                      )}
+
+                                      {/* Actions */}
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="outline"
+                                          className="flex-1"
+                                          onClick={() => window.open(doc.file_url, '_blank')}
+                                        >
+                                          <Download className="h-4 w-4 mr-2" />
+                                          Скачать документ
+                                        </Button>
+                                        {!doc.is_classified && (
+                                          <Button
+                                            className="flex-1"
+                                            onClick={() => analyzeDocument(doc.id)}
+                                            disabled={analyzingId === doc.id}
+                                          >
+                                            {analyzingId === doc.id ? (
+                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            ) : (
+                                              <Brain className="h-4 w-4 mr-2" />
+                                            )}
+                                            Анализировать ИИ
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
                                   </ScrollArea>
                                 </DialogContent>
                               </Dialog>
-                              <Button
-                                variant="ghost"
+
+                              {/* Re-analyze */}
+                              {doc.is_classified && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => analyzeDocument(doc.id)}
+                                  disabled={analyzingId === doc.id}
+                                  title="Повторить анализ"
+                                >
+                                  <Brain className="h-4 w-4" />
+                                </Button>
+                              )}
+
+                              {/* Download */}
+                              <Button 
+                                variant="ghost" 
                                 size="icon"
-                                asChild
+                                onClick={() => window.open(doc.file_url, '_blank')}
                               >
-                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer" download>
-                                  <Download className="h-4 w-4" />
-                                </a>
+                                <Download className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
+
+                              {/* Delete */}
+                              <Button 
+                                variant="ghost" 
                                 size="icon"
                                 onClick={() => handleDeleteDocument(doc)}
                               >

@@ -609,6 +609,10 @@ export type Database = {
       }
       medical_documents_v2: {
         Row: {
+          ai_category_chance: number | null
+          ai_explanation: string | null
+          ai_fitness_category: string | null
+          ai_recommendations: string[] | null
           created_at: string | null
           document_date: string | null
           document_subtype_id: string | null
@@ -616,6 +620,7 @@ export type Database = {
           file_url: string
           id: string
           is_classified: boolean | null
+          linked_article_id: string | null
           meta: Json | null
           raw_text: string | null
           title: string | null
@@ -624,6 +629,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string[] | null
           created_at?: string | null
           document_date?: string | null
           document_subtype_id?: string | null
@@ -631,6 +640,7 @@ export type Database = {
           file_url: string
           id?: string
           is_classified?: boolean | null
+          linked_article_id?: string | null
           meta?: Json | null
           raw_text?: string | null
           title?: string | null
@@ -639,6 +649,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string[] | null
           created_at?: string | null
           document_date?: string | null
           document_subtype_id?: string | null
@@ -646,6 +660,7 @@ export type Database = {
           file_url?: string
           id?: string
           is_classified?: boolean | null
+          linked_article_id?: string | null
           meta?: Json | null
           raw_text?: string | null
           title?: string | null
@@ -666,6 +681,13 @@ export type Database = {
             columns: ["document_type_id"]
             isOneToOne: false
             referencedRelation: "document_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_documents_v2_linked_article_id_fkey"
+            columns: ["linked_article_id"]
+            isOneToOne: false
+            referencedRelation: "disease_articles_565"
             referencedColumns: ["id"]
           },
         ]
