@@ -153,9 +153,28 @@ serve(async (req) => {
 }`;
 
     // Extract base64 data without data URL prefix if present
-    const base64Data = imageBase64.includes('base64,') 
+    let base64Data = imageBase64.includes('base64,') 
       ? imageBase64.split('base64,')[1] 
       : imageBase64;
+    
+    // Clean base64 string - remove any whitespace or newlines
+    base64Data = base64Data.replace(/\s/g, '');
+    
+    // Validate base64 length
+    console.log('Image base64 length:', base64Data.length);
+    
+    if (!base64Data || base64Data.length < 100) {
+      throw new Error("Invalid image data: base64 string is too short or empty");
+    }
+    
+    // Check if base64 is valid
+    try {
+      // Test decode a small portion to verify it's valid base64
+      atob(base64Data.substring(0, 100));
+    } catch (e) {
+      console.error("Invalid base64 encoding");
+      throw new Error("Invalid base64 image data");
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
