@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer, FileStack, File } from "lucide-react";
+import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -62,6 +63,9 @@ export default function MedicalDocumentsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<MedicalDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [uploadMode, setUploadMode] = useState<"single" | "multi" | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [enhancing, setEnhancing] = useState(false);
   
   // Filters & Sorting
   const [filterType, setFilterType] = useState<string>("all");
@@ -151,14 +155,22 @@ export default function MedicalDocumentsPage() {
     e.preventDefault();
     setIsDragOver(false);
     const files = Array.from(e.dataTransfer.files);
-    await uploadFiles(files);
-  }, [user]);
+    // Используем текущий режим загрузки
+    await uploadFiles(files, uploadMode === "multi");
+  }, [user, uploadMode]);
 
-  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>, mode: "single" | "multi") => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      await uploadFiles(files);
+      if (mode === "single") {
+        // Для одностраничного - каждый файл отдельно
+        await uploadFiles(files, false);
+      } else {
+        // Для многостраничного - все файлы в один PDF
+        await uploadFiles(files, true);
+      }
     }
+    setUploadMode(null);
   };
 
   // Конвертация файла в JPEG с максимальным качеством
@@ -262,7 +274,91 @@ export default function MedicalDocumentsPage() {
     });
   };
 
-  const uploadFiles = async (files: File[]) => {
+  // Улучшение изображения через AI
+  const enhanceImage = async (base64: string): Promise<string> => {
+    try {
+      setUploadProgress("Улучшение качества изображения...");
+      
+      const { data, error } = await supabase.functions.invoke('enhance-document', {
+        body: { imageBase64: base64 }
+      });
+
+      if (error) {
+        console.error("Enhancement error:", error);
+        return base64; // Возвращаем оригинал при ошибке
+      }
+
+      if (data?.enhancedBase64 && data?.wasEnhanced) {
+        console.log("Image enhanced successfully");
+        // Извлекаем base64 из data URL
+        const enhancedBase64 = data.enhancedBase64.includes(',') 
+          ? data.enhancedBase64.split(',')[1] 
+          : data.enhancedBase64;
+        return enhancedBase64;
+      }
+
+      return base64;
+    } catch (error) {
+      console.error("Enhancement failed:", error);
+      return base64;
+    }
+  };
+
+  // Создание PDF из изображений
+  const createPdfFromImages = async (images: { base64: string; width: number; height: number }[]): Promise<Blob> => {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'px',
+    });
+
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      
+      // Рассчитываем размер страницы под изображение
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      
+      // Масштабируем изображение под страницу
+      const imgRatio = img.width / img.height;
+      const pageRatio = pageWidth / pageHeight;
+      
+      let finalWidth, finalHeight;
+      if (imgRatio > pageRatio) {
+        finalWidth = pageWidth - 20;
+        finalHeight = finalWidth / imgRatio;
+      } else {
+        finalHeight = pageHeight - 20;
+        finalWidth = finalHeight * imgRatio;
+      }
+      
+      const x = (pageWidth - finalWidth) / 2;
+      const y = (pageHeight - finalHeight) / 2;
+      
+      if (i > 0) {
+        pdf.addPage();
+      }
+      
+      pdf.addImage(`data:image/jpeg;base64,${img.base64}`, 'JPEG', x, y, finalWidth, finalHeight);
+    }
+
+    return pdf.output('blob');
+  };
+
+  // Получение размеров изображения из base64
+  const getImageDimensions = (base64: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.width, height: img.height });
+      };
+      img.onerror = () => {
+        resolve({ width: 800, height: 1100 }); // Дефолтный размер A4
+      };
+      img.src = `data:image/jpeg;base64,${base64}`;
+    });
+  };
+
+  const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
     if (!user) return;
 
     const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
@@ -278,19 +374,39 @@ export default function MedicalDocumentsPage() {
     }
 
     setUploading(true);
+    setEnhancing(true);
 
-    for (const file of validFiles) {
-      try {
-        // Конвертируем в JPEG
-        const { blob: jpegBlob, base64 } = await convertToJpeg(file);
+    try {
+      if (combineIntoOne) {
+        // Многостраничный режим - объединяем все в один PDF
+        const enhancedImages: { base64: string; width: number; height: number }[] = [];
         
-        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-
-        // Загружаем JPEG версию
+        for (let i = 0; i < validFiles.length; i++) {
+          const file = validFiles[i];
+          setUploadProgress(`Обработка файла ${i + 1} из ${validFiles.length}...`);
+          
+          // Конвертируем в JPEG
+          const { base64 } = await convertToJpeg(file);
+          
+          // Улучшаем качество через AI
+          const enhancedBase64 = await enhanceImage(base64);
+          const dimensions = await getImageDimensions(enhancedBase64);
+          
+          enhancedImages.push({ base64: enhancedBase64, ...dimensions });
+        }
+        
+        setUploadProgress("Создание PDF документа...");
+        
+        // Создаём PDF
+        const pdfBlob = await createPdfFromImages(enhancedImages);
+        
+        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+        
+        // Загружаем PDF
         const { error: uploadError } = await supabase.storage
           .from("medical-documents")
-          .upload(fileName, jpegBlob, {
-            contentType: 'image/jpeg'
+          .upload(fileName, pdfBlob, {
+            contentType: 'application/pdf'
           });
 
         if (uploadError) throw uploadError;
@@ -304,7 +420,7 @@ export default function MedicalDocumentsPage() {
           .from("medical_documents_v2")
           .insert({
             user_id: user.id,
-            title: file.name,
+            title: `Документ_${validFiles.length}_стр_${format(new Date(), 'dd.MM.yyyy')}`,
             file_url: publicUrl,
             is_classified: false,
           })
@@ -315,24 +431,91 @@ export default function MedicalDocumentsPage() {
 
         toast({
           title: "Документ загружен",
-          description: "Запускаем AI-анализ...",
+          description: `${validFiles.length} страниц объединено в PDF. Запускаем AI-анализ...`,
         });
 
-        // Запускаем AI анализ автоматически
-        if (insertedDoc) {
-          analyzeDocument(insertedDoc.id, base64);
+        // Запускаем AI анализ на первой странице
+        if (insertedDoc && enhancedImages.length > 0) {
+          analyzeDocument(insertedDoc.id, enhancedImages[0].base64);
         }
-      } catch (error: any) {
-        toast({
-          title: "Ошибка загрузки",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-    }
+      } else {
+        // Одностраничный режим - каждый файл отдельно
+        for (let i = 0; i < validFiles.length; i++) {
+          const file = validFiles[i];
+          setUploadProgress(`Обработка файла ${i + 1} из ${validFiles.length}...`);
+          
+          try {
+            // Конвертируем в JPEG
+            const { base64 } = await convertToJpeg(file);
+            
+            // Улучшаем качество через AI
+            const enhancedBase64 = await enhanceImage(base64);
+            
+            setUploadProgress("Создание PDF...");
+            
+            // Создаём одностраничный PDF
+            const dimensions = await getImageDimensions(enhancedBase64);
+            const pdfBlob = await createPdfFromImages([{ base64: enhancedBase64, ...dimensions }]);
+            
+            const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
-    setUploading(false);
-    loadDocuments();
+            // Загружаем PDF
+            const { error: uploadError } = await supabase.storage
+              .from("medical-documents")
+              .upload(fileName, pdfBlob, {
+                contentType: 'application/pdf'
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from("medical-documents")
+              .getPublicUrl(fileName);
+
+            // Создаём запись в базе
+            const { data: insertedDoc, error: insertError } = await supabase
+              .from("medical_documents_v2")
+              .insert({
+                user_id: user.id,
+                title: file.name.replace(/\.[^/.]+$/, '') + '.pdf',
+                file_url: publicUrl,
+                is_classified: false,
+              })
+              .select()
+              .single();
+
+            if (insertError) throw insertError;
+
+            toast({
+              title: "Документ загружен",
+              description: "Запускаем AI-анализ...",
+            });
+
+            // Запускаем AI анализ
+            if (insertedDoc) {
+              analyzeDocument(insertedDoc.id, enhancedBase64);
+            }
+          } catch (error: any) {
+            toast({
+              title: "Ошибка загрузки",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Ошибка загрузки",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      setEnhancing(false);
+      setUploadProgress("");
+      loadDocuments();
+    }
   };
 
   const analyzeDocument = async (documentId: string, imageBase64?: string) => {
@@ -610,52 +793,115 @@ export default function MedicalDocumentsPage() {
 
           {/* Drag & Drop Zone */}
           <Card className="mb-8">
-            <CardContent className="p-0">
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`
-                  relative border-2 border-dashed rounded-lg p-12 text-center transition-all
-                  ${isDragOver 
-                    ? "border-primary bg-primary/5" 
-                    : "border-muted-foreground/25 hover:border-primary/50"
-                  }
-                `}
-              >
-                {uploading ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-12 w-12 text-primary animate-spin" />
-                    <p className="text-lg font-medium">Загрузка и конвертация...</p>
+            <CardContent className="p-6">
+              {uploading ? (
+                <div className="flex flex-col items-center gap-4 py-8">
+                  <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                  <p className="text-lg font-medium">
+                    {enhancing ? "Улучшение качества документа..." : "Создание PDF..."}
+                  </p>
+                  {uploadProgress && (
+                    <p className="text-sm text-muted-foreground">{uploadProgress}</p>
+                  )}
+                </div>
+              ) : uploadMode ? (
+                <div className="py-6">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-medium mb-2">
+                      {uploadMode === "single" ? "Загрузка одностраничных документов" : "Загрузка многостраничного документа"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {uploadMode === "single" 
+                        ? "Каждый файл будет сохранён как отдельный документ" 
+                        : "Все выбранные файлы будут объединены в один PDF"
+                      }
+                    </p>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                      <Upload className={`h-12 w-12 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
-                      <Sparkles className="h-8 w-8 text-primary" />
+                  
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`
+                      relative border-2 border-dashed rounded-lg p-8 text-center transition-all mb-4
+                      ${isDragOver 
+                        ? "border-primary bg-primary/5" 
+                        : "border-muted-foreground/25 hover:border-primary/50"
+                      }
+                    `}
+                  >
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <Upload className={`h-10 w-10 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                      <Sparkles className="h-6 w-6 text-primary" />
                     </div>
-                    <p className="text-lg font-medium mb-2">
-                      Перетащите файлы сюда
-                    </p>
-                    <p className="text-muted-foreground mb-4">
-                      или нажмите для выбора файлов
-                    </p>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Поддерживаемые форматы: PDF, JPEG, PNG, WebP
-                    </p>
+                    <p className="text-base font-medium mb-1">Перетащите файлы сюда</p>
+                    <p className="text-sm text-muted-foreground mb-3">или нажмите для выбора</p>
                     <p className="text-xs text-primary">
-                      ИИ автоматически: извлечёт текст • определит тип и дату • оценит категорию годности
+                      ИИ улучшит качество: выровняет • уберёт тени • повысит чёткость
                     </p>
                     <input
                       type="file"
                       multiple
                       accept=".pdf,.jpg,.jpeg,.png,.webp"
-                      onChange={handleFileInput}
+                      onChange={(e) => handleFileInput(e, uploadMode)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                  </>
-                )}
-              </div>
+                  </div>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => setUploadMode(null)}
+                  >
+                    Назад к выбору режима
+                  </Button>
+                </div>
+              ) : (
+                <div className="py-6">
+                  <div className="text-center mb-6">
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <Upload className="h-10 w-10 text-muted-foreground" />
+                      <Sparkles className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-medium mb-2">Загрузка документов</h3>
+                    <p className="text-sm text-muted-foreground">
+                      ИИ автоматически улучшит качество, конвертирует в PDF и проанализирует документ
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Card 
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => setUploadMode("single")}
+                    >
+                      <CardContent className="p-6 text-center">
+                        <File className="h-12 w-12 mx-auto mb-4 text-primary" />
+                        <h4 className="font-medium mb-2">Одностраничный документ</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Справки, заключения, выписки — каждый файл отдельно
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card 
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => setUploadMode("multi")}
+                    >
+                      <CardContent className="p-6 text-center">
+                        <FileStack className="h-12 w-12 mx-auto mb-4 text-primary" />
+                        <h4 className="font-medium mb-2">Многостраничный документ</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Медкарты, истории болезни — объединяются в один PDF
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <p className="text-xs text-center text-muted-foreground mt-4">
+                    Поддерживаемые форматы: PDF, JPEG, PNG, WebP
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
