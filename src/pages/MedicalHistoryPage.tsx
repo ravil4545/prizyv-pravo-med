@@ -34,6 +34,16 @@ interface UserDocument {
   linked_article_id: string | null;
 }
 
+interface DocumentArticleLink {
+  id: string;
+  document_id: string;
+  article_id: string;
+  ai_fitness_category: string | null;
+  ai_category_chance: number | null;
+  ai_recommendations: string[] | null;
+  ai_explanation: string | null;
+}
+
 interface ArticleAssessment {
   article_id: string;
   score_v: number;
@@ -100,7 +110,7 @@ const categoryBKeywords: Record<string, string[]> = {
 // Calculate Category B chance based on AI analysis from documents
 function calculateCategoryBChance(
   article: Article,
-  relevantDocs: UserDocument[],
+  articleLinks: DocumentArticleLink[],
   assessments: ArticleAssessment[]
 ): { categoryB: number; categoryA: number; noData: number; hasRelevantDocs: boolean; relevantDocsCount: number } {
   // Check if there's a saved assessment for this article
@@ -112,11 +122,11 @@ function calculateCategoryBChance(
       categoryA: Math.max(0, 100 - score - 5),
       noData: 5,
       hasRelevantDocs: true,
-      relevantDocsCount: relevantDocs.length,
+      relevantDocsCount: articleLinks.length,
     };
   }
 
-  if (relevantDocs.length === 0) {
+  if (articleLinks.length === 0) {
     return {
       categoryB: 0,
       categoryA: 0,
@@ -126,37 +136,53 @@ function calculateCategoryBChance(
     };
   }
 
-  // Use AI-calculated chances from documents
-  const docsWithChance = relevantDocs.filter(doc => doc.ai_category_chance !== null && doc.ai_category_chance > 0);
+  // Use AI-calculated chances from article links
+  const linksWithChance = articleLinks.filter(link => link.ai_category_chance !== null && link.ai_category_chance > 0);
   
-  if (docsWithChance.length === 0) {
+  if (linksWithChance.length === 0) {
     return {
       categoryB: 0,
       categoryA: 70,
       noData: 30,
       hasRelevantDocs: true,
-      relevantDocsCount: relevantDocs.length,
+      relevantDocsCount: articleLinks.length,
     };
   }
 
-  // Take the maximum AI-calculated chance from relevant documents
-  const maxChance = Math.max(...docsWithChance.map(doc => doc.ai_category_chance || 0));
+  // Take the maximum AI-calculated chance from relevant links
+  const maxChance = Math.max(...linksWithChance.map(link => link.ai_category_chance || 0));
 
   return {
     categoryB: maxChance,
     categoryA: Math.max(0, 100 - maxChance - 5),
     noData: 5,
     hasRelevantDocs: true,
-    relevantDocsCount: relevantDocs.length,
+    relevantDocsCount: articleLinks.length,
   };
 }
 
-// Get documents relevant to a specific article - only directly linked documents
-function getRelevantDocuments(article: Article, documents: UserDocument[]): UserDocument[] {
-  if (!article || documents.length === 0) return [];
+// Get document article links for a specific article
+function getArticleLinks(articleId: string, allLinks: DocumentArticleLink[]): DocumentArticleLink[] {
+  return allLinks.filter(link => link.article_id === articleId);
+}
+
+// Get documents for an article using the junction table
+function getDocumentsForArticle(
+  articleId: string, 
+  allLinks: DocumentArticleLink[], 
+  allDocuments: UserDocument[]
+): { document: UserDocument; link: DocumentArticleLink }[] {
+  const links = allLinks.filter(link => link.article_id === articleId);
+  const result: { document: UserDocument; link: DocumentArticleLink }[] = [];
   
-  // Only return documents that are directly linked to this specific article
-  return documents.filter((doc) => doc.linked_article_id === article.id);
+  for (const link of links) {
+    const doc = allDocuments.find(d => d.id === link.document_id);
+    if (doc) {
+      result.push({ document: doc, link });
+    }
+  }
+  
+  return result;
 }
 
 export default function MedicalHistoryPage() {
@@ -166,6 +192,7 @@ export default function MedicalHistoryPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [userDocuments, setUserDocuments] = useState<UserDocument[]>([]);
+  const [documentArticleLinks, setDocumentArticleLinks] = useState<DocumentArticleLink[]>([]);
   const [assessments, setAssessments] = useState<ArticleAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -177,6 +204,7 @@ export default function MedicalHistoryPage() {
     if (user) {
       loadArticles();
       loadUserDocuments();
+      loadDocumentArticleLinks();
       loadAssessments();
     }
   }, [user]);
@@ -222,6 +250,26 @@ export default function MedicalHistoryPage() {
     }
   };
 
+  const loadDocumentArticleLinks = async () => {
+    // Fetch all document article links for user's documents
+    const { data: docs } = await supabase
+      .from("medical_documents_v2")
+      .select("id")
+      .eq("user_id", user.id);
+    
+    if (docs && docs.length > 0) {
+      const docIds = docs.map(d => d.id);
+      const { data, error } = await supabase
+        .from("document_article_links")
+        .select("id, document_id, article_id, ai_fitness_category, ai_category_chance, ai_recommendations, ai_explanation")
+        .in("document_id", docIds);
+
+      if (!error && data) {
+        setDocumentArticleLinks(data as DocumentArticleLink[]);
+      }
+    }
+  };
+
   const loadAssessments = async () => {
     const { data, error } = await supabase
       .from("article_user_assessment")
@@ -233,22 +281,22 @@ export default function MedicalHistoryPage() {
     }
   };
 
-  // Calculate article scores with their relevant documents
+  // Calculate article scores using junction table
   const articleScores = useMemo(() => {
-    const scores: { article: Article; relevantDocs: UserDocument[]; maxChance: number }[] = [];
+    const scores: { article: Article; linksCount: number; maxChance: number }[] = [];
     
     articles.forEach((article) => {
-      const relevantDocs = getRelevantDocuments(article, userDocuments);
-      const docsWithChance = relevantDocs.filter(doc => doc.ai_category_chance !== null && doc.ai_category_chance > 0);
-      const maxChance = docsWithChance.length > 0 
-        ? Math.max(...docsWithChance.map(doc => doc.ai_category_chance || 0))
+      const links = getArticleLinks(article.id, documentArticleLinks);
+      const linksWithChance = links.filter(link => link.ai_category_chance !== null && link.ai_category_chance > 0);
+      const maxChance = linksWithChance.length > 0 
+        ? Math.max(...linksWithChance.map(link => link.ai_category_chance || 0))
         : 0;
       
-      scores.push({ article, relevantDocs, maxChance });
+      scores.push({ article, linksCount: links.length, maxChance });
     });
     
     return scores;
-  }, [articles, userDocuments]);
+  }, [articles, documentArticleLinks]);
 
   // Sort articles by chance (highest first), then by article number
   const sortedArticles = useMemo(() => {
@@ -294,24 +342,30 @@ export default function MedicalHistoryPage() {
     return groups;
   }, [filteredArticles]);
 
-  // Get relevant documents for selected article
-  const relevantDocuments = useMemo(() => {
+  // Get article links for selected article
+  const selectedArticleLinks = useMemo(() => {
     if (!selectedArticle) return [];
-    return getRelevantDocuments(selectedArticle, userDocuments);
-  }, [selectedArticle, userDocuments]);
+    return getArticleLinks(selectedArticle.id, documentArticleLinks);
+  }, [selectedArticle, documentArticleLinks]);
 
-  // Calculate chance data for selected article using only its relevant documents
+  // Get documents with their links for selected article
+  const documentsWithLinks = useMemo(() => {
+    if (!selectedArticle) return [];
+    return getDocumentsForArticle(selectedArticle.id, documentArticleLinks, userDocuments);
+  }, [selectedArticle, documentArticleLinks, userDocuments]);
+
+  // Calculate chance data for selected article using junction table
   const chanceData = useMemo(() => {
     if (!selectedArticle) return null;
-    return calculateCategoryBChance(selectedArticle, relevantDocuments, assessments);
-  }, [selectedArticle, relevantDocuments, assessments]);
+    return calculateCategoryBChance(selectedArticle, selectedArticleLinks, assessments);
+  }, [selectedArticle, selectedArticleLinks, assessments]);
 
-  // Get all AI recommendations for relevant documents
+  // Get all AI recommendations for selected article from links
   const allRecommendations = useMemo(() => {
     const recommendations: string[] = [];
-    relevantDocuments.forEach((doc) => {
-      if (doc.ai_recommendations && Array.isArray(doc.ai_recommendations)) {
-        doc.ai_recommendations.forEach((rec) => {
+    selectedArticleLinks.forEach((link) => {
+      if (link.ai_recommendations && Array.isArray(link.ai_recommendations)) {
+        link.ai_recommendations.forEach((rec) => {
           if (!recommendations.includes(rec)) {
             recommendations.push(rec);
           }
@@ -319,7 +373,7 @@ export default function MedicalHistoryPage() {
       }
     });
     return recommendations;
-  }, [relevantDocuments]);
+  }, [selectedArticleLinks]);
 
   // Pie chart data
   const pieChartData = useMemo(() => {
@@ -406,7 +460,7 @@ export default function MedicalHistoryPage() {
                       </div>
                       <div className="space-y-1">
                         {categoryArticles.map((article) => {
-                          const hasDocuments = userDocuments.some(doc => doc.linked_article_id === article.id);
+                          const hasDocuments = documentArticleLinks.some(link => link.article_id === article.id);
                           return (
                             <button
                               key={article.id}
@@ -605,7 +659,7 @@ export default function MedicalHistoryPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-3 sm:px-6">
-                    {relevantDocuments.length === 0 ? (
+                    {documentsWithLinks.length === 0 ? (
                       <div className="text-center py-6 sm:py-8 text-muted-foreground">
                         <FileText className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-4 opacity-50" />
                         <p className="mb-2 text-sm">Нет документов по данной статье</p>
@@ -623,31 +677,38 @@ export default function MedicalHistoryPage() {
                       </div>
                     ) : (
                       <div className="space-y-2 sm:space-y-3">
-                        {relevantDocuments.slice(0, 10).map((doc) => (
+                        {documentsWithLinks.slice(0, 10).map(({ document: doc, link }) => (
                           <div 
-                            key={doc.id}
-                            className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                            key={`${doc.id}-${link.id}`}
+                            className="flex flex-col gap-2 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                           >
-                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate text-sm">{doc.title || "Без названия"}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
-                                {doc.ai_category_chance !== null && (
-                                  <span className="ml-2 text-primary">• {doc.ai_category_chance}%</span>
-                                )}
-                              </p>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate text-sm">{doc.title || "Без названия"}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
+                                  {link.ai_category_chance !== null && (
+                                    <span className="ml-2 text-primary font-medium">• {link.ai_category_chance}% шанс В</span>
+                                  )}
+                                </p>
+                              </div>
+                              <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" asChild>
+                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
+                                  Открыть
+                                </a>
+                              </Button>
                             </div>
-                            <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" asChild>
-                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                                Открыть
-                              </a>
-                            </Button>
+                            {link.ai_explanation && (
+                              <p className="text-xs text-muted-foreground pl-6 sm:pl-7 border-l-2 border-primary/20 ml-2">
+                                {link.ai_explanation}
+                              </p>
+                            )}
                           </div>
                         ))}
-                        {relevantDocuments.length > 10 && (
+                        {documentsWithLinks.length > 10 && (
                           <p className="text-xs text-muted-foreground text-center">
-                            И ещё {relevantDocuments.length - 10} документов...
+                            И ещё {documentsWithLinks.length - 10} документов...
                           </p>
                         )}
                         <Button 

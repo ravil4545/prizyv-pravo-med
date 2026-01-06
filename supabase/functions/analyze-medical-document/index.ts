@@ -40,7 +40,7 @@ serve(async (req) => {
     const documentTypesStr = documentTypes?.map(t => `${t.code}: ${t.name}`).join(", ") || "";
     const articlesStr = articles?.map(a => `Статья ${a.article_number}: ${a.title}`).join("\n") || "";
 
-    // Разные промпты для рукописного (текстового) и обычного (с изображением) анализа
+    // Базовый промпт с правилами
     const basePrompt = `Ты медицинский эксперт-документовед высшей категории, специализирующийся на анализе медицинских документов для определения годности к военной службе по Постановлению Правительства РФ №565 (Расписание болезней).
 
 КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ОЦЕНКИ СТЕПЕНЕЙ ЗАБОЛЕВАНИЙ:
@@ -50,7 +50,15 @@ serve(async (req) => {
 - Плоскостопие II степени: только при наличии артроза II стадии в суставах среднего отдела стопы. Шанс В = 40-60%
 - Плоскостопие III степени: категория В (ограниченно годен). Шанс В = 70-90%
 
-ЦИТАТА ИЗ СТАТЬИ 68: "Продольное или поперечное плоскостопие I степени не является основанием для применения этой статьи, не препятствует прохождению военной службы и поступлению в военно-учебные заведения."`;
+ЦИТАТА ИЗ СТАТЬИ 68: "Продольное или поперечное плоскостопие I степени не является основанием для применения этой статьи, не препятствует прохождению военной службы и поступлению в военно-учебные заведения."
+
+ВАЖНО: Один документ может содержать НЕСКОЛЬКО диагнозов, относящихся к РАЗНЫМ статьям!
+Например, выписка может содержать:
+- ПМК (пролапс митрального клапана) → Статья 42
+- Разрыв связок коленного сустава → Статья 65
+- Синусит → Статья 49
+
+Ты должен найти ВСЕ диагнозы и указать ВСЕ соответствующие статьи с отдельными рекомендациями для каждой!`;
 
     let prompt: string;
     let requestBody: any;
@@ -74,19 +82,22 @@ ${manualText}
    
    Если не подходит ни один - выбери "other" или "unknown"
 
-2. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ:
-   Определи, к какой статье Постановления №565 относится документ:
+2. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ (МНОЖЕСТВЕННАЯ!):
+   Определи ВСЕ статьи Постановления №565, к которым относятся диагнозы в документе:
    ${articlesStr}
    
    ВАЖНО! Правильное соответствие статей и заболеваний:
+   - Статья 42: Ревматизм, болезни сердца (ПМК, пороки клапанов)
+   - Статья 49: Болезни носа и придаточных пазух (синусит, гайморит, ринит)
    - Статья 57: Болезни КИШЕЧНИКА
    - Статья 58: Болезни ПЕЧЕНИ, желчного пузыря, поджелудочной железы
    - Статья 59: Грыжи
+   - Статья 65: Болезни и повреждения суставов, связок (разрыв связок, артрит)
    - Статья 68: Плоскостопие и деформации стоп
    
-   Верни номер наиболее релевантной статьи (только число)
+   Для КАЖДОГО найденного диагноза укажи соответствующую статью!
 
-3. КАТЕГОРИЯ ГОДНОСТИ:
+3. КАТЕГОРИЯ ГОДНОСТИ (для основного диагноза):
    Определи предварительную категорию годности:
    - А - годен (норма, заболевания I степени)
    - Б - годен с ограничениями (минимальные отклонения)
@@ -107,19 +118,29 @@ ${manualText}
    - Плоскостопие III степени: 75-90%
    - Сколиоз III степени: 80-95%
 
-5. РЕКОМЕНДАЦИИ:
-   Укажи конкретные рекомендации по дополнительным обследованиям.
+5. РЕКОМЕНДАЦИИ ДЛЯ КАЖДОЙ СТАТЬИ:
+   Укажи конкретные рекомендации по дополнительным обследованиям для каждой найденной статьи.
 
 Верни результат СТРОГО в формате JSON:
 {
   "extractedText": "повтор введённого пользователем текста",
   "documentDate": null,
   "documentTypeCode": "код типа документа",
-  "linkedArticleNumber": "номер статьи или null",
-  "fitnessCategory": "А, Б, В, Г или Д",
-  "categoryBChance": число от 0 до 100,
-  "explanation": "подробное обоснование",
-  "recommendations": ["Рекомендация 1", "Рекомендация 2"],
+  "linkedArticles": [
+    {
+      "articleNumber": "номер статьи",
+      "diagnosisFound": "какой диагноз относится к этой статье",
+      "fitnessCategory": "А, Б, В, Г или Д",
+      "categoryBChance": число от 0 до 100,
+      "explanation": "обоснование для этой статьи",
+      "recommendations": ["Рекомендация 1 для этой статьи", "Рекомендация 2"]
+    }
+  ],
+  "primaryArticleNumber": "номер основной статьи (с максимальным шансом В)",
+  "fitnessCategory": "А, Б, В, Г или Д (общая)",
+  "categoryBChance": число от 0 до 100 (максимальное из всех),
+  "explanation": "общее обоснование",
+  "recommendations": ["Общая рекомендация 1", "Общая рекомендация 2"],
   "suggestedTitle": "предложенное название документа"
 }`;
 
@@ -161,19 +182,22 @@ ${manualText}
 3. ОПРЕДЕЛЕНИЕ ДАТЫ ДОКУМЕНТА:
    Найди дату создания/выдачи документа и верни в формате YYYY-MM-DD
 
-4. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ:
-   Определи, к какой статье Постановления №565 относится документ:
+4. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ (МНОЖЕСТВЕННАЯ!):
+   Определи ВСЕ статьи Постановления №565, к которым относятся диагнозы в документе:
    ${articlesStr}
    
    ВАЖНО! Правильное соответствие статей и заболеваний:
+   - Статья 42: Ревматизм, болезни сердца (ПМК - пролапс митрального клапана, пороки клапанов, аритмии)
+   - Статья 49: Болезни носа и придаточных пазух (синусит, гайморит, полипы носа, хронический ринит)
    - Статья 57: Болезни КИШЕЧНИКА (эрозивный илеит, болезнь Крона, неспецифический язвенный колит, хронический колит, проктит, сигмоидит, энтерит, колоноскопия с патологией)
    - Статья 58: Болезни ПЕЧЕНИ, желчного пузыря, поджелудочной железы (гепатит, холецистит, панкреатит, цирроз)
    - Статья 59: Грыжи (паховая, пупочная, бедренная, послеоперационная грыжа)
+   - Статья 65: Болезни и повреждения крупных суставов, связок (разрыв связок, нестабильность сустава, привычный вывих, артрит, артроз крупных суставов)
    - Статья 68: Плоскостопие и деформации стоп
    
    НЕ ПУТАЙ: Колоноскопия, илеит, колит = Статья 57 (кишечник), НЕ статья 59!
    
-   Верни номер наиболее релевантной статьи (только число)
+   Для КАЖДОГО найденного диагноза укажи соответствующую статью!
 
 5. КАТЕГОРИЯ ГОДНОСТИ:
    Определи предварительную категорию годности к военной службе:
@@ -183,7 +207,7 @@ ${manualText}
    - Г - временно не годен (острые заболевания, требующие лечения)
    - Д - не годен к военной службе (тяжёлые патологии)
 
-6. ШАНС НЕПРИЗЫВНОЙ КАТЕГОРИИ (В):
+6. ШАНС НЕПРИЗЫВНОЙ КАТЕГОРИИ (В) для каждой статьи:
    ВАЖНЕЙШИЕ ИСКЛЮЧЕНИЯ (ШАНС БЛИЗОК К 0%):
    - Плоскостопие I степени: 0-10% (НЕ освобождает от службы!)
    - Сколиоз I степени (до 10°): 0-10%
@@ -193,13 +217,15 @@ ${manualText}
    СРЕДНИЙ ШАНС (40-60%):
    - Плоскостопие II степени с артрозом II стадии: 50-60%
    - Сколиоз II степени (11-25°): 50-65%
+   - ПМК с регургитацией: 40-60%
    
    ВЫСОКИЙ ШАНС (70-90%):
    - Плоскостопие III степени: 75-90%
    - Сколиоз III степени (более 25°): 80-95%
    - Грыжи межпозвонковых дисков с неврологической симптоматикой: 75-90%
+   - Разрыв связок с нестабильностью сустава: 60-80%
 
-7. РЕКОМЕНДАЦИИ:
+7. РЕКОМЕНДАЦИИ ДЛЯ КАЖДОЙ СТАТЬИ:
    Укажи конкретные рекомендации:
    - Какие СПЕЦИАЛИСТЫ нужны для подтверждения диагноза
    - Какие дополнительные обследования требуются
@@ -210,14 +236,24 @@ ${manualText}
   "extractedText": "полный извлечённый текст документа",
   "documentDate": "YYYY-MM-DD или null если не определена",
   "documentTypeCode": "код типа документа",
-  "linkedArticleNumber": "номер статьи (только число) или null",
-  "fitnessCategory": "А, Б, В, Г или Д",
-  "categoryBChance": число от 0 до 100 (ВНИМАНИЕ: для плоскостопия I степени МАКСИМУМ 10%!),
-  "explanation": "подробное обоснование выбранной категории и шанса (3-5 предложений)",
+  "linkedArticles": [
+    {
+      "articleNumber": "номер статьи (только число)",
+      "diagnosisFound": "какой конкретно диагноз из документа относится к этой статье",
+      "fitnessCategory": "А, Б, В, Г или Д",
+      "categoryBChance": число от 0 до 100,
+      "explanation": "обоснование выбора статьи и категории (2-3 предложения)",
+      "recommendations": ["Рекомендация 1 для этой статьи", "Рекомендация 2"]
+    }
+  ],
+  "primaryArticleNumber": "номер основной статьи с максимальным шансом категории В",
+  "fitnessCategory": "А, Б, В, Г или Д (общая категория по худшему диагнозу)",
+  "categoryBChance": число от 0 до 100 (максимальное из всех статей),
+  "explanation": "общее обоснование (3-5 предложений)",
   "recommendations": [
-    "Конкретная рекомендация 1",
-    "Конкретная рекомендация 2",
-    "Конкретная рекомендация 3"
+    "Общая рекомендация 1",
+    "Общая рекомендация 2",
+    "Общая рекомендация 3"
   ],
   "suggestedTitle": "предложенное название документа на основе содержания"
 }`;
@@ -328,7 +364,8 @@ ${manualText}
         extractedText: "Не удалось извлечь текст из документа.",
         documentDate: null,
         documentTypeCode: "unknown",
-        linkedArticleNumber: null,
+        linkedArticles: [],
+        primaryArticleNumber: null,
         fitnessCategory: "Требуется анализ",
         categoryBChance: 0,
         explanation: "Не удалось автоматически проанализировать документ.",
@@ -344,11 +381,12 @@ ${manualText}
       documentTypeId = foundType?.id || null;
     }
 
-    // Находим ID статьи по номеру
-    let linkedArticleId = null;
-    if (result.linkedArticleNumber && articles) {
-      const foundArticle = articles.find(a => a.article_number === String(result.linkedArticleNumber));
-      linkedArticleId = foundArticle?.id || null;
+    // Находим ID основной статьи (для обратной совместимости)
+    let primaryArticleId = null;
+    const primaryArticleNumber = result.primaryArticleNumber || result.linkedArticleNumber;
+    if (primaryArticleNumber && articles) {
+      const foundArticle = articles.find(a => a.article_number === String(primaryArticleNumber));
+      primaryArticleId = foundArticle?.id || null;
     }
 
     // Обновляем документ в базе данных если есть documentId
@@ -369,8 +407,8 @@ ${manualText}
       if (documentTypeId) {
         updateData.document_type_id = documentTypeId;
       }
-      if (linkedArticleId) {
-        updateData.linked_article_id = linkedArticleId;
+      if (primaryArticleId) {
+        updateData.linked_article_id = primaryArticleId;
       }
       if (result.suggestedTitle) {
         updateData.title = result.suggestedTitle;
@@ -382,17 +420,91 @@ ${manualText}
         .eq("id", documentId);
 
       if (updateError) {
-        console.error("Error updating document:", updateError);
+        console.error("Failed to update document:", updateError);
+      }
+
+      // Удаляем старые связи и создаём новые в junction-таблице
+      if (result.linkedArticles && Array.isArray(result.linkedArticles) && result.linkedArticles.length > 0) {
+        // Сначала удаляем старые связи
+        const { error: deleteError } = await supabase
+          .from("document_article_links")
+          .delete()
+          .eq("document_id", documentId);
+
+        if (deleteError) {
+          console.error("Failed to delete old article links:", deleteError);
+        }
+
+        // Создаём новые связи для каждой статьи
+        const linksToInsert = [];
+        for (const articleLink of result.linkedArticles) {
+          const articleNum = String(articleLink.articleNumber);
+          const foundArticle = articles?.find(a => a.article_number === articleNum);
+          
+          if (foundArticle) {
+            linksToInsert.push({
+              document_id: documentId,
+              article_id: foundArticle.id,
+              ai_fitness_category: articleLink.fitnessCategory,
+              ai_category_chance: articleLink.categoryBChance || 0,
+              ai_recommendations: articleLink.recommendations || [],
+              ai_explanation: articleLink.explanation || `Диагноз: ${articleLink.diagnosisFound}`
+            });
+          }
+        }
+
+        if (linksToInsert.length > 0) {
+          const { error: insertError } = await supabase
+            .from("document_article_links")
+            .insert(linksToInsert);
+
+          if (insertError) {
+            console.error("Failed to insert article links:", insertError);
+          } else {
+            console.log(`Successfully linked document to ${linksToInsert.length} articles`);
+          }
+        }
+      } else if (primaryArticleId) {
+        // Если нет массива linkedArticles, но есть основная статья - создаём одну связь
+        const { error: deleteError } = await supabase
+          .from("document_article_links")
+          .delete()
+          .eq("document_id", documentId);
+
+        if (!deleteError) {
+          const { error: insertError } = await supabase
+            .from("document_article_links")
+            .insert({
+              document_id: documentId,
+              article_id: primaryArticleId,
+              ai_fitness_category: result.fitnessCategory,
+              ai_category_chance: result.categoryBChance || 0,
+              ai_recommendations: result.recommendations || [],
+              ai_explanation: result.explanation
+            });
+
+          if (insertError) {
+            console.error("Failed to insert single article link:", insertError);
+          }
+        }
       }
     }
 
-    console.log('Medical document analysis completed successfully');
+    console.log("Medical document analysis completed successfully");
 
     return new Response(
       JSON.stringify({
-        ...result,
-        documentTypeId,
-        linkedArticleId
+        success: true,
+        extractedText: result.extractedText,
+        documentDate: result.documentDate,
+        documentTypeCode: result.documentTypeCode,
+        linkedArticles: result.linkedArticles || [],
+        primaryArticleNumber: primaryArticleNumber,
+        fitnessCategory: result.fitnessCategory,
+        categoryBChance: result.categoryBChance || 0,
+        explanation: result.explanation,
+        recommendations: result.recommendations || [],
+        suggestedTitle: result.suggestedTitle
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -402,8 +514,8 @@ ${manualText}
     console.error("Error in analyze-medical-document:", error);
     return new Response(
       JSON.stringify({ 
-        error: "server_error",
-        message: error instanceof Error ? error.message : "Неизвестная ошибка"
+        error: "processing_error",
+        message: error instanceof Error ? error.message : "Произошла ошибка при анализе документа"
       }),
       {
         status: 500,

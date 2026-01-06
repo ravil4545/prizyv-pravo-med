@@ -429,6 +429,54 @@ export type Database = {
         }
         Relationships: []
       }
+      document_article_links: {
+        Row: {
+          ai_category_chance: number | null
+          ai_explanation: string | null
+          ai_fitness_category: string | null
+          ai_recommendations: string[] | null
+          article_id: string
+          created_at: string | null
+          document_id: string
+          id: string
+        }
+        Insert: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string[] | null
+          article_id: string
+          created_at?: string | null
+          document_id: string
+          id?: string
+        }
+        Update: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: string[] | null
+          article_id?: string
+          created_at?: string | null
+          document_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_article_links_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "disease_articles_565"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_article_links_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "medical_documents_v2"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_subtypes: {
         Row: {
           code: string
