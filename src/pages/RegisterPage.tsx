@@ -117,11 +117,11 @@ const RegisterPage = () => {
     }
   };
 
-  const handleGoogleRegister = async () => {
+  const handleOAuthRegister = async (provider: "google" | "azure" | "facebook") => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
+        provider,
         options: {
           redirectTo: `${window.location.origin}/dashboard`
         }
@@ -197,12 +197,10 @@ const RegisterPage = () => {
   };
 
   const formatPhoneInput = (value: string) => {
-    // Keep only digits and + at the start
-    let formatted = value.replace(/[^\\d+]/g, "");
+    let formatted = value.replace(/[^\d+]/g, "");
     if (!formatted.startsWith("+7")) {
       formatted = "+7" + formatted.replace(/\+/g, "").replace(/^7/, "");
     }
-    // Limit to +7 + 10 digits
     if (formatted.length > 12) {
       formatted = formatted.slice(0, 12);
     }
@@ -223,23 +221,19 @@ const RegisterPage = () => {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="email" className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  <span className="hidden sm:inline">Email</span>
+              <TabsList className="grid w-full grid-cols-2 mb-2">
+                <TabsTrigger value="email" className="flex items-center gap-1 text-xs">
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>Email</span>
                 </TabsTrigger>
-                <TabsTrigger value="google" className="flex items-center gap-2">
-                  <Chrome className="h-4 w-4" />
-                  <span className="hidden sm:inline">Google</span>
-                </TabsTrigger>
-                <TabsTrigger value="phone" className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  <span className="hidden sm:inline">Телефон</span>
+                <TabsTrigger value="phone" className="flex items-center gap-1 text-xs">
+                  <Phone className="h-3.5 w-3.5" />
+                  <span>Телефон</span>
                 </TabsTrigger>
               </TabsList>
               
               {/* Email Registration */}
-              <TabsContent value="email" className="mt-6">
+              <TabsContent value="email" className="mt-4">
                 <form onSubmit={handleEmailRegister} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
@@ -287,27 +281,8 @@ const RegisterPage = () => {
                 </form>
               </TabsContent>
               
-              {/* Google Registration */}
-              <TabsContent value="google" className="mt-6">
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Нажмите кнопку ниже, чтобы войти через ваш аккаунт Google.
-                    Ваше имя и фото будут сохранены автоматически.
-                  </p>
-                  <Button 
-                    onClick={handleGoogleRegister} 
-                    className="w-full" 
-                    variant="outline"
-                    disabled={loading}
-                  >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Chrome className="h-4 w-4 mr-2" />}
-                    Войти через Google
-                  </Button>
-                </div>
-              </TabsContent>
-              
               {/* Phone Registration */}
-              <TabsContent value="phone" className="mt-6">
+              <TabsContent value="phone" className="mt-4">
                 {!otpSent ? (
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -360,6 +335,57 @@ const RegisterPage = () => {
                 )}
               </TabsContent>
             </Tabs>
+
+            {/* OAuth Providers */}
+            <div className="mt-6 space-y-3">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Или войти через</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <Button 
+                  onClick={() => handleOAuthRegister("google")} 
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                >
+                  <Chrome className="h-4 w-4 mr-2" />
+                  Google
+                </Button>
+
+                <Button 
+                  onClick={() => handleOAuthRegister("azure")} 
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                >
+                  <svg className="h-4 w-4 mr-2" viewBox="0 0 23 23" fill="none">
+                    <path d="M11 0H0v11h11V0z" fill="#F25022"/>
+                    <path d="M23 0H12v11h11V0z" fill="#7FBA00"/>
+                    <path d="M11 12H0v11h11V12z" fill="#00A4EF"/>
+                    <path d="M23 12H12v11h11V12z" fill="#FFB900"/>
+                  </svg>
+                  Microsoft
+                </Button>
+
+                <Button 
+                  onClick={() => handleOAuthRegister("facebook")} 
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                >
+                  <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="#1877F2">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  Facebook
+                </Button>
+              </div>
+            </div>
 
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">Уже есть аккаунт? </span>
