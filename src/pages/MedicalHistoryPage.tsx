@@ -151,24 +151,12 @@ function calculateCategoryBChance(
   };
 }
 
-// Get documents relevant to a specific article
+// Get documents relevant to a specific article - only directly linked documents
 function getRelevantDocuments(article: Article, documents: UserDocument[]): UserDocument[] {
   if (!article || documents.length === 0) return [];
   
-  const keywords = categoryBKeywords[article.category] || [];
-  
-  return documents.filter((doc) => {
-    // Check if document is directly linked to this article
-    if (doc.linked_article_id === article.id) return true;
-    
-    const textToSearch = [
-      doc.title?.toLowerCase() || "",
-      doc.raw_text?.toLowerCase() || "",
-      JSON.stringify(doc.meta || {}).toLowerCase(),
-    ].join(" ");
-
-    return keywords.some((keyword) => textToSearch.includes(keyword.toLowerCase()));
-  });
+  // Only return documents that are directly linked to this specific article
+  return documents.filter((doc) => doc.linked_article_id === article.id);
 }
 
 export default function MedicalHistoryPage() {
