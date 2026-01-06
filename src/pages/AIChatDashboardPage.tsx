@@ -390,7 +390,7 @@ const AIChatDashboardPage = () => {
                       }`}
                     >
                       <div
-                        className={`max-w-[85%] sm:max-w-[80%] p-2.5 sm:p-4 rounded-lg overflow-hidden ${
+                        className={`max-w-[240px] xs:max-w-[260px] sm:max-w-[80%] p-2.5 sm:p-4 rounded-lg overflow-hidden ${
                           message.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
