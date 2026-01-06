@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -157,27 +161,69 @@ export default function MedicalDocumentsPage() {
 
   // Конвертация файла в JPEG с максимальным качеством
   const convertToJpeg = async (file: File): Promise<{ blob: Blob; base64: string }> => {
+    // Если это PDF, конвертируем первую страницу в JPEG
+    if (file.type === "application/pdf") {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        
+        // Увеличиваем масштаб для лучшего качества
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale });
+        
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        const context = canvas.getContext("2d")!;
+        context.fillStyle = "#FFFFFF";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport,
+          canvas: canvas,
+        }).promise;
+        
+        return new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64 = (reader.result as string).split(",")[1];
+                  resolve({ blob, base64 });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              } else {
+                reject(new Error("Failed to convert PDF to JPEG"));
+              }
+            },
+            "image/jpeg",
+            0.95
+          );
+        });
+      } catch (error) {
+        console.error("PDF conversion error:", error);
+        throw new Error("Не удалось обработать PDF файл");
+      }
+    }
+    
+    // Для изображений конвертируем в JPEG
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const result = e.target?.result as string;
         
-        // Если это PDF, используем оригинальный файл и конвертируем первую страницу
-        if (file.type === "application/pdf") {
-          // Для PDF возвращаем base64 напрямую - AI обработает
-          const base64 = result.split(',')[1];
-          resolve({ blob: file, base64 });
-          return;
-        }
-        
-        // Для изображений конвертируем в JPEG
         const img = new Image();
         img.onload = () => {
-          const canvas = document.createElement('canvas');
+          const canvas = document.createElement("canvas");
           canvas.width = img.width;
           canvas.height = img.height;
-          const ctx = canvas.getContext('2d')!;
-          ctx.fillStyle = '#FFFFFF';
+          const ctx = canvas.getContext("2d")!;
+          ctx.fillStyle = "#FFFFFF";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
           
@@ -186,7 +232,7 @@ export default function MedicalDocumentsPage() {
               if (blob) {
                 const jpegReader = new FileReader();
                 jpegReader.onload = () => {
-                  const base64 = (jpegReader.result as string).split(',')[1];
+                  const base64 = (jpegReader.result as string).split(",")[1];
                   resolve({ blob, base64 });
                 };
                 jpegReader.readAsDataURL(blob);
@@ -194,8 +240,8 @@ export default function MedicalDocumentsPage() {
                 reject(new Error("Failed to convert image"));
               }
             },
-            'image/jpeg',
-            0.95 // Высокое качество
+            "image/jpeg",
+            0.95
           );
         };
         img.onerror = reject;
