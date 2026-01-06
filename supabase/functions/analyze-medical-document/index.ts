@@ -391,6 +391,15 @@ ${manualText}
 
     // Обновляем документ в базе данных если есть documentId
     if (documentId) {
+      // Сначала получаем текущий документ чтобы проверить meta
+      const { data: currentDoc } = await supabase
+        .from("medical_documents_v2")
+        .select("meta, title")
+        .eq("id", documentId)
+        .single();
+      
+      const hasParts = currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts) && currentDoc.meta.parts.length > 1;
+      
       const updateData: Record<string, any> = {
         raw_text: result.extractedText,
         is_classified: true,
@@ -406,11 +415,23 @@ ${manualText}
       }
       if (documentTypeId) {
         updateData.document_type_id = documentTypeId;
+        
+        // Если есть parts в meta, обновляем тип первой части
+        if (currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts)) {
+          const foundType = documentTypes?.find(t => t.id === documentTypeId);
+          const updatedParts = [...currentDoc.meta.parts];
+          if (updatedParts[0]) {
+            updatedParts[0].type_id = documentTypeId;
+            updatedParts[0].type_name = foundType?.name || null;
+          }
+          updateData.meta = { parts: updatedParts };
+        }
       }
       if (primaryArticleId) {
         updateData.linked_article_id = primaryArticleId;
       }
-      if (result.suggestedTitle) {
+      // Не перезаписываем title если документ объединён из нескольких частей
+      if (result.suggestedTitle && !hasParts) {
         updateData.title = result.suggestedTitle;
       }
 
