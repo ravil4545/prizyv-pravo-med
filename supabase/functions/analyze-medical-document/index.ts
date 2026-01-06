@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, documentId, userId } = await req.json();
+    const { imageBase64, documentId, userId, manualText, isHandwritten } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -24,8 +24,6 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
-
-    console.log('Starting comprehensive medical document analysis with Lovable AI');
 
     // Получаем список типов документов для классификации
     const { data: documentTypes } = await supabase
@@ -42,7 +40,8 @@ serve(async (req) => {
     const documentTypesStr = documentTypes?.map(t => `${t.code}: ${t.name}`).join(", ") || "";
     const articlesStr = articles?.map(a => `Статья ${a.article_number}: ${a.title}`).join("\n") || "";
 
-    const prompt = `Ты медицинский эксперт-документовед высшей категории, специализирующийся на анализе медицинских документов для определения годности к военной службе по Постановлению Правительства РФ №565 (Расписание болезней).
+    // Разные промпты для рукописного (текстового) и обычного (с изображением) анализа
+    const basePrompt = `Ты медицинский эксперт-документовед высшей категории, специализирующийся на анализе медицинских документов для определения годности к военной службе по Постановлению Правительства РФ №565 (Расписание болезней).
 
 КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ОЦЕНКИ СТЕПЕНЕЙ ЗАБОЛЕВАНИЙ:
 
@@ -51,7 +50,94 @@ serve(async (req) => {
 - Плоскостопие II степени: только при наличии артроза II стадии в суставах среднего отдела стопы. Шанс В = 40-60%
 - Плоскостопие III степени: категория В (ограниченно годен). Шанс В = 70-90%
 
-ЦИТАТА ИЗ СТАТЬИ 68: "Продольное или поперечное плоскостопие I степени не является основанием для применения этой статьи, не препятствует прохождению военной службы и поступлению в военно-учебные заведения."
+ЦИТАТА ИЗ СТАТЬИ 68: "Продольное или поперечное плоскостопие I степени не является основанием для применения этой статьи, не препятствует прохождению военной службы и поступлению в военно-учебные заведения."`;
+
+    let prompt: string;
+    let requestBody: any;
+
+    if (isHandwritten && manualText) {
+      // Анализ рукописного документа на основе текста, введённого пользователем
+      console.log('Starting handwritten document analysis based on user-entered text');
+      
+      prompt = `${basePrompt}
+
+ЗАДАЧА: Проанализируй информацию, введённую пользователем из рукописного медицинского документа:
+
+ТЕКСТ ИЗ ДОКУМЕНТА:
+${manualText}
+
+На основе этого текста выполни следующее:
+
+1. ОПРЕДЕЛЕНИЕ ТИПА ДОКУМЕНТА:
+   Выбери наиболее подходящий тип из списка:
+   ${documentTypesStr}
+   
+   Если не подходит ни один - выбери "other" или "unknown"
+
+2. СВЯЗЬ СО СТАТЬЯМИ РАСПИСАНИЯ БОЛЕЗНЕЙ:
+   Определи, к какой статье Постановления №565 относится документ:
+   ${articlesStr}
+   
+   ВАЖНО! Правильное соответствие статей и заболеваний:
+   - Статья 57: Болезни КИШЕЧНИКА
+   - Статья 58: Болезни ПЕЧЕНИ, желчного пузыря, поджелудочной железы
+   - Статья 59: Грыжи
+   - Статья 68: Плоскостопие и деформации стоп
+   
+   Верни номер наиболее релевантной статьи (только число)
+
+3. КАТЕГОРИЯ ГОДНОСТИ:
+   Определи предварительную категорию годности:
+   - А - годен (норма, заболевания I степени)
+   - Б - годен с ограничениями (минимальные отклонения)
+   - В - ограниченно годен (хронические заболевания II-III степени)
+   - Г - временно не годен
+   - Д - не годен
+
+4. ШАНС НЕПРИЗЫВНОЙ КАТЕГОРИИ (В):
+   ВАЖНЕЙШИЕ ИСКЛЮЧЕНИЯ (ШАНС БЛИЗОК К 0%):
+   - Плоскостопие I степени: 0-10%
+   - Сколиоз I степени: 0-10%
+   
+   СРЕДНИЙ ШАНС (40-60%):
+   - Плоскостопие II степени с артрозом: 50-60%
+   - Сколиоз II степени: 50-65%
+   
+   ВЫСОКИЙ ШАНС (70-90%):
+   - Плоскостопие III степени: 75-90%
+   - Сколиоз III степени: 80-95%
+
+5. РЕКОМЕНДАЦИИ:
+   Укажи конкретные рекомендации по дополнительным обследованиям.
+
+Верни результат СТРОГО в формате JSON:
+{
+  "extractedText": "повтор введённого пользователем текста",
+  "documentDate": null,
+  "documentTypeCode": "код типа документа",
+  "linkedArticleNumber": "номер статьи или null",
+  "fitnessCategory": "А, Б, В, Г или Д",
+  "categoryBChance": число от 0 до 100,
+  "explanation": "подробное обоснование",
+  "recommendations": ["Рекомендация 1", "Рекомендация 2"],
+  "suggestedTitle": "предложенное название документа"
+}`;
+
+      requestBody = {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" }
+      };
+    } else {
+      // Обычный анализ документа с изображением
+      console.log('Starting comprehensive medical document analysis with Lovable AI');
+      
+      prompt = `${basePrompt}
 
 ЗАДАЧА: Проанализируй этот медицинский документ и выполни следующие действия:
 
@@ -136,37 +222,31 @@ serve(async (req) => {
   "suggestedTitle": "предложенное название документа на основе содержания"
 }`;
 
-    // Extract base64 data without data URL prefix if present
-    let base64Data = imageBase64.includes('base64,') 
-      ? imageBase64.split('base64,')[1] 
-      : imageBase64;
-    
-    // Clean base64 string - remove any whitespace or newlines
-    base64Data = base64Data.replace(/\s/g, '');
-    
-    // Validate base64 length
-    console.log('Image base64 length:', base64Data.length);
-    
-    if (!base64Data || base64Data.length < 100) {
-      throw new Error("Invalid image data: base64 string is too short or empty");
-    }
-    
-    // Check if base64 is valid
-    try {
-      // Test decode a small portion to verify it's valid base64
-      atob(base64Data.substring(0, 100));
-    } catch (e) {
-      console.error("Invalid base64 encoding");
-      throw new Error("Invalid base64 image data");
-    }
+      // Extract base64 data without data URL prefix if present
+      let base64Data = imageBase64.includes('base64,') 
+        ? imageBase64.split('base64,')[1] 
+        : imageBase64;
+      
+      // Clean base64 string - remove any whitespace or newlines
+      base64Data = base64Data.replace(/\s/g, '');
+      
+      // Validate base64 length
+      console.log('Image base64 length:', base64Data.length);
+      
+      if (!base64Data || base64Data.length < 100) {
+        throw new Error("Invalid image data: base64 string is too short or empty");
+      }
+      
+      // Check if base64 is valid
+      try {
+        // Test decode a small portion to verify it's valid base64
+        atob(base64Data.substring(0, 100));
+      } catch (e) {
+        console.error("Invalid base64 encoding");
+        throw new Error("Invalid base64 image data");
+      }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      requestBody = {
         model: "google/gemini-2.5-flash",
         messages: [
           {
@@ -186,7 +266,16 @@ serve(async (req) => {
           }
         ],
         response_format: { type: "json_object" }
-      }),
+      };
+    }
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

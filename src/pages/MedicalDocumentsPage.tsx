@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer, FileStack, File } from "lucide-react";
+import { Upload, FileText, Loader2, Trash2, Download, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, Eye, Brain, Copy, Check, ExternalLink, AlertCircle, Sparkles, Printer, FileStack, File, PenLine } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -64,9 +64,18 @@ export default function MedicalDocumentsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<MedicalDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [uploadMode, setUploadMode] = useState<"single" | "multi" | null>(null);
+  const [uploadMode, setUploadMode] = useState<"single" | "multi" | "handwritten" | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [enhancing, setEnhancing] = useState(false);
+  
+  // Handwritten document form state
+  const [handwrittenFile, setHandwrittenFile] = useState<File | null>(null);
+  const [handwrittenForm, setHandwrittenForm] = useState({
+    documentType: "",
+    examination: "",
+    conclusion: "",
+    diagnosis: "",
+  });
   
   // Filters & Sorting
   const [filterType, setFilterType] = useState<string>("all");
@@ -160,9 +169,14 @@ export default function MedicalDocumentsPage() {
     await uploadFiles(files, uploadMode === "multi");
   }, [user, uploadMode]);
 
-  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>, mode: "single" | "multi") => {
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>, mode: "single" | "multi" | "handwritten") => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
+      if (mode === "handwritten") {
+        // Для рукописного - только один файл, сохраняем в state
+        setHandwrittenFile(files[0]);
+        return;
+      }
       if (mode === "single") {
         // Для одностраничного - каждый файл отдельно
         await uploadFiles(files, false);
@@ -172,6 +186,141 @@ export default function MedicalDocumentsPage() {
       }
     }
     setUploadMode(null);
+  };
+
+  // Upload handwritten document with manual text input
+  const uploadHandwrittenDocument = async () => {
+    if (!user || !handwrittenFile) return;
+    
+    const { documentType, examination, conclusion, diagnosis } = handwrittenForm;
+    if (!documentType && !examination && !conclusion && !diagnosis) {
+      toast({
+        title: "Введите данные",
+        description: "Заполните хотя бы одно поле для анализа",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress("Сжатие изображения...");
+
+    try {
+      // Конвертируем и сжимаем изображение
+      const { base64 } = await convertToJpeg(handwrittenFile);
+      const compressedBase64 = await compressImage(base64);
+      
+      setUploadProgress("Создание PDF...");
+      
+      // Создаём одностраничный PDF
+      const dimensions = await getImageDimensions(compressedBase64);
+      const pdfBlob = await createPdfFromImages([{ base64: compressedBase64, ...dimensions }]);
+      
+      const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+
+      // Загружаем PDF
+      const { error: uploadError } = await supabase.storage
+        .from("medical-documents")
+        .upload(fileName, pdfBlob, {
+          contentType: 'application/pdf'
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("medical-documents")
+        .getPublicUrl(fileName);
+
+      // Формируем текст для анализа
+      const manualText = [
+        documentType ? `Вид документа: ${documentType}` : "",
+        examination ? `Анализ/обследование/врач: ${examination}` : "",
+        conclusion ? `Заключение: ${conclusion}` : "",
+        diagnosis ? `Диагноз: ${diagnosis}` : "",
+      ].filter(Boolean).join("\n");
+
+      // Создаём запись в базе
+      const { data: insertedDoc, error: insertError } = await supabase
+        .from("medical_documents_v2")
+        .insert({
+          user_id: user.id,
+          title: `Рукописный_${format(new Date(), 'dd.MM.yyyy_HH-mm')}`,
+          file_url: publicUrl,
+          is_classified: false,
+          raw_text: manualText, // Сохраняем введённый пользователем текст
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: "Документ загружен",
+        description: "Запускаем AI-анализ введённого текста...",
+      });
+
+      // Запускаем AI анализ на введённом тексте
+      if (insertedDoc) {
+        analyzeHandwrittenDocument(insertedDoc.id, manualText);
+      }
+
+      // Сбрасываем форму
+      setHandwrittenFile(null);
+      setHandwrittenForm({ documentType: "", examination: "", conclusion: "", diagnosis: "" });
+      setUploadMode(null);
+    } catch (error: any) {
+      toast({
+        title: "Ошибка загрузки",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      setUploadProgress("");
+      loadDocuments();
+    }
+  };
+
+  // Analyze handwritten document based on user-entered text
+  const analyzeHandwrittenDocument = async (documentId: string, manualText: string) => {
+    setAnalyzingId(documentId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-medical-document', {
+        body: { 
+          manualText, 
+          documentId, 
+          userId: user.id,
+          isHandwritten: true
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast({
+          title: "Ошибка анализа",
+          description: data.message || "Попробуйте позже",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Анализ завершён",
+          description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+        });
+      }
+
+      loadDocuments();
+    } catch (error: any) {
+      console.error("Analysis error:", error);
+      toast({
+        title: "Ошибка анализа",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAnalyzingId(null);
+    }
   };
 
   // Конвертация файла в JPEG с максимальным качеством
@@ -822,6 +971,120 @@ export default function MedicalDocumentsPage() {
                     <p className="text-sm text-muted-foreground">{uploadProgress}</p>
                   )}
                 </div>
+              ) : uploadMode === "handwritten" ? (
+                <div className="py-6">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-medium mb-2">Загрузка рукописного документа</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Загрузите фото документа и введите текст вручную для анализа
+                    </p>
+                  </div>
+                  
+                  {/* Фото документа */}
+                  {!handwrittenFile ? (
+                    <div
+                      className="relative border-2 border-dashed rounded-lg p-8 text-center transition-all mb-4 border-muted-foreground/25 hover:border-primary/50"
+                    >
+                      <PenLine className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-base font-medium mb-1">Выберите фото документа</p>
+                      <p className="text-sm text-muted-foreground">Рукописный документ для сохранения</p>
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.webp"
+                        onChange={(e) => handleFileInput(e, "handwritten")}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mb-4 p-4 border rounded-lg bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-5 w-5 text-green-500" />
+                          <span className="font-medium">{handwrittenFile.name}</span>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setHandwrittenFile(null)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Форма ручного ввода */}
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Вид документа</label>
+                      <Input
+                        placeholder="Например: Справка, Выписка, Заключение..."
+                        value={handwrittenForm.documentType}
+                        onChange={(e) => setHandwrittenForm(prev => ({ ...prev, documentType: e.target.value }))}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Анализ / Обследование / Врач</label>
+                      <Input
+                        placeholder="Например: Рентген стоп, УЗИ, Консультация ортопеда..."
+                        value={handwrittenForm.examination}
+                        onChange={(e) => setHandwrittenForm(prev => ({ ...prev, examination: e.target.value }))}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Заключение</label>
+                      <Textarea
+                        placeholder="Перепишите текст заключения из документа..."
+                        value={handwrittenForm.conclusion}
+                        onChange={(e) => setHandwrittenForm(prev => ({ ...prev, conclusion: e.target.value }))}
+                        rows={3}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Диагноз</label>
+                      <Textarea
+                        placeholder="Перепишите диагноз из документа..."
+                        value={handwrittenForm.diagnosis}
+                        onChange={(e) => setHandwrittenForm(prev => ({ ...prev, diagnosis: e.target.value }))}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => {
+                        setUploadMode(null);
+                        setHandwrittenFile(null);
+                        setHandwrittenForm({ documentType: "", examination: "", conclusion: "", diagnosis: "" });
+                      }}
+                    >
+                      Отмена
+                    </Button>
+                    <Button 
+                      className="flex-1"
+                      disabled={!handwrittenFile || uploading}
+                      onClick={uploadHandwrittenDocument}
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Загрузка...
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="h-4 w-4 mr-2" />
+                          Загрузить и проанализировать
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               ) : uploadMode ? (
                 <div className="py-6">
                   <div className="text-center mb-6">
@@ -850,13 +1113,9 @@ export default function MedicalDocumentsPage() {
                   >
                     <div className="flex items-center justify-center gap-2 mb-3">
                       <Upload className={`h-10 w-10 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
-                      <Sparkles className="h-6 w-6 text-primary" />
                     </div>
                     <p className="text-base font-medium mb-1">Перетащите файлы сюда</p>
                     <p className="text-sm text-muted-foreground mb-3">или нажмите для выбора</p>
-                    <p className="text-xs text-primary">
-                      ИИ улучшит качество: выровняет • уберёт тени • повысит чёткость
-                    </p>
                     <input
                       type="file"
                       multiple
@@ -879,24 +1138,23 @@ export default function MedicalDocumentsPage() {
                   <div className="text-center mb-6">
                     <div className="flex items-center justify-center gap-2 mb-3">
                       <Upload className="h-10 w-10 text-muted-foreground" />
-                      <Sparkles className="h-6 w-6 text-primary" />
                     </div>
                     <h3 className="text-lg font-medium mb-2">Загрузка документов</h3>
                     <p className="text-sm text-muted-foreground">
-                      ИИ автоматически улучшит качество, конвертирует в PDF и проанализирует документ
+                      ИИ конвертирует в PDF и проанализирует документ
                     </p>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card 
                       className="cursor-pointer hover:border-primary/50 transition-colors"
                       onClick={() => setUploadMode("single")}
                     >
                       <CardContent className="p-6 text-center">
                         <File className="h-12 w-12 mx-auto mb-4 text-primary" />
-                        <h4 className="font-medium mb-2">Одностраничный документ</h4>
+                        <h4 className="font-medium mb-2">Одностраничный</h4>
                         <p className="text-sm text-muted-foreground">
-                          Справки, заключения, выписки — каждый файл отдельно
+                          Справки, заключения — каждый файл отдельно
                         </p>
                       </CardContent>
                     </Card>
@@ -907,9 +1165,22 @@ export default function MedicalDocumentsPage() {
                     >
                       <CardContent className="p-6 text-center">
                         <FileStack className="h-12 w-12 mx-auto mb-4 text-primary" />
-                        <h4 className="font-medium mb-2">Многостраничный документ</h4>
+                        <h4 className="font-medium mb-2">Многостраничный</h4>
                         <p className="text-sm text-muted-foreground">
-                          Медкарты, истории болезни — объединяются в один PDF
+                          Медкарты — объединяются в один PDF
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card 
+                      className="cursor-pointer hover:border-primary/50 transition-colors border-dashed"
+                      onClick={() => setUploadMode("handwritten")}
+                    >
+                      <CardContent className="p-6 text-center">
+                        <PenLine className="h-12 w-12 mx-auto mb-4 text-primary" />
+                        <h4 className="font-medium mb-2">Рукописный</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Ручной ввод текста для анализа
                         </p>
                       </CardContent>
                     </Card>
