@@ -26,11 +26,20 @@ const ChatWidget = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const CHAT_URL = `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat`;
 
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    const scrollToBottom = () => {
+      if (scrollRef.current) {
+        const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
+      }
+    };
+    // Small delay to ensure content is rendered
+    const timer = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(timer);
+  }, [messages, isLoading]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -157,7 +166,7 @@ const ChatWidget = () => {
           </CardHeader>
 
           <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-hidden">
               {messages.map((message, index) => (
                 <div
                   key={index}
@@ -166,28 +175,33 @@ const ChatWidget = () => {
                   }`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    className={`max-w-[85%] rounded-lg px-4 py-2 overflow-hidden ${
                       message.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-foreground"
                     }`}
                   >
                     {message.role === "assistant" ? (
-                      <div className="text-sm prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+                      <div className="text-sm prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 break-words [&_*]:break-words [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {enhanceTypography(message.content)}
                         </ReactMarkdown>
                       </div>
                     ) : (
-                      <p className="text-sm whitespace-pre-wrap">{enhanceTypography(message.content)}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{enhanceTypography(message.content)}</p>
                     )}
                   </div>
                 </div>
               ))}
-              {isLoading && (
+              {isLoading && messages[messages.length - 1]?.role === "user" && (
                 <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="bg-muted rounded-lg px-4 py-3 flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <span className="text-sm text-muted-foreground">ИИ печатает...</span>
                   </div>
                 </div>
               )}
