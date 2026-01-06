@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PdfViewer from "@/components/PdfViewer";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Configure PDF.js worker
@@ -1084,42 +1085,8 @@ export default function MedicalDocumentsPage() {
                                   </DialogHeader>
                                   <ScrollArea className="max-h-[calc(90vh-100px)]">
                                     <div className="space-y-4 sm:space-y-6 pr-4 overflow-hidden">
-                                      {/* Document Viewer */}
-                                      <div className="rounded-lg overflow-hidden border bg-muted/20">
-                                        {doc.file_url.endsWith('.pdf') ? (
-                                          <div className="p-8 text-center">
-                                            <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                                            <p className="text-muted-foreground mb-4">PDF документ</p>
-                                            <Button onClick={() => window.open(doc.file_url, '_blank')}>
-                                              <Eye className="h-4 w-4 mr-2" />
-                                              Открыть PDF
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="block">
-                                              <img 
-                                                src={doc.file_url} 
-                                                alt={doc.title || "Документ"} 
-                                                className="w-full cursor-zoom-in hover:opacity-90 transition-opacity"
-                                                onError={(e) => {
-                                                  const target = e.target as HTMLImageElement;
-                                                  target.style.display = 'none';
-                                                  target.parentElement?.insertAdjacentHTML('afterend', `
-                                                    <div class="p-8 text-center">
-                                                      <p class="text-muted-foreground">Не удалось загрузить изображение</p>
-                                                      <a href="${doc.file_url}" target="_blank" class="text-primary underline">Открыть в новой вкладке</a>
-                                                    </div>
-                                                  `);
-                                                }}
-                                              />
-                                            </a>
-                                            <div className="p-2 bg-muted/50 text-center text-xs text-muted-foreground">
-                                              Нажмите на изображение для просмотра в полном размере
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
+                                      {/* Document Viewer with PDF support */}
+                                      <PdfViewer url={doc.file_url} />
 
                                       {/* AI Analysis Results */}
                                       {doc.is_classified && (
