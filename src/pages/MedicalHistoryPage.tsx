@@ -28,6 +28,10 @@ interface UserDocument {
   raw_text: string | null;
   document_type_id: string | null;
   meta: any;
+  ai_recommendations: string[] | null;
+  ai_fitness_category: string | null;
+  ai_category_chance: number | null;
+  linked_article_id: string | null;
 }
 
 interface ArticleAssessment {
@@ -257,7 +261,7 @@ export default function MedicalHistoryPage() {
   const loadUserDocuments = async () => {
     const { data, error } = await supabase
       .from("medical_documents_v2")
-      .select("id, title, file_url, uploaded_at, raw_text, document_type_id, meta")
+      .select("id, title, file_url, uploaded_at, raw_text, document_type_id, meta, ai_recommendations, ai_fitness_category, ai_category_chance, linked_article_id")
       .eq("user_id", user.id)
       .order("uploaded_at", { ascending: false });
 
@@ -313,6 +317,9 @@ export default function MedicalHistoryPage() {
     const keywords = categoryBKeywords[selectedArticle.category] || [];
     
     return userDocuments.filter((doc) => {
+      // Check if document is linked to this article
+      if (doc.linked_article_id === selectedArticle.id) return true;
+      
       const textToSearch = [
         doc.title?.toLowerCase() || "",
         doc.raw_text?.toLowerCase() || "",
@@ -322,6 +329,21 @@ export default function MedicalHistoryPage() {
       return keywords.some((keyword) => textToSearch.includes(keyword.toLowerCase()));
     });
   }, [selectedArticle, userDocuments]);
+
+  // Get all AI recommendations for relevant documents
+  const allRecommendations = useMemo(() => {
+    const recommendations: string[] = [];
+    relevantDocuments.forEach((doc) => {
+      if (doc.ai_recommendations && Array.isArray(doc.ai_recommendations)) {
+        doc.ai_recommendations.forEach((rec) => {
+          if (!recommendations.includes(rec)) {
+            recommendations.push(rec);
+          }
+        });
+      }
+    });
+    return recommendations;
+  }, [relevantDocuments]);
 
   // Pie chart data
   const pieChartData = useMemo(() => {
@@ -568,6 +590,28 @@ export default function MedicalHistoryPage() {
                   </CardContent>
                 </Card>
 
+                {/* AI Recommendations */}
+                {allRecommendations.length > 0 && (
+                  <Card className="border-primary/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                        <AlertCircle className="h-5 w-5" />
+                        Рекомендации ИИ по статье {selectedArticle.article_number}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2">
+                        {allRecommendations.map((rec, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm">
+                            <span className="text-primary font-bold">{idx + 1}.</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Relevant Documents */}
                 <Card>
                   <CardHeader>
@@ -604,8 +648,11 @@ export default function MedicalHistoryPage() {
                               <p className="font-medium truncate">{doc.title || "Без названия"}</p>
                               <p className="text-sm text-muted-foreground">
                                 {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
+                                {doc.ai_category_chance !== null && (
+                                  <span className="ml-2 text-primary">• Шанс В: {doc.ai_category_chance}%</span>
+                                )}
                                 {doc.raw_text && (
-                                  <span className="ml-2 text-green-600">• OCR обработан</span>
+                                  <span className="ml-2 text-green-600">• OCR</span>
                                 )}
                               </p>
                             </div>

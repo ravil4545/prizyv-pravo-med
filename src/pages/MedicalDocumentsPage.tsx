@@ -696,8 +696,8 @@ export default function MedicalDocumentsPage() {
                     <TableBody>
                       {filteredDocuments.map((doc) => (
                         <TableRow key={doc.id} className="group">
-                          <TableCell className="font-medium min-w-[200px]">
-                            <div className="whitespace-normal break-words">{doc.title || "Без названия"}</div>
+                          <TableCell className="font-medium w-[180px] max-w-[180px]">
+                            <div className="whitespace-normal break-words text-sm leading-tight">{doc.title || "Без названия"}</div>
                             {doc.disease_articles_565 && (
                               <div className="text-xs text-primary mt-1">
                                 Статья {doc.disease_articles_565.article_number}
