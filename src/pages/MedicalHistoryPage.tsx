@@ -405,34 +405,42 @@ export default function MedicalHistoryPage() {
                         {categoryLabels[category] || category}
                       </div>
                       <div className="space-y-1">
-                        {categoryArticles.map((article) => (
-                          <button
-                            key={article.id}
-                            onClick={() => setSelectedArticle(article)}
-                            className={`
-                              w-full text-left px-3 py-2 rounded-lg transition-all duration-200
-                              flex items-center gap-2 group text-sm
-                              ${selectedArticle?.id === article.id 
-                                ? "bg-primary text-primary-foreground shadow-md" 
-                                : "hover:bg-muted"
-                              }
-                            `}
-                          >
-                            <span className="font-medium flex-shrink-0 w-8">
-                              {article.article_number}
-                            </span>
-                            <span className={`truncate ${
-                              selectedArticle?.id === article.id 
-                                ? "text-primary-foreground/90" 
-                                : "text-muted-foreground"
-                            }`}>
-                              {article.title}
-                            </span>
-                            <ChevronRight className={`h-4 w-4 flex-shrink-0 ml-auto transition-transform ${
-                              selectedArticle?.id === article.id ? "" : "opacity-0 group-hover:opacity-100"
-                            }`} />
-                          </button>
-                        ))}
+                        {categoryArticles.map((article) => {
+                          const hasDocuments = userDocuments.some(doc => doc.linked_article_id === article.id);
+                          return (
+                            <button
+                              key={article.id}
+                              onClick={() => setSelectedArticle(article)}
+                              className={`
+                                w-full text-left px-3 py-2 rounded-lg transition-all duration-200
+                                flex items-center gap-2 group text-sm
+                                ${selectedArticle?.id === article.id 
+                                  ? "bg-primary text-primary-foreground shadow-md" 
+                                  : "hover:bg-muted"
+                                }
+                              `}
+                            >
+                              <span className={`flex-shrink-0 w-8 ${hasDocuments ? "font-bold" : "font-medium"}`}>
+                                {article.article_number}
+                              </span>
+                              <span className={`truncate ${
+                                selectedArticle?.id === article.id 
+                                  ? "text-primary-foreground/90" 
+                                  : hasDocuments 
+                                    ? "text-foreground font-semibold" 
+                                    : "text-muted-foreground"
+                              }`}>
+                                {article.title}
+                              </span>
+                              {hasDocuments && (
+                                <FileCheck className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+                              )}
+                              <ChevronRight className={`h-4 w-4 flex-shrink-0 ml-auto transition-transform ${
+                                selectedArticle?.id === article.id ? "" : "opacity-0 group-hover:opacity-100"
+                              }`} />
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
