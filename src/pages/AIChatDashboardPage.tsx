@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -37,9 +37,25 @@ const AIChatDashboardPage = () => {
   const [sending, setSending] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      }
+    }, 100);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, sending, scrollToBottom]);
 
   useEffect(() => {
     checkUser();
@@ -358,12 +374,12 @@ const AIChatDashboardPage = () => {
                 Консультация по вопросам призыва и воинского учёта
               </p>
             </CardHeader>
-            <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0">
-              <ScrollArea className="flex-1 mb-4">
+            <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0 overflow-hidden">
+              <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
                 <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
                   {messages.length === 0 && (
                     <div className="text-center text-muted-foreground py-8 sm:py-12 px-4">
-                      <p className="text-sm sm:text-base">Задайте вопрос юридическому AI консультанту</p>
+                      <p className="text-[13px] sm:text-base leading-relaxed">Задайте вопрос юридическому AI консультанту</p>
                     </div>
                   )}
                   {messages.map((message, index) => (
@@ -374,24 +390,39 @@ const AIChatDashboardPage = () => {
                       }`}
                     >
                       <div
-                        className={`max-w-[85%] sm:max-w-[80%] p-3 sm:p-4 rounded-lg break-words ${
+                        className={`max-w-[85%] sm:max-w-[80%] p-2.5 sm:p-4 rounded-lg overflow-hidden ${
                           message.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
                         }`}
+                        style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                       >
                         {message.role === "assistant" ? (
-                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 sm:prose-p:my-2 prose-ul:my-1 sm:prose-ul:my-2 prose-ol:my-1 sm:prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2">
+                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 sm:prose-p:my-2 prose-ul:my-1 sm:prose-ul:my-2 prose-ol:my-1 sm:prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2 text-[13px] sm:text-sm leading-relaxed [&_p]:break-words [&_li]:break-words">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {enhanceTypography(message.content)}
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <p className="whitespace-pre-wrap text-sm sm:text-base">{enhanceTypography(message.content)}</p>
+                          <p className="whitespace-pre-wrap text-[13px] sm:text-base leading-relaxed break-words">{enhanceTypography(message.content)}</p>
                         )}
                       </div>
                     </div>
                   ))}
+                  {sending && messages.length > 0 && messages[messages.length - 1].role === "user" && (
+                    <div className="flex justify-start">
+                      <div className="bg-muted p-3 sm:p-4 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] sm:text-sm text-muted-foreground">ИИ думает</span>
+                          <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
