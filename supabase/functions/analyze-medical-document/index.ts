@@ -7,6 +7,64 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Retry helper with exponential backoff for image processing errors
+async function callAIWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`AI API call attempt ${attempt}/${maxRetries}`);
+      const response = await fetch(url, options);
+      
+      // If response is OK, return it
+      if (response.ok) {
+        return response;
+      }
+      
+      // For non-retriable errors, return immediately
+      if (response.status === 429 || response.status === 402) {
+        return response;
+      }
+      
+      // Check if it's an image processing error (retriable)
+      const errorText = await response.text();
+      console.error(`AI API error (attempt ${attempt}):`, response.status, errorText);
+      
+      const isImageProcessingError = 
+        errorText.includes("Unable to process input image") ||
+        errorText.includes("Could not process image") ||
+        errorText.includes("Invalid image") ||
+        (response.status === 400 && errorText.toLowerCase().includes("image"));
+      
+      if (isImageProcessingError && attempt < maxRetries) {
+        // Wait with exponential backoff: 1s, 2s, 4s
+        const delayMs = Math.pow(2, attempt - 1) * 1000;
+        console.log(`Image processing error, retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      
+      // Non-retriable error or last attempt
+      throw new Error(`AI API error: ${response.status} - ${errorText}`);
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000;
+        console.log(`Request failed, retrying in ${delayMs}ms...`, lastError.message);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  
+  throw lastError || new Error("All retry attempts failed");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -305,19 +363,44 @@ ${manualText}
       };
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI API error:", response.status, errorText);
+    // Use retry mechanism for AI API calls (especially for image processing)
+    let response: Response;
+    try {
+      response = await callAIWithRetry(
+        "https://ai.gateway.lovable.dev/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        },
+        3 // max 3 retries
+      );
+    } catch (retryError) {
+      console.error("All AI API retry attempts failed:", retryError);
       
+      // Check if it was an image processing error
+      const errorMessage = retryError instanceof Error ? retryError.message : String(retryError);
+      if (errorMessage.includes("image") || errorMessage.includes("Unable to process")) {
+        return new Response(
+          JSON.stringify({ 
+            error: "image_processing_error",
+            message: "Не удалось распознать изображение. Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим ручного ввода для рукописных документов."
+          }),
+          {
+            status: 422,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
+      throw retryError;
+    }
+
+    // Handle specific error responses
+    if (!response.ok) {
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ 
@@ -344,6 +427,8 @@ ${manualText}
         );
       }
       
+      const errorText = await response.text();
+      console.error("AI API error:", response.status, errorText);
       throw new Error(`AI API error: ${response.status}`);
     }
 
