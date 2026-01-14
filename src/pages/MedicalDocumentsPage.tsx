@@ -749,9 +749,28 @@ export default function MedicalDocumentsPage() {
       if (error) throw error;
 
       if (data.error) {
+        // Handle specific error types with appropriate messages
+        let toastTitle = "Ошибка анализа";
+        let toastDescription = data.message || "Попробуйте позже";
+        
+        switch (data.error) {
+          case "image_processing_error":
+            toastTitle = "Не удалось распознать изображение";
+            toastDescription = "Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим «Рукописный документ» для ручного ввода текста.";
+            break;
+          case "rate_limit":
+            toastTitle = "Превышен лимит запросов";
+            toastDescription = "Подождите несколько минут и попробуйте снова.";
+            break;
+          case "payment_required":
+            toastTitle = "Ошибка сервиса AI";
+            toastDescription = "Временные проблемы с сервисом. Попробуйте позже.";
+            break;
+        }
+        
         toast({
-          title: "Ошибка анализа",
-          description: data.message || "Попробуйте позже",
+          title: toastTitle,
+          description: toastDescription,
           variant: "destructive",
         });
       } else {
@@ -764,9 +783,18 @@ export default function MedicalDocumentsPage() {
       loadDocuments();
     } catch (error: any) {
       console.error("Analysis error:", error);
+      
+      // Handle edge function errors
+      let errorMessage = error.message || "Произошла ошибка при анализе";
+      
+      // Check for common error patterns
+      if (errorMessage.includes("non-2xx status code") || errorMessage.includes("FunctionsHttpError")) {
+        errorMessage = "Ошибка сервера. Попробуйте повторить анализ через несколько секунд.";
+      }
+      
       toast({
         title: "Ошибка анализа",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
