@@ -360,20 +360,180 @@ export default function MedicalHistoryPage() {
     return calculateCategoryBChance(selectedArticle, selectedArticleLinks, assessments);
   }, [selectedArticle, selectedArticleLinks, assessments]);
 
-  // Get all AI recommendations for selected article from links
-  const allRecommendations = useMemo(() => {
-    const recommendations: string[] = [];
+  // Smart recommendation summarization
+  const summarizedRecommendations = useMemo(() => {
+    // Collect all raw recommendations with document dates
+    const rawRecommendations: { rec: string; docDate: Date | null; docId: string }[] = [];
+    
     selectedArticleLinks.forEach((link) => {
+      const doc = userDocuments.find(d => d.id === link.document_id);
+      const docDate = doc?.uploaded_at ? new Date(doc.uploaded_at) : null;
+      
       if (link.ai_recommendations && Array.isArray(link.ai_recommendations)) {
         link.ai_recommendations.forEach((rec) => {
-          if (!recommendations.includes(rec)) {
-            recommendations.push(rec);
-          }
+          rawRecommendations.push({ rec, docDate, docId: link.document_id });
         });
       }
     });
-    return recommendations;
-  }, [selectedArticleLinks]);
+
+    if (rawRecommendations.length === 0) return [];
+
+    // Define recommendation categories for grouping
+    const categoryPatterns = {
+      bloodTests: /анализ.*крови|кровь|гемоглобин|лейкоцит|тромбоцит|общий анализ|биохим|оак|бак/i,
+      urineTests: /анализ.*мочи|моча|урин/i,
+      imaging: /ренг|рентген|мрт|кт|узи|ультразвук|томограф|флюорог|снимок/i,
+      ecg: /экг|электрокардио|кардиограм|холтер/i,
+      consultation: /консультац|осмотр|прием|врач|специалист|обратиться/i,
+      hospitalization: /госпитализ|стационар|выписка|лечение|терапия/i,
+      documentation: /документ|справка|заключение|выписк|история болезни/i,
+      repeatExam: /повтор|обновить|актуальн|давност/i,
+    };
+
+    // Group recommendations by category
+    const groupedRecs: Record<string, { recs: string[]; oldestDate: Date | null }> = {
+      bloodTests: { recs: [], oldestDate: null },
+      urineTests: { recs: [], oldestDate: null },
+      imaging: { recs: [], oldestDate: null },
+      ecg: { recs: [], oldestDate: null },
+      consultation: { recs: [], oldestDate: null },
+      hospitalization: { recs: [], oldestDate: null },
+      documentation: { recs: [], oldestDate: null },
+      repeatExam: { recs: [], oldestDate: null },
+      other: { recs: [], oldestDate: null },
+    };
+
+    rawRecommendations.forEach(({ rec, docDate }) => {
+      let matched = false;
+      for (const [category, pattern] of Object.entries(categoryPatterns)) {
+        if (pattern.test(rec)) {
+          if (!groupedRecs[category].recs.some(r => 
+            r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) || 
+            rec.toLowerCase().includes(r.toLowerCase().slice(0, 30))
+          )) {
+            groupedRecs[category].recs.push(rec);
+          }
+          if (docDate && (!groupedRecs[category].oldestDate || docDate < groupedRecs[category].oldestDate)) {
+            groupedRecs[category].oldestDate = docDate;
+          }
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        if (!groupedRecs.other.recs.some(r => 
+          r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) || 
+          rec.toLowerCase().includes(r.toLowerCase().slice(0, 30))
+        )) {
+          groupedRecs.other.recs.push(rec);
+        }
+        if (docDate && (!groupedRecs.other.oldestDate || docDate < groupedRecs.other.oldestDate)) {
+          groupedRecs.other.oldestDate = docDate;
+        }
+      }
+    });
+
+    // Generate summarized recommendations
+    const summarized: string[] = [];
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
+
+    // Helper to check if documents are outdated
+    const isOutdated = (date: Date | null) => date && date < sixMonthsAgo;
+    const monthsOld = (date: Date | null) => date ? Math.floor((now.getTime() - date.getTime()) / (30 * 24 * 60 * 60 * 1000)) : 0;
+
+    // Blood tests
+    if (groupedRecs.bloodTests.recs.length > 0) {
+      if (isOutdated(groupedRecs.bloodTests.oldestDate)) {
+        summarized.push(`Обновите анализы крови (последние данные ${monthsOld(groupedRecs.bloodTests.oldestDate)} мес. назад): общий анализ, биохимия, специфические показатели по заболеванию`);
+      } else {
+        summarized.push("Сдайте анализы крови: общий анализ, биохимия, специфические показатели по заболеванию");
+      }
+    }
+
+    // Urine tests
+    if (groupedRecs.urineTests.recs.length > 0) {
+      if (isOutdated(groupedRecs.urineTests.oldestDate)) {
+        summarized.push(`Обновите анализ мочи (давность ${monthsOld(groupedRecs.urineTests.oldestDate)} мес.): общий + специальные исследования`);
+      } else {
+        summarized.push("Сдайте анализы мочи: общий анализ и специальные исследования при необходимости");
+      }
+    }
+
+    // Imaging studies - be specific
+    if (groupedRecs.imaging.recs.length > 0) {
+      const imagingTypes = [];
+      const allImageRecs = groupedRecs.imaging.recs.join(" ").toLowerCase();
+      if (/мрт/.test(allImageRecs)) imagingTypes.push("МРТ");
+      if (/кт|томограф/.test(allImageRecs)) imagingTypes.push("КТ");
+      if (/узи|ультразвук/.test(allImageRecs)) imagingTypes.push("УЗИ");
+      if (/рентген|ренг|снимок/.test(allImageRecs)) imagingTypes.push("рентген");
+      if (/флюорог/.test(allImageRecs)) imagingTypes.push("флюорография");
+      
+      const imagingList = imagingTypes.length > 0 ? imagingTypes.join(", ") : "лучевую диагностику";
+      if (isOutdated(groupedRecs.imaging.oldestDate)) {
+        summarized.push(`Повторите инструментальные исследования (${monthsOld(groupedRecs.imaging.oldestDate)} мес. назад): ${imagingList}`);
+      } else {
+        summarized.push(`Пройдите инструментальные исследования: ${imagingList}`);
+      }
+    }
+
+    // ECG
+    if (groupedRecs.ecg.recs.length > 0) {
+      if (isOutdated(groupedRecs.ecg.oldestDate)) {
+        summarized.push(`Обновите ЭКГ/кардиологическое обследование (давность ${monthsOld(groupedRecs.ecg.oldestDate)} мес.)`);
+      } else {
+        summarized.push("Пройдите ЭКГ или кардиологическое обследование");
+      }
+    }
+
+    // Consultations - extract specific specialists
+    if (groupedRecs.consultation.recs.length > 0) {
+      const specialists = [];
+      const allConsultRecs = groupedRecs.consultation.recs.join(" ").toLowerCase();
+      if (/невролог|неврол/.test(allConsultRecs)) specialists.push("невролог");
+      if (/кардиолог/.test(allConsultRecs)) specialists.push("кардиолог");
+      if (/терапевт/.test(allConsultRecs)) specialists.push("терапевт");
+      if (/хирург/.test(allConsultRecs)) specialists.push("хирург");
+      if (/ортопед/.test(allConsultRecs)) specialists.push("ортопед");
+      if (/офтальмолог|окулист|глаз/.test(allConsultRecs)) specialists.push("офтальмолог");
+      if (/лор|отоларинголог/.test(allConsultRecs)) specialists.push("ЛОР");
+      if (/психиатр/.test(allConsultRecs)) specialists.push("психиатр");
+      if (/дерматолог/.test(allConsultRecs)) specialists.push("дерматолог");
+      if (/гастроэнтеролог/.test(allConsultRecs)) specialists.push("гастроэнтеролог");
+      if (/эндокринолог/.test(allConsultRecs)) specialists.push("эндокринолог");
+      if (/уролог/.test(allConsultRecs)) specialists.push("уролог");
+      if (/пульмонолог/.test(allConsultRecs)) specialists.push("пульмонолог");
+
+      const specList = specialists.length > 0 ? specialists.join(", ") : "профильных специалистов";
+      summarized.push(`Получите консультации: ${specList}`);
+    }
+
+    // Hospitalization
+    if (groupedRecs.hospitalization.recs.length > 0) {
+      summarized.push("Рассмотрите госпитализацию или стационарное обследование для углублённой диагностики и документирования");
+    }
+
+    // Documentation
+    if (groupedRecs.documentation.recs.length > 0) {
+      summarized.push("Соберите полный пакет медицинской документации: выписки, заключения специалистов, результаты обследований");
+    }
+
+    // Other recommendations - keep unique ones that don't fit categories
+    groupedRecs.other.recs.slice(0, 3).forEach(rec => {
+      if (!summarized.some(s => s.toLowerCase().includes(rec.toLowerCase().slice(0, 20)))) {
+        summarized.push(rec);
+      }
+    });
+
+    // Add general recommendation about document freshness if many are old
+    const oldDocsCount = rawRecommendations.filter(r => r.docDate && r.docDate < sixMonthsAgo).length;
+    if (oldDocsCount > rawRecommendations.length / 2 && rawRecommendations.length > 2) {
+      summarized.push("⚠️ Большинство документов старше 6 месяцев — рекомендуем обновить основные исследования для актуальности данных");
+    }
+
+    return summarized;
+  }, [selectedArticleLinks, userDocuments]);
 
   // Pie chart data
   const pieChartData = useMemo(() => {
@@ -629,7 +789,7 @@ export default function MedicalHistoryPage() {
                 </Card>
 
                 {/* AI Recommendations */}
-                {allRecommendations.length > 0 && (
+                {summarizedRecommendations.length > 0 && (
                   <Card className="border-primary/50">
                     <CardHeader className="px-3 sm:px-6">
                       <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-primary">
@@ -639,7 +799,7 @@ export default function MedicalHistoryPage() {
                     </CardHeader>
                     <CardContent className="px-3 sm:px-6">
                       <ul className="space-y-2">
-                        {allRecommendations.map((rec, idx) => (
+                        {summarizedRecommendations.map((rec, idx) => (
                           <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
                             <span className="text-primary font-bold">{idx + 1}.</span>
                             <span>{rec}</span>
