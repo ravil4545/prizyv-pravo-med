@@ -20,6 +20,7 @@ const messageSchema = z.object({
 
 const chatRequestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(50),
+  medicalContext: z.string().max(50000).optional(),
 });
 
 serve(async (req) => {
@@ -41,14 +42,14 @@ serve(async (req) => {
       });
     }
     
-    const { messages } = validation.data;
+    const { messages, medicalContext } = validation.data;
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     
     if (!OPENROUTER_API_KEY) {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
-    const systemPrompt = `Вы - виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
+    let systemPrompt = `Вы - виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
 
 Ваша задача:
 - Отвечать на вопросы о законодательстве РФ по призыву
@@ -66,6 +67,19 @@ serve(async (req) => {
 - Телефон: +7 (925) 350-05-33
 - WhatsApp и Telegram доступны
 - Email: dompc9@gmail.com`;
+
+    if (medicalContext) {
+      systemPrompt += `
+
+ВАЖНО: У вас есть доступ к медицинским данным пользователя. Используйте эту информацию при ответах:
+- Давайте конкретные рекомендации с учетом загруженных документов и их AI-анализа
+- Обращайте внимание на давность документов: если документ старше 6 месяцев, рекомендуйте обновить обследование
+- Указывайте шансы на категорию «В» (ограниченно годен) по конкретным статьям Расписания болезней (Постановление №565)
+- Рекомендуйте недостающие обследования для повышения шансов
+- Если у пользователя нет документов по какой-то статье, предложите какие обследования пройти
+
+${medicalContext}`;
+    }
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
