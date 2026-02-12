@@ -39,6 +39,8 @@ const AIChatDashboardPage = () => {
   const [sending, setSending] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [medicalContext, setMedicalContext] = useState<string>("");
+  const [medicalContextLoading, setMedicalContextLoading] = useState(false);
+  const medicalContextRef = useRef<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -72,7 +74,9 @@ const AIChatDashboardPage = () => {
   }, [user]);
 
   const loadMedicalContext = async () => {
+    setMedicalContextLoading(true);
     try {
+      console.log("[MedicalContext] Loading medical data...");
       // Load documents, article links, and article names in parallel
       const [docsRes, linksRes, articlesRes] = await Promise.all([
         supabase
@@ -89,15 +93,17 @@ const AIChatDashboardPage = () => {
       ]);
 
       if (docsRes.error || linksRes.error || articlesRes.error) {
-        console.error("Error loading medical context:", docsRes.error, linksRes.error, articlesRes.error);
+        console.error("[MedicalContext] Error loading:", docsRes.error, linksRes.error, articlesRes.error);
         return;
       }
 
       const docs = docsRes.data || [];
       const links = linksRes.data || [];
+      console.log("[MedicalContext] Loaded", docs.length, "docs,", links.length, "links");
 
       if (docs.length === 0) {
         setMedicalContext("");
+        medicalContextRef.current = "";
         return;
       }
 
@@ -174,9 +180,14 @@ const AIChatDashboardPage = () => {
         context += `\n⚠️ ${oldDocs.length} из ${docs.length} документов старше 6 месяцев — рекомендуется обновить обследования.\n`;
       }
 
-      setMedicalContext(context.substring(0, 50000));
+      const finalContext = context.substring(0, 50000);
+      setMedicalContext(finalContext);
+      medicalContextRef.current = finalContext;
+      console.log("[MedicalContext] Context built:", finalContext.length, "chars");
     } catch (error) {
-      console.error("Error building medical context:", error);
+      console.error("[MedicalContext] Error building context:", error);
+    } finally {
+      setMedicalContextLoading(false);
     }
   };
 
@@ -308,10 +319,12 @@ const AIChatDashboardPage = () => {
     setSending(true);
 
     try {
+      const contextToSend = medicalContextRef.current;
+      console.log("[Chat] Sending message with medicalContext:", contextToSend ? contextToSend.length + " chars" : "NONE");
       const { data, error } = await supabase.functions.invoke("chat", {
         body: { 
           messages: [...messages, userMessage],
-          ...(medicalContext ? { medicalContext } : {}),
+          ...(contextToSend ? { medicalContext: contextToSend } : {}),
         },
       });
 
@@ -489,6 +502,13 @@ const AIChatDashboardPage = () => {
               <p className="text-xs sm:text-sm text-muted-foreground">
                 Консультация по вопросам призыва и воинского учёта
               </p>
+              {medicalContextLoading ? (
+                <p className="text-xs text-muted-foreground animate-pulse">⏳ Загрузка медицинских данных...</p>
+              ) : medicalContext ? (
+                <p className="text-xs text-green-600 dark:text-green-400">✅ Медицинские данные загружены — ИИ видит ваши документы</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">📋 Загрузите документы, чтобы ИИ мог учитывать вашу ситуацию</p>
+              )}
             </CardHeader>
             <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0 overflow-hidden">
               <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
