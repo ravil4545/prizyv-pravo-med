@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { format, differenceInMonths } from "date-fns";
+import { ru } from "date-fns/locale";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +38,7 @@ const AIChatDashboardPage = () => {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [medicalContext, setMedicalContext] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -64,8 +67,118 @@ const AIChatDashboardPage = () => {
   useEffect(() => {
     if (user) {
       loadConversations();
+      loadMedicalContext();
     }
   }, [user]);
+
+  const loadMedicalContext = async () => {
+    try {
+      // Load documents, article links, and article names in parallel
+      const [docsRes, linksRes, articlesRes] = await Promise.all([
+        supabase
+          .from("medical_documents_v2")
+          .select("id, title, document_date, document_type_id, document_subtype_id, document_types(name), document_subtypes(name)")
+          .order("document_date", { ascending: false }),
+        supabase
+          .from("document_article_links")
+          .select("document_id, article_id, ai_category_chance, ai_fitness_category, ai_explanation, ai_recommendations, disease_articles_565(article_number, title)"),
+        supabase
+          .from("disease_articles_565")
+          .select("id, article_number, title")
+          .eq("is_active", true),
+      ]);
+
+      if (docsRes.error || linksRes.error || articlesRes.error) {
+        console.error("Error loading medical context:", docsRes.error, linksRes.error, articlesRes.error);
+        return;
+      }
+
+      const docs = docsRes.data || [];
+      const links = linksRes.data || [];
+
+      if (docs.length === 0) {
+        setMedicalContext("");
+        return;
+      }
+
+      const now = new Date();
+      const linksByDoc = new Map<string, typeof links>();
+      for (const link of links) {
+        const arr = linksByDoc.get(link.document_id) || [];
+        arr.push(link);
+        linksByDoc.set(link.document_id, arr);
+      }
+
+      let context = "=== МЕДИЦИНСКИЕ ДОКУМЕНТЫ ПОЛЬЗОВАТЕЛЯ ===\n\n";
+
+      // Track best chances per article
+      const articleBestChance = new Map<string, { chance: number; articleNum: string; title: string }>();
+
+      for (const doc of docs) {
+        const typeName = (doc as any).document_types?.name || "Не указан";
+        const subtypeName = (doc as any).document_subtypes?.name;
+        const docTitle = doc.title || "Без названия";
+
+        let dateLine = "Дата не указана";
+        let ageMonths = 0;
+        if (doc.document_date) {
+          const docDate = new Date(doc.document_date);
+          ageMonths = differenceInMonths(now, docDate);
+          const formattedDate = format(docDate, "dd.MM.yyyy");
+          dateLine = ageMonths > 0 ? `${formattedDate} (давность: ${ageMonths} мес.)` : formattedDate;
+          if (ageMonths > 6) {
+            dateLine += " ⚠️ УСТАРЕЛ";
+          }
+        }
+
+        context += `Документ: ${docTitle}\n`;
+        context += `Тип: ${typeName}${subtypeName ? ` / ${subtypeName}` : ""}\n`;
+        context += `Дата: ${dateLine}\n`;
+
+        const docLinks = linksByDoc.get(doc.id) || [];
+        for (const link of docLinks) {
+          const article = (link as any).disease_articles_565;
+          if (!article) continue;
+          const chance = link.ai_category_chance || 0;
+          context += `  Статья ${article.article_number} (${article.title}) — шанс кат. В: ${chance}%\n`;
+          if (link.ai_explanation) {
+            context += `    Обоснование: ${link.ai_explanation}\n`;
+          }
+          if (link.ai_recommendations && link.ai_recommendations.length > 0) {
+            context += `    Рекомендации: ${link.ai_recommendations.join("; ")}\n`;
+          }
+
+          // Track best chance per article
+          const existing = articleBestChance.get(link.article_id);
+          if (!existing || chance > existing.chance) {
+            articleBestChance.set(link.article_id, { chance, articleNum: article.article_number, title: article.title });
+          }
+        }
+
+        context += "\n";
+      }
+
+      // Summary
+      context += `Всего документов: ${docs.length}\n`;
+
+      const sortedArticles = [...articleBestChance.values()]
+        .sort((a, b) => b.chance - a.chance)
+        .slice(0, 5);
+
+      if (sortedArticles.length > 0) {
+        context += `Статьи с наибольшим шансом кат. В: ${sortedArticles.map(a => `Ст.${a.articleNum} (${a.chance}%)`).join(", ")}\n`;
+      }
+
+      const oldDocs = docs.filter(d => d.document_date && differenceInMonths(now, new Date(d.document_date)) > 6);
+      if (oldDocs.length > 0) {
+        context += `\n⚠️ ${oldDocs.length} из ${docs.length} документов старше 6 месяцев — рекомендуется обновить обследования.\n`;
+      }
+
+      setMedicalContext(context.substring(0, 50000));
+    } catch (error) {
+      console.error("Error building medical context:", error);
+    }
+  };
 
   useEffect(() => {
     if (currentConversationId) {
@@ -196,7 +309,10 @@ const AIChatDashboardPage = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("chat", {
-        body: { messages: [...messages, userMessage] },
+        body: { 
+          messages: [...messages, userMessage],
+          ...(medicalContext ? { medicalContext } : {}),
+        },
       });
 
       if (error) throw error;
