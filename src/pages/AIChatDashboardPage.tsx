@@ -534,7 +534,7 @@ const AIChatDashboardPage = () => {
                         style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                       >
                         {message.role === "assistant" ? (
-                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 sm:prose-p:my-2 prose-ul:my-1 sm:prose-ul:my-2 prose-ol:my-1 sm:prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2 text-[13px] sm:text-sm leading-relaxed [&_p]:break-words [&_li]:break-words">
+                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-2 sm:prose-p:my-3 prose-ul:my-2 sm:prose-ul:my-3 prose-ol:my-2 sm:prose-ol:my-3 prose-li:my-1 prose-headings:my-3 sm:prose-headings:my-4 prose-hr:my-4 sm:prose-hr:my-5 prose-hr:border-border/50 text-[13px] sm:text-sm leading-relaxed sm:leading-loose [&_p]:break-words [&_li]:break-words [&_ol>li]:pl-1 [&_ul>li]:pl-1">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {enhanceTypography(message.content)}
                             </ReactMarkdown>
