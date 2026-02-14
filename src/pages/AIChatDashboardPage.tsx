@@ -321,22 +321,37 @@ const AIChatDashboardPage = () => {
     try {
       const contextToSend = medicalContextRef.current;
       console.log("[Chat] Sending message with medicalContext:", contextToSend ? contextToSend.length + " chars" : "NONE");
-      const { data, error } = await supabase.functions.invoke("chat", {
+      const response = await supabase.functions.invoke("chat", {
         body: { 
           messages: [...messages, userMessage],
           ...(contextToSend ? { medicalContext: contextToSend } : {}),
         },
       });
 
-      if (error) throw error;
+      if (response.error) throw response.error;
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      const reader = data.body?.getReader();
+      // supabase.functions.invoke returns data as ReadableStream for SSE responses
+      const streamData = response.data;
+      const reader = (streamData?.body ?? streamData)?.getReader?.();
       const decoder = new TextDecoder();
       let assistantContent = "";
+
+      if (!reader) {
+        // Fallback: if data is not a stream, try to read it as text
+        const text = typeof streamData === 'string' ? streamData : await streamData?.text?.() || '';
+        // Try to extract content from non-streaming response
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.error) throw new Error(parsed.error);
+          assistantContent = parsed.choices?.[0]?.message?.content || text;
+        } catch {
+          assistantContent = text || "Не удалось получить ответ";
+        }
+        const assistantMessage: Message = { role: "assistant", content: assistantContent };
+        setMessages((prev) => [...prev, assistantMessage]);
+        await saveMessage(assistantMessage);
+        return;
+      }
 
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
