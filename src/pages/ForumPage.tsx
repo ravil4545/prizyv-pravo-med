@@ -43,15 +43,14 @@ const ForumPage = () => {
   }, []);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     setUser(session?.user || null);
   };
 
   const loadPosts = async () => {
-    const { data, error } = await supabase
-      .from("forum_posts")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("forum_posts").select("*").order("created_at", { ascending: false });
 
     if (error) {
       toast({
@@ -96,14 +95,12 @@ const ForumPage = () => {
 
     setLoading(true);
 
-    const { error } = await supabase
-      .from("forum_posts")
-      .insert({
-        topic_type: activeTopic,
-        title: validation.data.title,
-        content: validation.data.content,
-        user_id: user.id,
-      });
+    const { error } = await supabase.from("forum_posts").insert({
+      topic_type: activeTopic,
+      title: validation.data.title,
+      content: validation.data.content,
+      user_id: user.id,
+    });
 
     if (error) {
       toast({
@@ -167,12 +164,10 @@ const ForumPage = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      
+
       <main className="flex-1 py-20 px-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-12 gradient-text">
-            Форум
-          </h1>
+          <h1 className="text-4xl font-bold text-center mb-12 gradient-text">Форум</h1>
 
           <Tabs value={activeTopic} onValueChange={(v: any) => setActiveTopic(v)} className="mb-8">
             <TabsList className="grid w-full grid-cols-3">
@@ -195,9 +190,7 @@ const ForumPage = () => {
             <Card className="mb-8 glass-card">
               <CardHeader>
                 <CardTitle>Создать пост</CardTitle>
-                <CardDescription>
-                  Раздел: {getTopicLabel(activeTopic)}
-                </CardDescription>
+                <CardDescription>Раздел: {getTopicLabel(activeTopic)}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -226,8 +219,8 @@ const ForumPage = () => {
 
           <div className="space-y-6">
             {filteredPosts.map((post) => (
-              <Card 
-                key={post.id} 
+              <Card
+                key={post.id}
                 className="glass-card hover-lift cursor-pointer"
                 onClick={() => setSelectedPost(post)}
               >
@@ -236,9 +229,7 @@ const ForumPage = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         {getTopicIcon(post.topic_type)}
-                        <Badge variant="outline">
-                          {getTopicLabel(post.topic_type)}
-                        </Badge>
+                        <Badge variant="outline">{getTopicLabel(post.topic_type)}</Badge>
                       </div>
                       <CardTitle className="text-xl">{post.title}</CardTitle>
                     </div>
@@ -248,9 +239,11 @@ const ForumPage = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
-                    prose-p:text-foreground/90 prose-p:mb-2 prose-strong:text-foreground line-clamp-3">
-                    {post.content.includes('<p>') || post.content.includes('<h') ? (
+                  <div
+                    className="prose prose-slate dark:prose-invert max-w-none prose-sm
+                    prose-p:text-foreground/90 prose-p:mb-2 prose-strong:text-foreground line-clamp-3"
+                  >
+                    {post.content.includes("<p>") || post.content.includes("<h") ? (
                       <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />
                     ) : (
                       <p className="whitespace-pre-wrap">{enhanceTypography(post.content)}</p>
@@ -281,14 +274,13 @@ const ForumPage = () => {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               {selectedPost && getTopicIcon(selectedPost.topic_type)}
-              <Badge variant="outline">
-                {selectedPost && getTopicLabel(selectedPost.topic_type)}
-              </Badge>
+              <Badge variant="outline">{selectedPost && getTopicLabel(selectedPost.topic_type)}</Badge>
               <span className="text-sm text-muted-foreground ml-auto">
                 {selectedPost && new Date(selectedPost.created_at).toLocaleDateString("ru-RU")}
               </span>
             </div>
-            <div className="prose prose-slate dark:prose-invert max-w-none 
+            <div
+              className="prose prose-slate dark:prose-invert max-w-none 
               prose-headings:font-bold prose-headings:text-foreground prose-headings:mt-6 prose-headings:mb-3
               prose-h2:text-2xl prose-h3:text-xl prose-h4:text-lg
               prose-p:text-base prose-p:leading-relaxed prose-p:mb-4 prose-p:text-foreground
@@ -300,8 +292,9 @@ const ForumPage = () => {
               prose-a:text-primary prose-a:no-underline hover:prose-a:underline
               prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
               prose-img:rounded-lg prose-img:shadow-lg
-              prose-hr:border-border prose-hr:my-6">
-              {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
+              prose-hr:border-border prose-hr:my-6"
+            >
+              {selectedPost?.content.includes("<p>") || selectedPost?.content.includes("<h") ? (
                 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
               ) : (
                 <p className="whitespace-pre-wrap">{selectedPost && enhanceTypography(selectedPost.content)}</p>
