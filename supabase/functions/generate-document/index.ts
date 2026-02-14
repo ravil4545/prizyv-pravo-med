@@ -69,6 +69,9 @@ serve(async (req) => {
       case "obsledovaniya":
         textContent = customContent || "Нет данных для обследований";
         break;
+      case "questionnaire":
+        textContent = customContent || "Нет данных опросника";
+        break;
       default:
         throw new Error("Неизвестный тип документа");
     }

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check } from "lucide-react";
+import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check, Stethoscope } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getSignedDocumentUrl } from "@/lib/storage";
 import { toast } from "sonner";
@@ -203,6 +203,9 @@ export default function MedicalHistoryPage() {
   const [isEditingExams, setIsEditingExams] = useState(false);
   const [editedExamsText, setEditedExamsText] = useState("");
   const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
+  const [isEditingGlobalExams, setIsEditingGlobalExams] = useState(false);
+  const [editedGlobalExamsText, setEditedGlobalExamsText] = useState("");
+  const [isGeneratingGlobalDoc, setIsGeneratingGlobalDoc] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -620,6 +623,121 @@ export default function MedicalHistoryPage() {
     return lines.join("\n");
   }, [structuredExaminations]);
 
+  // Global recommendations aggregated from ALL document links
+  const globalExaminationsText = useMemo(() => {
+    if (documentArticleLinks.length === 0) return "";
+
+    const allRecs: string[] = [];
+    documentArticleLinks.forEach((link) => {
+      if (link.ai_recommendations && Array.isArray(link.ai_recommendations)) {
+        link.ai_recommendations.forEach((rec) => {
+          const lower = rec.toLowerCase();
+          if (!allRecs.some(r => r.toLowerCase().includes(lower.slice(0, 30)) || lower.includes(r.toLowerCase().slice(0, 30)))) {
+            allRecs.push(rec);
+          }
+        });
+      }
+    });
+
+    if (allRecs.length === 0) return "";
+
+    const analyses: string[] = [];
+    const examinations: string[] = [];
+    const consultations: string[] = [];
+
+    allRecs.forEach((rec) => {
+      const lower = rec.toLowerCase();
+      if (/консультац|врач|специалист|невролог|кардиолог|терапевт|хирург|ортопед|офтальмолог|лор|психиатр|дерматолог|гастроэнтеролог|эндокринолог|уролог|пульмонолог/.test(lower)) {
+        consultations.push(rec);
+      } else if (/мрт|кт|узи|рентген|экг|кардиограм|холтер|томограф|флюорог|инструментальн|лучев|обследован|госпитализ|стационар/.test(lower)) {
+        examinations.push(rec);
+      } else {
+        analyses.push(rec);
+      }
+    });
+
+    const lines: string[] = [];
+    let num = 1;
+    if (analyses.length > 0) {
+      lines.push("АНАЛИЗЫ:");
+      analyses.forEach((r) => { lines.push(`${num}. ${r}`); num++; });
+      lines.push("");
+    }
+    if (examinations.length > 0) {
+      lines.push("ОБСЛЕДОВАНИЯ:");
+      examinations.forEach((r) => { lines.push(`${num}. ${r}`); num++; });
+      lines.push("");
+    }
+    if (consultations.length > 0) {
+      lines.push("КОНСУЛЬТАЦИИ ВРАЧЕЙ:");
+      consultations.forEach((r) => { lines.push(`${num}. ${r}`); num++; });
+    }
+    return lines.join("\n");
+  }, [documentArticleLinks]);
+
+  // Sync global exams text
+  useEffect(() => {
+    setEditedGlobalExamsText(globalExaminationsText);
+    setIsEditingGlobalExams(false);
+  }, [globalExaminationsText]);
+
+  const handleDownloadGlobalExamsDocx = async () => {
+    if (!user) return;
+    setIsGeneratingGlobalDoc(true);
+    try {
+      const contentToExport = isEditingGlobalExams ? editedGlobalExamsText : globalExaminationsText;
+      const fullContent = `ПЛАН ОБСЛЕДОВАНИЙ\nНа основании всех загруженных медицинских документов\nДата: ${new Date().toLocaleDateString("ru-RU")}\n\n${contentToExport}`;
+
+      const response = await fetch(
+        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            docType: "obsledovaniya",
+            format: "docx",
+            customContent: fullContent,
+          }),
+        }
+      );
+      if (!response.ok) throw new Error("Ошибка генерации документа");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `plan_obsledovaniy.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Документ скачан");
+    } catch (error) {
+      console.error("Error generating doc:", error);
+      toast.error("Ошибка при генерации документа");
+    } finally {
+      setIsGeneratingGlobalDoc(false);
+    }
+  };
+
+  const handlePrintGlobalExams = () => {
+    const contentToPrint = isEditingGlobalExams ? editedGlobalExamsText : globalExaminationsText;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html><head><title>План обследований</title>
+      <style>body{font-family:Arial,sans-serif;padding:40px;line-height:1.8;font-size:14px}
+      h1{font-size:18px;margin-bottom:20px}pre{white-space:pre-wrap;font-family:inherit}</style></head>
+      <body><h1>План обследований</h1>
+      <p>На основании всех загруженных медицинских документов</p>
+      <p>Дата: ${new Date().toLocaleDateString("ru-RU")}</p>
+      <pre>${contentToPrint}</pre></body></html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   // Sync editable text when article changes
   useEffect(() => {
     setEditedExamsText(examinationsText);
@@ -728,15 +846,89 @@ export default function MedicalHistoryPage() {
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground">Расписание болезней • {articles.length} статей</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="self-start sm:self-auto flex-shrink-0"
-            onClick={() => navigate("/dashboard")}
-          >
-            Назад
-          </Button>
+          <div className="flex gap-2 self-start sm:self-auto flex-shrink-0">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => navigate("/medical-questionnaire")}
+              className="gap-1"
+            >
+              <ClipboardList className="h-4 w-4" />
+              Опросник
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/dashboard")}
+            >
+              Назад
+            </Button>
+          </div>
         </div>
+
+        {/* Global Recommendations Block - Fixed above articles */}
+        {globalExaminationsText && (
+          <Card className="mb-6 border-2 border-indigo-500/50 shadow-lg">
+            <CardHeader className="px-3 sm:px-6 pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                  <Stethoscope className="h-5 w-5" />
+                  План обследований
+                  <Badge variant="secondary" className="text-[10px]">На основании всех документов</Badge>
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (isEditingGlobalExams) {
+                        setIsEditingGlobalExams(false);
+                      } else {
+                        setEditedGlobalExamsText(globalExaminationsText);
+                        setIsEditingGlobalExams(true);
+                      }
+                    }}
+                    className="text-xs gap-1"
+                  >
+                    {isEditingGlobalExams ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                    {isEditingGlobalExams ? "Готово" : "Редактировать"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadGlobalExamsDocx}
+                    disabled={isGeneratingGlobalDoc}
+                    className="text-xs gap-1"
+                  >
+                    {isGeneratingGlobalDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    DOCX
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrintGlobalExams}
+                    className="text-xs gap-1"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Печать
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              {isEditingGlobalExams ? (
+                <Textarea
+                  value={editedGlobalExamsText}
+                  onChange={(e) => setEditedGlobalExamsText(e.target.value)}
+                  className="min-h-[200px] text-sm font-mono leading-relaxed"
+                  placeholder="Редактируйте план обследований..."
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed font-sans">{globalExaminationsText}</pre>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-4 sm:gap-6">
           {/* Sidebar - Articles List */}

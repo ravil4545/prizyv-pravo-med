@@ -1256,6 +1256,12 @@ export default function MedicalDocumentsPage() {
       return true;
     })
     .sort((a, b) => {
+      // Pin questionnaire documents at the top
+      const aIsQuestionnaire = (a.meta as any)?.is_questionnaire === true;
+      const bIsQuestionnaire = (b.meta as any)?.is_questionnaire === true;
+      if (aIsQuestionnaire && !bIsQuestionnaire) return -1;
+      if (!aIsQuestionnaire && bIsQuestionnaire) return 1;
+
       let aVal: string | null = null;
       let bVal: string | null = null;
 
@@ -1661,8 +1667,10 @@ export default function MedicalDocumentsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredDocuments.map((doc) => (
-                        <TableRow key={doc.id} className={`group ${selectedDocIds.has(doc.id) ? "bg-muted/50" : ""}`}>
+                      {filteredDocuments.map((doc) => {
+                        const isQuestionnaire = (doc.meta as any)?.is_questionnaire === true;
+                        return (
+                        <TableRow key={doc.id} className={`group ${selectedDocIds.has(doc.id) ? "bg-muted/50" : ""} ${isQuestionnaire ? "bg-blue-50/50 dark:bg-blue-950/20 border-l-2 border-l-blue-500" : ""}`}>
                           <TableCell className="w-10">
                             <Button
                               variant="ghost"
@@ -1679,6 +1687,7 @@ export default function MedicalDocumentsPage() {
                           </TableCell>
                           <TableCell className="font-medium w-[180px] max-w-[180px]">
                             <div className="whitespace-normal break-words text-sm leading-tight">
+                              {isQuestionnaire && <Badge className="mb-1 text-[10px] bg-blue-500 hover:bg-blue-600 block w-fit">📋 Опросник</Badge>}
                               {doc.meta?.parts && doc.meta.parts.length > 1
                                 ? doc.meta.parts.map((p) => p.name).join(" + ")
                                 : doc.title || "Без названия"}
@@ -2009,7 +2018,8 @@ export default function MedicalDocumentsPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
