@@ -17,6 +17,7 @@ const AuthPage = () => {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,6 +64,16 @@ const AuthPage = () => {
     e.preventDefault();
     setErrors({});
 
+    if (password !== confirmPassword) {
+      setErrors({ confirmPassword: "Пароли не совпадают" });
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Пароли не совпадают",
+      });
+      return;
+    }
+
     const validation = signUpSchema.safeParse({ email, password, fullName, phone });
     if (!validation.success) {
       const fieldErrors: Record<string, string> = {};
@@ -83,7 +94,7 @@ const AuthPage = () => {
     setLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/dashboard`;
+      const redirectUrl = `${window.location.origin}/auth/confirm`;
       
       const { error } = await supabase.auth.signUp({
         email: validation.data.email,
@@ -336,6 +347,19 @@ const AuthPage = () => {
                       minLength={8}
                     />
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password-signup">Подтвердите пароль</Label>
+                    <Input
+                      id="confirm-password-signup"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      maxLength={72}
+                      required
+                      minLength={8}
+                    />
+                    {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

@@ -71,6 +71,11 @@ const RegisterPage = () => {
 
     if (password !== confirmPassword) {
       setErrors({ confirmPassword: "Пароли не совпадают" });
+      toast({
+        variant: "destructive",
+        title: "Ошибка валидации",
+        description: "Пароли не совпадают",
+      });
       return;
     }
 
@@ -90,7 +95,7 @@ const RegisterPage = () => {
         email: validation.data.email,
         password: validation.data.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
+          emailRedirectTo: `${window.location.origin}/auth/confirm`
         }
       });
 
