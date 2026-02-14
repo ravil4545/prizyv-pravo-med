@@ -9,143 +9,136 @@ const getAllowedOrigin = () => {
 };
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': getAllowedOrigin(),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": getAllowedOrigin(),
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { userId, docType, format } = await req.json();
 
-    console.log('Generating document:', { userId, docType, format });
+    console.log("Generating document:", { userId, docType, format });
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Получаем данные профиля
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
       .single();
 
     if (profileError) {
-      console.error('Error fetching profile:', profileError);
-      throw new Error('Не удалось загрузить данные профиля');
+      console.error("Error fetching profile:", profileError);
+      throw new Error("Не удалось загрузить данные профиля");
     }
 
     // Получаем диагнозы пользователя
-    const { data: diagnoses } = await supabase
-      .from('user_diagnoses')
-      .select('*')
-      .eq('user_id', userId);
+    const { data: diagnoses } = await supabase.from("user_diagnoses").select("*").eq("user_id", userId);
 
-    console.log('Profile data loaded:', { profile, diagnoses });
+    console.log("Profile data loaded:", { profile, diagnoses });
 
     // Генерируем контент документа в зависимости от типа
-    let textContent = '';
-    
+    let textContent = "";
+
     switch (docType) {
-      case 'priobschenie':
+      case "priobschenie":
         textContent = generatePriobschenieDocument(profile, diagnoses || []);
         break;
-      case 'vypiska':
+      case "vypiska":
         textContent = generateVypiskaDocument(profile);
         break;
-      case 'obzhalovanie':
+      case "obzhalovanie":
         textContent = generateObzhalovanieDocument(profile, diagnoses || []);
         break;
-      case 'prokuratura':
+      case "prokuratura":
         textContent = generateProkuraturaDocument(profile);
         break;
-      case 'isk_sud':
+      case "isk_sud":
         textContent = generateIskSudDocument(profile, diagnoses || []);
         break;
-      case 'apellyaciya':
+      case "apellyaciya":
         textContent = generateApellyaciyaDocument(profile);
         break;
       default:
-        throw new Error('Неизвестный тип документа');
+        throw new Error("Неизвестный тип документа");
     }
 
     // Генерируем файл в зависимости от формата
-    if (format === 'docx') {
+    if (format === "docx") {
       const doc = generateDocxDocument(textContent);
       const buffer = await Packer.toBuffer(doc);
-      
+
       return new Response(buffer, {
         headers: {
           ...corsHeaders,
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'Content-Disposition': `attachment; filename="${docType}.docx"`,
+          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "Content-Disposition": `attachment; filename="${docType}.docx"`,
         },
       });
-    } else if (format === 'xlsx') {
+    } else if (format === "xlsx") {
       const workbook = generateXlsxDocument(textContent);
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
+      const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
       return new Response(buffer, {
         headers: {
           ...corsHeaders,
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="${docType}.xlsx"`,
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="${docType}.xlsx"`,
         },
       });
     } else {
-      throw new Error('Неподдерживаемый формат');
+      throw new Error("Неподдерживаемый формат");
     }
-
   } catch (error) {
-    console.error('Error generating document:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    console.error("Error generating document:", error);
+    const errorMessage = error instanceof Error ? error.message : "Неизвестная ошибка";
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
 
 function generatePriobschenieDocument(profile: any, diagnoses: any[]): string {
-  return `В ${profile.military_commissariat || '[Название военкомата]'}
-${profile.military_commissariat_address || '[Адрес военкомата]'}
+  return `В ${profile.military_commissariat || "[Название военкомата]"}
+${profile.military_commissariat_address || "[Адрес военкомата]"}
 
-От: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
-Телефон: ${profile.phone || '[Телефон]'}
+От: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
+Телефон: ${profile.phone || "[Телефон]"}
 
 ЗАЯВЛЕНИЕ
 о приобщении документов к делу призывника
 
-Я, ${profile.full_name || '[ФИО]'}, ${profile.birth_date || '[дата рождения]'} года рождения, 
-зарегистрированный по адресу: ${profile.registration_address || '[адрес]'},
-паспорт ${profile.passport_series || '[серия]'} ${profile.passport_number || '[номер]'}, 
-выдан ${profile.passport_issued_by || '[кем выдан]'} ${profile.passport_issue_date || '[дата выдачи]'},
+Я, ${profile.full_name || "[ФИО]"}, ${profile.birth_date || "[дата рождения]"} года рождения, 
+зарегистрированный по адресу: ${profile.registration_address || "[адрес]"},
+паспорт ${profile.passport_series || "[серия]"} ${profile.passport_number || "[номер]"}, 
+выдан ${profile.passport_issued_by || "[кем выдан]"} ${profile.passport_issue_date || "[дата выдачи]"},
 
 Прошу приобщить к моему личному делу призывника следующие медицинские документы:
 
-${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.medical_documents ? ' - ' + d.medical_documents : ''}`).join('\n') || '1. [Список документов]'}
+${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.medical_documents ? " - " + d.medical_documents : ""}`).join("\n") || "1. [Список документов]"}
 
 Данные документы подтверждают наличие у меня заболеваний, препятствующих прохождению военной службы.
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateVypiskaDocument(profile: any): string {
-  return `В ${profile.military_commissariat || '[Название военкомата]'}
-${profile.military_commissariat_address || '[Адрес военкомата]'}
+  return `В ${profile.military_commissariat || "[Название военкомата]"}
+${profile.military_commissariat_address || "[Адрес военкомата]"}
 
-От: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
-Телефон: ${profile.phone || '[Телефон]'}
+От: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
+Телефон: ${profile.phone || "[Телефон]"}
 
 ЗАЯВЛЕНИЕ
 о получении выписки из протокола заседания призывной комиссии
@@ -155,32 +148,32 @@ ${profile.registration_address || '[Адрес регистрации]'}
 
 Выписка необходима для дальнейшего обжалования решения призывной комиссии.
 
-Прошу направить выписку по адресу: ${profile.registration_address || '[адрес]'}
+Прошу направить выписку по адресу: ${profile.registration_address || "[адрес]"}
 или выдать на руки при личном обращении.
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateObzhalovanieDocument(profile: any, diagnoses: any[]): string {
-  return `В ${profile.superior_military_commissariat || '[Название вышестоящего военкомата]'}
-${profile.superior_military_commissariat_address || '[Адрес]'}
+  return `В ${profile.superior_military_commissariat || "[Название вышестоящего военкомата]"}
+${profile.superior_military_commissariat_address || "[Адрес]"}
 
-От: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
-Телефон: ${profile.phone || '[Телефон]'}
+От: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
+Телефон: ${profile.phone || "[Телефон]"}
 
 ЖАЛОБА
 на решение призывной комиссии
 
-Я, ${profile.full_name || '[ФИО]'}, ${profile.birth_date || '[дата рождения]'} года рождения,
-не согласен с решением призывной комиссии ${profile.military_commissariat || '[военкомат]'}
+Я, ${profile.full_name || "[ФИО]"}, ${profile.birth_date || "[дата рождения]"} года рождения,
+не согласен с решением призывной комиссии ${profile.military_commissariat || "[военкомат]"}
 от [дата решения] о признании меня годным к военной службе.
 
 Считаю данное решение незаконным и необоснованным по следующим основаниям:
 
 1. При вынесении решения не были учтены следующие заболевания:
-${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? ' (статья ' + d.user_article + ' Расписания болезней)' : ''}`).join('\n') || '[Список заболеваний]'}
+${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? " (статья " + d.user_article + " Расписания болезней)" : ""}`).join("\n") || "[Список заболеваний]"}
 
 2. Имеющиеся у меня заболевания подтверждаются медицинскими документами.
 
@@ -189,7 +182,7 @@ ${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? ' (с
 На основании изложенного и руководствуясь статьей 28 Федерального закона "О воинской обязанности и военной службе",
 
 ПРОШУ:
-1. Отменить решение призывной комиссии ${profile.military_commissariat || '[военкомат]'} от [дата].
+1. Отменить решение призывной комиссии ${profile.military_commissariat || "[военкомат]"} от [дата].
 2. Направить меня на дополнительное медицинское обследование.
 3. Вынести новое решение с учетом всех имеющихся заболеваний.
 
@@ -197,22 +190,22 @@ ${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? ' (с
 1. Копии медицинских документов.
 2. Выписка из протокола призывной комиссии.
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateProkuraturaDocument(profile: any): string {
-  return `В ${profile.prosecutor_office || '[Название прокуратуры]'}
+  return `В ${profile.prosecutor_office || "[Название прокуратуры]"}
 
-От: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
-Телефон: ${profile.phone || '[Телефон]'}
+От: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
+Телефон: ${profile.phone || "[Телефон]"}
 
 ЖАЛОБА
 на действия военного комиссариата
 
-Я, ${profile.full_name || '[ФИО]'}, обращаюсь с жалобой на неправомерные действия 
-${profile.military_commissariat || '[военкомат]'}.
+Я, ${profile.full_name || "[ФИО]"}, обращаюсь с жалобой на неправомерные действия 
+${profile.military_commissariat || "[военкомат]"}.
 
 [Описание ситуации и нарушений]
 
@@ -226,33 +219,33 @@ ${profile.military_commissariat || '[военкомат]'}.
 2. Принять меры к восстановлению моих нарушенных прав.
 3. Привлечь виновных лиц к ответственности.
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateIskSudDocument(profile: any, diagnoses: any[]): string {
-  return `В ${profile.court_by_registration || '[Название суда]'}
+  return `В ${profile.court_by_registration || "[Название суда]"}
 
-Истец: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
+Истец: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
 
-Ответчик: ${profile.military_commissariat || '[Название военкомата]'}
-${profile.military_commissariat_address || '[Адрес]'}
+Ответчик: ${profile.military_commissariat || "[Название военкомата]"}
+${profile.military_commissariat_address || "[Адрес]"}
 
 ИСКОВОЕ ЗАЯВЛЕНИЕ
 об оспаривании решения призывной комиссии
 
-Я, ${profile.full_name || '[ФИО]'}, ${profile.birth_date || '[дата рождения]'} года рождения,
-проживающий по адресу: ${profile.registration_address || '[адрес]'},
-паспорт ${profile.passport_series || '[серия]'} ${profile.passport_number || '[номер]'},
+Я, ${profile.full_name || "[ФИО]"}, ${profile.birth_date || "[дата рождения]"} года рождения,
+проживающий по адресу: ${profile.registration_address || "[адрес]"},
+паспорт ${profile.passport_series || "[серия]"} ${profile.passport_number || "[номер]"},
 
-Решением призывной комиссии ${profile.military_commissariat || '[военкомат]'} 
+Решением призывной комиссии ${profile.military_commissariat || "[военкомат]"} 
 от [дата] я был признан годным к военной службе (категория годности [категория]).
 
 Считаю данное решение незаконным и необоснованным, нарушающим мои права по следующим основаниям:
 
 1. У меня имеются следующие заболевания:
-${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? ' (статья ' + d.user_article + ' Расписания болезней)' : ''}`).join('\n') || '[Список заболеваний]'}
+${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? " (статья " + d.user_article + " Расписания болезней)" : ""}`).join("\n") || "[Список заболеваний]"}
 
 2. Согласно Расписанию болезней, утвержденному Постановлением Правительства РФ,
 при данных заболеваниях я должен быть признан [категория годности].
@@ -271,21 +264,21 @@ ${diagnoses.map((d, i) => `${i + 1}. ${d.diagnosis_name}${d.user_article ? ' (с
 2. Копия решения призывной комиссии
 3. Квитанция об оплате госпошлины
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateApellyaciyaDocument(profile: any): string {
-  return `В ${profile.court_by_registration || '[Название суда]'} (апелляционная инстанция)
+  return `В ${profile.court_by_registration || "[Название суда]"} (апелляционная инстанция)
 
-От: ${profile.full_name || '[ФИО]'}
-${profile.registration_address || '[Адрес регистрации]'}
+От: ${profile.full_name || "[ФИО]"}
+${profile.registration_address || "[Адрес регистрации]"}
 
 АПЕЛЛЯЦИОННАЯ ЖАЛОБА
 на решение суда первой инстанции
 
-Решением ${profile.court_by_registration || '[суд]'} от [дата] по делу № [номер]
-по иску ${profile.full_name || '[ФИО]'} к ${profile.military_commissariat || '[военкомат]'}
+Решением ${profile.court_by_registration || "[суд]"} от [дата] по делу № [номер]
+по иску ${profile.full_name || "[ФИО]"} к ${profile.military_commissariat || "[военкомат]"}
 об оспаривании решения призывной комиссии было [результат решения].
 
 Считаю данное решение незаконным и необоснованным по следующим основаниям:
@@ -304,22 +297,23 @@ ${profile.registration_address || '[Адрес регистрации]'}
 1. Копия решения суда первой инстанции
 2. Дополнительные доказательства
 
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Подпись: _______________ ${profile.full_name || '[ФИО]'}`;
+Дата: ${new Date().toLocaleDateString("ru-RU")}
+Подпись: _______________ ${profile.full_name || "[ФИО]"}`;
 }
 
 function generateDocxDocument(textContent: string): Document {
-  const lines = textContent.split('\n');
-  const paragraphs = lines.map(line => {
+  const lines = textContent.split("\n");
+  const paragraphs = lines.map((line) => {
     const trimmedLine = line.trim();
-    
+
     // Определяем, является ли строка заголовком (в верхнем регистре)
-    const isHeading = trimmedLine === trimmedLine.toUpperCase() && 
-                      trimmedLine.length > 0 && 
-                      trimmedLine.length < 100 &&
-                      !trimmedLine.startsWith('От:') &&
-                      !trimmedLine.startsWith('Дата:');
-    
+    const isHeading =
+      trimmedLine === trimmedLine.toUpperCase() &&
+      trimmedLine.length > 0 &&
+      trimmedLine.length < 100 &&
+      !trimmedLine.startsWith("От:") &&
+      !trimmedLine.startsWith("Дата:");
+
     if (isHeading && trimmedLine.length > 0) {
       return new Paragraph({
         text: trimmedLine,
@@ -327,7 +321,7 @@ function generateDocxDocument(textContent: string): Document {
         spacing: { before: 240, after: 120 },
       });
     }
-    
+
     return new Paragraph({
       children: [new TextRun(line)],
       spacing: { after: 120 },
@@ -335,18 +329,20 @@ function generateDocxDocument(textContent: string): Document {
   });
 
   return new Document({
-    sections: [{
-      properties: {},
-      children: paragraphs,
-    }],
+    sections: [
+      {
+        properties: {},
+        children: paragraphs,
+      },
+    ],
   });
 }
 
 function generateXlsxDocument(textContent: string) {
-  const lines = textContent.split('\n').map(line => [line]);
+  const lines = textContent.split("\n").map((line) => [line]);
   const worksheet = XLSX.utils.aoa_to_sheet(lines);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Документ');
-  
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Документ");
+
   return workbook;
 }
