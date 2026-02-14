@@ -8,7 +8,9 @@ const getAllowedOrigin = (req?: Request) => {
   
   // Allow the configured origin
   if (allowedOrigin && requestOrigin === allowedOrigin) return requestOrigin;
-  // Allow Lovable preview domains
+  // Allow production domain (with and without www)
+  if (requestOrigin === "https://nepriziv.ru" || requestOrigin === "https://www.nepriziv.ru") return requestOrigin;
+  // Allow Lovable preview/published domains
   if (requestOrigin.endsWith(".lovable.app")) return requestOrigin;
   // Allow localhost for development
   if (requestOrigin.startsWith("http://localhost")) return requestOrigin;
