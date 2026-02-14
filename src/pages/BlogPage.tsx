@@ -13,6 +13,7 @@ import BlogComments from "@/components/BlogComments";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { enhanceTypography, textToMarkdown } from "@/lib/typography";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface BlogPost {
   id: string;
@@ -112,7 +113,7 @@ const BlogPage = () => {
                 prose-img:rounded-lg prose-img:shadow-lg
                 prose-hr:border-border prose-hr:my-8">
                 {selectedPost.content.includes('<p>') || selectedPost.content.includes('<h') ? (
-                  <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
                 ) : (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {enhanceTypography(textToMarkdown(selectedPost.content))}

@@ -13,6 +13,7 @@ import { MessageCircle, AlertCircle, FileText, Award } from "lucide-react";
 import { forumPostSchema } from "@/lib/validations";
 import ForumComments from "@/components/ForumComments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { enhanceTypography } from "@/lib/typography";
 import RichTextEditor from "@/components/RichTextEditor";
 
@@ -250,7 +251,7 @@ const ForumPage = () => {
                   <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
                     prose-p:text-foreground/90 prose-p:mb-2 prose-strong:text-foreground line-clamp-3">
                     {post.content.includes('<p>') || post.content.includes('<h') ? (
-                      <div dangerouslySetInnerHTML={{ __html: post.content }} />
+                      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />
                     ) : (
                       <p className="whitespace-pre-wrap">{enhanceTypography(post.content)}</p>
                     )}
@@ -301,7 +302,7 @@ const ForumPage = () => {
               prose-img:rounded-lg prose-img:shadow-lg
               prose-hr:border-border prose-hr:my-6">
               {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
-                <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
               ) : (
                 <p className="whitespace-pre-wrap">{selectedPost && enhanceTypography(selectedPost.content)}</p>
               )}

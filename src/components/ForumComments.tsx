@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Trash2 } from "lucide-react";
 import { enhanceTypography } from "@/lib/typography";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface Comment {
   id: string;
@@ -174,7 +175,7 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
               <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
                 prose-p:text-foreground prose-strong:text-foreground">
                 {comment.content.includes('<p>') || comment.content.includes('<h') ? (
-                  <div dangerouslySetInnerHTML={{ __html: comment.content }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }} />
                 ) : (
                   <p className="whitespace-pre-wrap">{enhanceTypography(comment.content)}</p>
                 )}
