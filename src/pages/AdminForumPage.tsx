@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { sanitizeHtml } from "@/lib/sanitize";
 import RichTextEditor from "@/components/RichTextEditor";
 
 interface ForumPost {
@@ -543,7 +544,7 @@ const AdminForumPage = () => {
               prose-a:text-primary prose-a:no-underline hover:prose-a:underline
               prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic">
               {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
-                <div dangerouslySetInnerHTML={{ __html: selectedPost.content }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
               ) : (
                 <span className="whitespace-pre-wrap">{selectedPost?.content}</span>
               )}

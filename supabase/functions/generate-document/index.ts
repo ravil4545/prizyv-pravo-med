@@ -3,8 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "https://esm.sh/docx@8.5.0";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
+const getAllowedOrigin = () => {
+  const origin = Deno.env.get("ALLOWED_ORIGIN");
+  return origin || "*";
+};
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': getAllowedOrigin(),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
