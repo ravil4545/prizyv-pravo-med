@@ -8,9 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getSignedDocumentUrl } from "@/lib/storage";
+import { toast } from "sonner";
 
 interface Article {
   id: string;
@@ -198,6 +200,9 @@ export default function MedicalHistoryPage() {
   const [documentArticleLinks, setDocumentArticleLinks] = useState<DocumentArticleLink[]>([]);
   const [assessments, setAssessments] = useState<ArticleAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isEditingExams, setIsEditingExams] = useState(false);
+  const [editedExamsText, setEditedExamsText] = useState("");
+  const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -561,6 +566,124 @@ export default function MedicalHistoryPage() {
     return summarized;
   }, [selectedArticleLinks, userDocuments]);
 
+  // Structured examinations list for the new block
+  const structuredExaminations = useMemo(() => {
+    if (summarizedRecommendations.length === 0) return { analyses: [] as string[], examinations: [] as string[], consultations: [] as string[] };
+
+    const analyses: string[] = [];
+    const examinations: string[] = [];
+    const consultations: string[] = [];
+
+    summarizedRecommendations.forEach((rec) => {
+      const lower = rec.toLowerCase();
+      if (/консультац|врач|специалист|невролог|кардиолог|терапевт|хирург|ортопед|офтальмолог|лор|психиатр|дерматолог|гастроэнтеролог|эндокринолог|уролог|пульмонолог/.test(lower)) {
+        consultations.push(rec);
+      } else if (/мрт|кт|узи|рентген|экг|кардиограм|холтер|томограф|флюорог|инструментальн|лучев|обследован|госпитализ|стационар/.test(lower)) {
+        examinations.push(rec);
+      } else {
+        analyses.push(rec);
+      }
+    });
+
+    return { analyses, examinations, consultations };
+  }, [summarizedRecommendations]);
+
+  // Format examinations as numbered text for editing/export
+  const examinationsText = useMemo(() => {
+    const lines: string[] = [];
+    let num = 1;
+
+    if (structuredExaminations.analyses.length > 0) {
+      lines.push("АНАЛИЗЫ:");
+      structuredExaminations.analyses.forEach((r) => {
+        lines.push(`${num}. ${r}`);
+        num++;
+      });
+      lines.push("");
+    }
+    if (structuredExaminations.examinations.length > 0) {
+      lines.push("ОБСЛЕДОВАНИЯ:");
+      structuredExaminations.examinations.forEach((r) => {
+        lines.push(`${num}. ${r}`);
+        num++;
+      });
+      lines.push("");
+    }
+    if (structuredExaminations.consultations.length > 0) {
+      lines.push("КОНСУЛЬТАЦИИ ВРАЧЕЙ:");
+      structuredExaminations.consultations.forEach((r) => {
+        lines.push(`${num}. ${r}`);
+        num++;
+      });
+    }
+
+    return lines.join("\n");
+  }, [structuredExaminations]);
+
+  // Sync editable text when article changes
+  useEffect(() => {
+    setEditedExamsText(examinationsText);
+    setIsEditingExams(false);
+  }, [examinationsText]);
+
+  const handleDownloadExamsDocx = async () => {
+    if (!user || !selectedArticle) return;
+    setIsGeneratingDoc(true);
+    try {
+      const contentToExport = isEditingExams ? editedExamsText : examinationsText;
+      const fullContent = `МИНИМАЛЬНЫЕ НЕОБХОДИМЫЕ ОБСЛЕДОВАНИЯ\nСтатья ${selectedArticle.article_number}: ${selectedArticle.title}\n\n${contentToExport}`;
+
+      const response = await fetch(
+        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            docType: "obsledovaniya",
+            format: "docx",
+            customContent: fullContent,
+          }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Ошибка генерации документа");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `obsledovaniya_st${selectedArticle.article_number}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Документ скачан");
+    } catch (error) {
+      console.error("Error generating doc:", error);
+      toast.error("Ошибка при генерации документа");
+    } finally {
+      setIsGeneratingDoc(false);
+    }
+  };
+
+  const handlePrintExams = () => {
+    const contentToPrint = isEditingExams ? editedExamsText : examinationsText;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html><head><title>Обследования - ст. ${selectedArticle?.article_number}</title>
+      <style>body{font-family:Arial,sans-serif;padding:40px;line-height:1.8;font-size:14px}
+      h1{font-size:18px;margin-bottom:20px}pre{white-space:pre-wrap;font-family:inherit}</style></head>
+      <body><h1>Минимальные необходимые обследования</h1>
+      <p>Статья ${selectedArticle?.article_number}: ${selectedArticle?.title}</p>
+      <pre>${contentToPrint}</pre></body></html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   // Pie chart data
   const pieChartData = useMemo(() => {
     if (!chanceData) return [];
@@ -919,6 +1042,109 @@ export default function MedicalHistoryPage() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Минимальные необходимые обследования */}
+                {(structuredExaminations.analyses.length > 0 || structuredExaminations.examinations.length > 0 || structuredExaminations.consultations.length > 0) && (
+                  <Card className="border-emerald-500/50">
+                    <CardHeader className="px-3 sm:px-6">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                          <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
+                          Минимальные необходимые обследования
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (isEditingExams) {
+                                setIsEditingExams(false);
+                              } else {
+                                setEditedExamsText(examinationsText);
+                                setIsEditingExams(true);
+                              }
+                            }}
+                            className="text-xs gap-1"
+                          >
+                            {isEditingExams ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                            {isEditingExams ? "Готово" : "Редактировать"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownloadExamsDocx}
+                            disabled={isGeneratingDoc}
+                            className="text-xs gap-1"
+                          >
+                            {isGeneratingDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            DOCX
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePrintExams}
+                            className="text-xs gap-1"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            Печать
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-3 sm:px-6">
+                      {isEditingExams ? (
+                        <Textarea
+                          value={editedExamsText}
+                          onChange={(e) => setEditedExamsText(e.target.value)}
+                          className="min-h-[200px] text-sm font-mono leading-relaxed"
+                          placeholder="Редактируйте список обследований..."
+                        />
+                      ) : (
+                        <div className="space-y-4">
+                          {structuredExaminations.analyses.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Анализы</h4>
+                              <ol className="space-y-2">
+                                {structuredExaminations.analyses.map((rec, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex-shrink-0">{idx + 1}.</span>
+                                    <span>{rec}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                          {structuredExaminations.examinations.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Обследования</h4>
+                              <ol className="space-y-2" start={structuredExaminations.analyses.length + 1}>
+                                {structuredExaminations.examinations.map((rec, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex-shrink-0">{structuredExaminations.analyses.length + idx + 1}.</span>
+                                    <span>{rec}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                          {structuredExaminations.consultations.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Консультации врачей</h4>
+                              <ol className="space-y-2" start={structuredExaminations.analyses.length + structuredExaminations.examinations.length + 1}>
+                                {structuredExaminations.consultations.map((rec, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex-shrink-0">{structuredExaminations.analyses.length + structuredExaminations.examinations.length + idx + 1}.</span>
+                                    <span>{rec}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </>
             ) : (
               <Card className="p-12 text-center">
