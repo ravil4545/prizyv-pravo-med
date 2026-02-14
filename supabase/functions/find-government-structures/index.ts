@@ -24,15 +24,17 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const isMoscow = city?.toLowerCase().includes('москва') || region?.toLowerCase().includes('москва');
-    
+    const isMoscow = city?.toLowerCase().includes("москва") || region?.toLowerCase().includes("москва");
+
     const prompt = `На основе следующих данных, найди и предоставь точную информацию о государственных структурах:
 
 Город: ${city}
 Регион: ${region}
 Адрес регистрации: ${address}
 
-${isMoscow ? `
+${
+  isMoscow
+    ? `
 ВАЖНО ДЛЯ МОСКВЫ: 
 1. В поле "military_commissariat" укажи ОБА военкомата через "\\n\\n":
    - Районный военкомат по месту регистрации
@@ -41,11 +43,13 @@ ${isMoscow ? `
    - Адрес районного военкомата
    - г. Москва, ул. Яблочкова, д. 5, стр. 5
 3. Вышестоящий военкомат - Военный комиссариат города Москвы, адрес: г. Москва, Проспект Мира, д. 15, стр. 2
-` : `
+`
+    : `
 Пожалуйста, найди и укажи:
 1. Название районного военного комиссариата по месту регистрации и его адрес
 2. Название вышестоящего военного комиссариата (областного/регионального) и его адрес
-`}
+`
+}
 
 Также укажи:
 3. Название районного суда по адресу военкомата
@@ -66,7 +70,7 @@ ${isMoscow ? `
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -74,12 +78,13 @@ ${isMoscow ? `
         messages: [
           {
             role: "system",
-            content: "Ты помощник, который помогает найти точную информацию о государственных структурах России. Отвечай строго в формате JSON без дополнительного текста."
+            content:
+              "Ты помощник, который помогает найти точную информацию о государственных структурах России. Отвечай строго в формате JSON без дополнительного текста.",
           },
           {
             role: "user",
-            content: prompt
-          }
+            content: prompt,
+          },
         ],
         temperature: 0.3,
       }),
@@ -93,7 +98,7 @@ ${isMoscow ? `
 
     const data = await response.json();
     const content = data.choices[0].message.content;
-    
+
     // Извлекаем JSON из ответа
     let suggestions;
     try {
@@ -112,24 +117,18 @@ ${isMoscow ? `
         superior_military_commissariat_address: "",
         court_by_military: "",
         court_by_registration: "",
-        prosecutor_office: ""
+        prosecutor_office: "",
       };
     }
 
-    return new Response(
-      JSON.stringify({ suggestions }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ suggestions }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Error in find-government-structures:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
