@@ -19,9 +19,9 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, docType, format } = await req.json();
+    const { userId, docType, format, customContent } = await req.json();
 
-    console.log("Generating document:", { userId, docType, format });
+    console.log("Generating document:", { userId, docType, format, hasCustomContent: !!customContent });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -65,6 +65,9 @@ serve(async (req) => {
         break;
       case "apellyaciya":
         textContent = generateApellyaciyaDocument(profile);
+        break;
+      case "obsledovaniya":
+        textContent = customContent || "Нет данных для обследований";
         break;
       default:
         throw new Error("Неизвестный тип документа");
