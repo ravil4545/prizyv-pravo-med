@@ -37,14 +37,13 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
   }, [postId]);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (session?.user) {
       setUser(session.user);
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", session.user.id);
-      setIsAdmin(roles?.some(r => r.role === "admin") || false);
+      const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id);
+      setIsAdmin(roles?.some((r) => r.role === "admin") || false);
     }
   };
 
@@ -65,12 +64,12 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
             .select("full_name")
             .eq("id", comment.user_id)
             .single();
-          
+
           return {
             ...comment,
             profiles: { full_name: profile?.full_name || null },
           };
-        })
+        }),
       );
       setComments(commentsWithNames);
     }
@@ -80,13 +79,11 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
     if (!user || !newComment.trim()) return;
 
     setLoading(true);
-    const { error } = await supabase
-      .from("forum_comments")
-      .insert({
-        post_id: postId,
-        user_id: user.id,
-        content: newComment,
-      });
+    const { error } = await supabase.from("forum_comments").insert({
+      post_id: postId,
+      user_id: user.id,
+      content: newComment,
+    });
 
     if (error) {
       toast({
@@ -106,10 +103,7 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
   };
 
   const deleteComment = async (commentId: string) => {
-    const { error } = await supabase
-      .from("forum_comments")
-      .delete()
-      .eq("id", commentId);
+    const { error } = await supabase.from("forum_comments").delete().eq("id", commentId);
 
     if (error) {
       toast({
@@ -153,28 +147,22 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium">
-                    {comment.profiles?.full_name || "Пользователь"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(comment.created_at).toLocaleString("ru")}
-                  </p>
+                  <p className="text-sm font-medium">{comment.profiles?.full_name || "Пользователь"}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString("ru")}</p>
                 </div>
                 {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => deleteComment(comment.id)}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => deleteComment(comment.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              <div className="prose prose-slate dark:prose-invert max-w-none prose-sm
-                prose-p:text-foreground prose-strong:text-foreground">
-                {comment.content.includes('<p>') || comment.content.includes('<h') ? (
+              <div
+                className="prose prose-slate dark:prose-invert max-w-none prose-sm
+                prose-p:text-foreground prose-strong:text-foreground"
+              >
+                {comment.content.includes("<p>") || comment.content.includes("<h") ? (
                   <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }} />
                 ) : (
                   <p className="whitespace-pre-wrap">{enhanceTypography(comment.content)}</p>
@@ -183,11 +171,7 @@ const ForumComments = ({ postId }: ForumCommentsProps) => {
             </CardContent>
           </Card>
         ))}
-        {comments.length === 0 && (
-          <p className="text-center text-muted-foreground py-4">
-            Пока нет комментариев
-          </p>
-        )}
+        {comments.length === 0 && <p className="text-center text-muted-foreground py-4">Пока нет комментариев</p>}
       </div>
     </div>
   );
