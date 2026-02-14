@@ -6,6 +6,7 @@ const getAllowedOrigin = (req?: Request) => {
   const requestOrigin = req?.headers.get("origin") || "";
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
   if (allowedOrigin && requestOrigin === allowedOrigin) return requestOrigin;
+  if (requestOrigin === "https://nepriziv.ru" || requestOrigin === "https://www.nepriziv.ru") return requestOrigin;
   if (requestOrigin.endsWith(".lovable.app")) return requestOrigin;
   if (requestOrigin.startsWith("http://localhost")) return requestOrigin;
   return allowedOrigin || "*";
