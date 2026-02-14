@@ -7,12 +7,12 @@ const getAllowedOrigin = () => {
 };
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': getAllowedOrigin(),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": getAllowedOrigin(),
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -20,32 +20,32 @@ serve(async (req) => {
     const { imageBase64 } = await req.json();
 
     if (!imageBase64) {
-      return new Response(
-        JSON.stringify({ error: true, message: 'Image base64 is required' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return new Response(JSON.stringify({ error: true, message: "Image base64 is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+      throw new Error("LOVABLE_API_KEY not configured");
     }
 
     // Clean base64 if it has data URL prefix
     let cleanBase64 = imageBase64;
-    if (imageBase64.includes(',')) {
-      cleanBase64 = imageBase64.split(',')[1];
+    if (imageBase64.includes(",")) {
+      cleanBase64 = imageBase64.split(",")[1];
     }
 
     // Detect image type from base64 or default to jpeg
-    let mimeType = 'image/jpeg';
-    if (imageBase64.startsWith('data:image/png')) {
-      mimeType = 'image/png';
-    } else if (imageBase64.startsWith('data:image/webp')) {
-      mimeType = 'image/webp';
+    let mimeType = "image/jpeg";
+    if (imageBase64.startsWith("data:image/png")) {
+      mimeType = "image/png";
+    } else if (imageBase64.startsWith("data:image/webp")) {
+      mimeType = "image/webp";
     }
 
-    console.log('Sending image for enhancement, size:', Math.round(cleanBase64.length / 1024), 'KB');
+    console.log("Sending image for enhancement, size:", Math.round(cleanBase64.length / 1024), "KB");
 
     const prompt = `СТРОГО ЗАПРЕЩЕНО: Генерировать, изменять, добавлять или удалять ЛЮБОЙ текст, печати, подписи, штампы или другое содержимое документа! Ты ТОЛЬКО улучшаешь визуальное качество изображения, НЕ изменяя содержимое.
 
@@ -78,82 +78,81 @@ serve(async (req) => {
 
 Результат: чистый белый документ с улучшенной читаемостью ОРИГИНАЛЬНОГО содержимого.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: "google/gemini-2.5-flash-image-preview",
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: [
-              { type: 'text', text: prompt },
+              { type: "text", text: prompt },
               {
-                type: 'image_url',
+                type: "image_url",
                 image_url: {
-                  url: `data:${mimeType};base64,${cleanBase64}`
-                }
-              }
-            ]
-          }
+                  url: `data:${mimeType};base64,${cleanBase64}`,
+                },
+              },
+            ],
+          },
         ],
-        modalities: ['image', 'text']
-      })
+        modalities: ["image", "text"],
+      }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI API error:', response.status, errorText);
-      
+      console.error("AI API error:", response.status, errorText);
+
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: true, message: 'Слишком много запросов, подождите минуту' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
-        );
+        return new Response(JSON.stringify({ error: true, message: "Слишком много запросов, подождите минуту" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429,
+        });
       }
-      
+
       throw new Error(`AI API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('AI response received');
+    console.log("AI response received");
 
     // Extract enhanced image from response
     const enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
     if (!enhancedImageUrl) {
-      console.log('No enhanced image in response, returning original');
+      console.log("No enhanced image in response, returning original");
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           enhancedBase64: `data:${mimeType};base64,${cleanBase64}`,
           wasEnhanced: false,
-          message: 'Изображение уже хорошего качества'
+          message: "Изображение уже хорошего качества",
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    console.log('Image enhanced successfully');
+    console.log("Image enhanced successfully");
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         enhancedBase64: enhancedImageUrl,
-        wasEnhanced: true
+        wasEnhanced: true,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-
   } catch (error: unknown) {
-    console.error('Enhancement error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: true, message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    console.error("Enhancement error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: true, message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });
