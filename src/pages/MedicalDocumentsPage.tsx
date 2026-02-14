@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
 
 interface DocumentType {
   id: string;
@@ -62,6 +63,15 @@ interface MedicalDocument {
 
 type SortField = "uploaded_at" | "document_date" | "title";
 type SortDirection = "asc" | "desc";
+
+function SignedPdfViewer({ fileUrl }: { fileUrl: string }) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  useEffect(() => {
+    getSignedDocumentUrl(fileUrl).then(setSignedUrl);
+  }, [fileUrl]);
+  if (!signedUrl) return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  return <PdfViewer url={signedUrl} />;
+}
 
 export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
@@ -259,9 +269,7 @@ export default function MedicalDocumentsPage() {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("medical-documents")
-        .getPublicUrl(fileName);
+      const storedPath = fileName;
 
       // Формируем текст для анализа
       const manualText = [
@@ -278,7 +286,7 @@ export default function MedicalDocumentsPage() {
         .insert({
           user_id: user.id,
           title: `Рукописный${pagesText}_${format(new Date(), 'dd.MM.yyyy_HH-mm')}`,
-          file_url: publicUrl,
+          file_url: storedPath,
           is_classified: false,
           raw_text: manualText, // Сохраняем введённый пользователем текст
         })
@@ -611,9 +619,7 @@ export default function MedicalDocumentsPage() {
 
         if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage
-          .from("medical-documents")
-          .getPublicUrl(fileName);
+        const storedPath = fileName;
 
         // Создаём запись в базе
         const { data: insertedDoc, error: insertError } = await supabase
@@ -621,7 +627,7 @@ export default function MedicalDocumentsPage() {
           .insert({
             user_id: user.id,
             title: `Документ_${validFiles.length}_стр_${format(new Date(), 'dd.MM.yyyy')}`,
-            file_url: publicUrl,
+            file_url: storedPath,
             is_classified: false,
           })
           .select()
@@ -668,9 +674,7 @@ export default function MedicalDocumentsPage() {
 
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage
-              .from("medical-documents")
-              .getPublicUrl(fileName);
+            const storedPath = fileName;
 
             // Создаём запись в базе
             const { data: insertedDoc, error: insertError } = await supabase
@@ -678,7 +682,7 @@ export default function MedicalDocumentsPage() {
               .insert({
                 user_id: user.id,
                 title: file.name.replace(/\.[^/.]+$/, '') + '.pdf',
-                file_url: publicUrl,
+                file_url: storedPath,
                 is_classified: false,
               })
               .select()
@@ -729,7 +733,9 @@ export default function MedicalDocumentsPage() {
         const doc = documents.find(d => d.id === documentId);
         if (!doc) throw new Error("Документ не найден");
         
-        const response = await fetch(doc.file_url);
+        const signedUrl = await getSignedDocumentUrl(doc.file_url);
+        if (!signedUrl) throw new Error("Не удалось получить доступ к файлу");
+        const response = await fetch(signedUrl);
         const blob = await response.blob();
         base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -806,8 +812,7 @@ export default function MedicalDocumentsPage() {
     if (!documentToDelete) return;
     
     try {
-      const urlParts = documentToDelete.file_url.split("/");
-      const filePath = urlParts.slice(-2).join("/");
+      const filePath = extractFilePath(documentToDelete.file_url);
 
       await supabase.storage
         .from("medical-documents")
@@ -851,10 +856,7 @@ export default function MedicalDocumentsPage() {
       const docsToDelete = documents.filter(d => selectedDocIds.has(d.id));
       
       // Удаляем файлы из хранилища
-      const filePaths = docsToDelete.map(doc => {
-        const urlParts = doc.file_url.split("/");
-        return urlParts.slice(-2).join("/");
-      });
+      const filePaths = docsToDelete.map(doc => extractFilePath(doc.file_url));
 
       await supabase.storage
         .from("medical-documents")
@@ -934,7 +936,9 @@ export default function MedicalDocumentsPage() {
       // Загружаем исходный PDF и извлекаем все страницы как изображения
       const existingImages: { base64: string; width: number; height: number }[] = [];
       
-      const response = await fetch(documentToAddPages.file_url);
+      const signedUrl = await getSignedDocumentUrl(documentToAddPages.file_url);
+      if (!signedUrl) throw new Error("Не удалось получить доступ к файлу");
+      const response = await fetch(signedUrl);
       const existingPdfBlob = await response.blob();
       const existingPdfData = await existingPdfBlob.arrayBuffer();
       
@@ -1007,8 +1011,7 @@ export default function MedicalDocumentsPage() {
       const combinedPdfBlob = await createPdfFromImages(allImages);
       
       // Удаляем старый файл из хранилища
-      const urlParts = documentToAddPages.file_url.split("/");
-      const oldFilePath = urlParts.slice(-2).join("/");
+      const oldFilePath = extractFilePath(documentToAddPages.file_url);
       await supabase.storage
         .from("medical-documents")
         .remove([oldFilePath]);
@@ -1023,9 +1026,7 @@ export default function MedicalDocumentsPage() {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("medical-documents")
-        .getPublicUrl(newFileName);
+      const storedPath = newFileName;
 
       // Обновляем запись в БД
       const totalPages = existingPageCount + addPagesFiles.length;
@@ -1052,7 +1053,7 @@ export default function MedicalDocumentsPage() {
       const { error: updateError } = await supabase
         .from("medical_documents_v2")
         .update({
-          file_url: publicUrl,
+          file_url: storedPath,
           title: combinedTitle,
           is_classified: false,
           meta: JSON.parse(JSON.stringify({ parts: allParts })),
@@ -1113,7 +1114,9 @@ export default function MedicalDocumentsPage() {
 
   const downloadDocument = async (doc: MedicalDocument) => {
     try {
-      const response = await fetch(doc.file_url);
+      const signedUrl = await getSignedDocumentUrl(doc.file_url);
+      if (!signedUrl) throw new Error("Не удалось получить доступ к файлу");
+      const response = await fetch(signedUrl);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1132,7 +1135,12 @@ export default function MedicalDocumentsPage() {
     }
   };
 
-  const printDocument = (doc: MedicalDocument) => {
+  const printDocument = async (doc: MedicalDocument) => {
+    const signedUrl = await getSignedDocumentUrl(doc.file_url);
+    if (!signedUrl) {
+      toast({ title: "Ошибка", description: "Не удалось получить доступ к файлу", variant: "destructive" });
+      return;
+    }
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast({
@@ -1179,7 +1187,7 @@ export default function MedicalDocumentsPage() {
               ${doc.document_date ? `<p>Дата документа: ${format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })}</p>` : ''}
             </div>
             <div class="image-container">
-              <img src="${doc.file_url}" alt="${doc.title || 'Документ'}" />
+              <img src="${signedUrl}" alt="${doc.title || 'Документ'}" />
             </div>
           </div>
         </body>
@@ -1764,7 +1772,7 @@ export default function MedicalDocumentsPage() {
                                   <ScrollArea className="max-h-[calc(90vh-100px)]">
                                     <div className="space-y-4 sm:space-y-6 pr-4 overflow-hidden">
                                       {/* Document Viewer with PDF support */}
-                                      <PdfViewer url={doc.file_url} />
+                                      <SignedPdfViewer fileUrl={doc.file_url} />
 
                                       {/* AI Analysis Results */}
                                       {doc.is_classified && (

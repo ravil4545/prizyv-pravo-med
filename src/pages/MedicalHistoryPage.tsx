@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { getSignedDocumentUrl } from "@/lib/storage";
 
 interface Article {
   id: string;
@@ -853,10 +854,11 @@ export default function MedicalHistoryPage() {
                                   )}
                                 </p>
                               </div>
-                              <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" asChild>
-                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                                  Открыть
-                                </a>
+                              <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" onClick={async () => {
+                                const url = await getSignedDocumentUrl(doc.file_url);
+                                if (url) window.open(url, '_blank');
+                              }}>
+                                Открыть
                               </Button>
                             </div>
                             {link.ai_explanation && (
