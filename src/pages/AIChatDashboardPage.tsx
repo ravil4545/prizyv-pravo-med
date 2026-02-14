@@ -533,33 +533,40 @@ const AIChatDashboardPage = () => {
                       <p className="text-[13px] sm:text-base leading-relaxed">Задайте вопрос юридическому AI консультанту</p>
                     </div>
                   )}
-                  {messages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`flex ${
-                        message.role === "user" ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                  {messages.map((message, index) => {
+                    // Split assistant messages by "---" into multiple bubbles (messenger style)
+                    const bubbles = message.role === "assistant" && message.content
+                      ? message.content.split(/\n\s*---\s*\n/).filter(b => b.trim())
+                      : [message.content];
+
+                    return bubbles.map((bubble, bubbleIdx) => (
                       <div
-                        className={`max-w-[240px] xs:max-w-[260px] sm:max-w-[80%] p-2.5 sm:p-4 rounded-lg overflow-hidden ${
-                          message.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
+                        key={`${index}-${bubbleIdx}`}
+                        className={`flex ${
+                          message.role === "user" ? "justify-end" : "justify-start"
                         }`}
-                        style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                       >
-                        {message.role === "assistant" ? (
-                          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-2 sm:prose-p:my-3 prose-ul:my-2 sm:prose-ul:my-3 prose-ol:my-2 sm:prose-ol:my-3 prose-li:my-1 sm:prose-li:my-1.5 prose-headings:my-3 sm:prose-headings:my-4 prose-hr:my-5 sm:prose-hr:my-6 prose-hr:border-border/50 text-[13px] sm:text-sm leading-relaxed sm:leading-loose [&_p]:break-words [&_li]:break-words [&_ol>li]:pl-1 [&_ul>li]:pl-1 [&_p]:text-indent-4 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {enhanceTypography(message.content)}
-                            </ReactMarkdown>
-                          </div>
-                        ) : (
-                          <p className="whitespace-pre-wrap text-[13px] sm:text-base leading-relaxed break-words">{enhanceTypography(message.content)}</p>
-                        )}
+                        <div
+                          className={`sm:max-w-[420px] max-w-[85vw] p-3 sm:p-4 rounded-2xl overflow-hidden ${
+                            message.role === "user"
+                              ? "bg-primary text-primary-foreground rounded-br-md"
+                              : "bg-muted rounded-bl-md"
+                          }`}
+                          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                        >
+                          {message.role === "assistant" ? (
+                            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {enhanceTypography(bubble.trim())}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap text-[13.5px] sm:text-[14.5px] leading-[1.65] break-words">{enhanceTypography(bubble)}</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ));
+                  })}
                   {sending && messages.length > 0 && messages[messages.length - 1].role === "user" && (
                     <div className="flex justify-start">
                       <div className="bg-muted p-3 sm:p-4 rounded-lg">
