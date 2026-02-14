@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { signUpSchema, signInSchema } from "@/lib/validations";
-import { Chrome, Loader2 } from "lucide-react";
+import { Chrome, Loader2, ArrowLeft } from "lucide-react";
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -23,6 +23,8 @@ const AuthPage = () => {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -184,6 +186,34 @@ const AuthPage = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) {
+      toast({ variant: "destructive", title: "Ошибка", description: "Введите email" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        toast({ variant: "destructive", title: "Ошибка", description: error.message });
+      } else {
+        toast({
+          title: "Письмо отправлено",
+          description: "Проверьте почту для сброса пароля.",
+        });
+        setShowForgotPassword(false);
+        setForgotEmail("");
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Ошибка", description: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const OAuthButtons = () => (
     <div className="space-y-3">
       <div className="relative">
@@ -262,39 +292,86 @@ const AuthPage = () => {
               </TabsList>
               
               <TabsContent value="signin">
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email-signin">Email</Label>
-                    <Input
-                      id="email-signin"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      maxLength={255}
-                      required
-                    />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                {showForgotPassword ? (
+                  <div className="space-y-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(false)}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Назад ко входу
+                    </button>
+                    <div className="text-center space-y-1">
+                      <h3 className="text-lg font-semibold">Восстановление пароля</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Введите email, и мы отправим ссылку для сброса пароля
+                      </p>
+                    </div>
+                    <form onSubmit={handleForgotPassword} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="forgot-email">Email</Label>
+                        <Input
+                          id="forgot-email"
+                          type="email"
+                          value={forgotEmail}
+                          onChange={(e) => setForgotEmail(e.target.value)}
+                          maxLength={255}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Отправить ссылку
+                      </Button>
+                    </form>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password-signin">Пароль</Label>
-                    <Input
-                      id="password-signin"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Войти
-                  </Button>
-                </form>
-                
-                <div className="mt-4">
-                  <OAuthButtons />
-                </div>
+                ) : (
+                  <>
+                    <form onSubmit={handleSignIn} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="email-signin">Email</Label>
+                        <Input
+                          id="email-signin"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          maxLength={255}
+                          required
+                        />
+                        {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="password-signin">Пароль</Label>
+                          <button
+                            type="button"
+                            onClick={() => setShowForgotPassword(true)}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            Забыли пароль?
+                          </button>
+                        </div>
+                        <Input
+                          id="password-signin"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                        />
+                        {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Войти
+                      </Button>
+                    </form>
+                    
+                    <div className="mt-4">
+                      <OAuthButtons />
+                    </div>
+                  </>
+                )}
               </TabsContent>
               
               <TabsContent value="signup">
