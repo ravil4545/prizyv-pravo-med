@@ -30,26 +30,24 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    
+
     // Validate input
     const validation = chatRequestSchema.safeParse(body);
     if (!validation.success) {
       console.error("Validation error:", validation.error);
-      return new Response(
-        JSON.stringify({ error: "Неверный формат запроса" }), {
+      return new Response(JSON.stringify({ error: "Неверный формат запроса" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    
+
     const { messages, medicalContext } = validation.data;
 
     // Require authentication when medical context is provided
     if (medicalContext) {
       const authHeader = req.headers.get("authorization");
       if (!authHeader?.startsWith("Bearer ")) {
-        return new Response(
-          JSON.stringify({ error: "Аутентификация требуется для медицинского контекста" }), {
+        return new Response(JSON.stringify({ error: "Аутентификация требуется для медицинского контекста" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -62,8 +60,7 @@ serve(async (req) => {
       });
       const { data, error } = await supabase.auth.getUser();
       if (error || !data?.user) {
-        return new Response(
-          JSON.stringify({ error: "Неверный токен авторизации" }), {
+        return new Response(JSON.stringify({ error: "Неверный токен авторизации" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -71,7 +68,7 @@ serve(async (req) => {
     }
 
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    
+
     if (!OPENROUTER_API_KEY) {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
@@ -155,34 +152,28 @@ ${medicalContext}`;
       },
       body: JSON.stringify({
         model: "x-ai/grok-4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Превышен лимит запросов. Пожалуйста, попробуйте позже." }), {
+        return new Response(JSON.stringify({ error: "Превышен лимит запросов. Пожалуйста, попробуйте позже." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Требуется пополнение счета." }), {
+        return new Response(JSON.stringify({ error: "Требуется пополнение счета." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
+
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: "Ошибка сервиса AI" }), {
+      return new Response(JSON.stringify({ error: "Ошибка сервиса AI" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -193,8 +184,7 @@ ${medicalContext}`;
     });
   } catch (error) {
     console.error("Chat error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Неизвестная ошибка" }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Неизвестная ошибка" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
