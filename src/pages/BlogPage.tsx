@@ -66,25 +66,20 @@ const BlogPage = () => {
 
         {selectedPost ? (
           <div className="max-w-4xl mx-auto">
-            <button
-              onClick={() => setSelectedPost(null)}
-              className="mb-6 text-primary hover:underline"
-            >
+            <button onClick={() => setSelectedPost(null)} className="mb-6 text-primary hover:underline">
               ← Вернуться к списку
             </button>
             <article className="prose prose-lg max-w-none">
               {selectedPost.image_url && (
-                <img 
-                  src={selectedPost.image_url} 
+                <img
+                  src={selectedPost.image_url}
                   alt={selectedPost.title}
                   className="w-full h-96 object-cover rounded-lg mb-6"
                 />
               )}
               <h1 className="text-4xl font-bold mb-4">{selectedPost.title}</h1>
               <div className="flex items-center gap-4 text-muted-foreground mb-8">
-                {selectedPost.category && (
-                  <Badge variant="secondary">{selectedPost.category}</Badge>
-                )}
+                {selectedPost.category && <Badge variant="secondary">{selectedPost.category}</Badge>}
                 {selectedPost.published_at && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
@@ -96,7 +91,8 @@ const BlogPage = () => {
                   </div>
                 )}
               </div>
-              <div className="prose prose-slate dark:prose-invert max-w-none 
+              <div
+                className="prose prose-slate dark:prose-invert max-w-none 
                 prose-headings:font-bold prose-headings:text-foreground prose-headings:mt-8 prose-headings:mb-4
                 prose-h1:text-4xl prose-h1:mt-0
                 prose-h2:text-3xl prose-h2:border-b prose-h2:border-border prose-h2:pb-2
@@ -111,8 +107,9 @@ const BlogPage = () => {
                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline
                 prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
                 prose-img:rounded-lg prose-img:shadow-lg
-                prose-hr:border-border prose-hr:my-8">
-                {selectedPost.content.includes('<p>') || selectedPost.content.includes('<h') ? (
+                prose-hr:border-border prose-hr:my-8"
+              >
+                {selectedPost.content.includes("<p>") || selectedPost.content.includes("<h") ? (
                   <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
                 ) : (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -141,9 +138,7 @@ const BlogPage = () => {
               </>
             ) : posts.length === 0 ? (
               <div className="col-span-full text-center py-12">
-                <p className="text-muted-foreground">
-                  Пока нет опубликованных статей
-                </p>
+                <p className="text-muted-foreground">Пока нет опубликованных статей</p>
               </div>
             ) : (
               posts.map((post) => (
@@ -154,8 +149,8 @@ const BlogPage = () => {
                 >
                   {post.image_url && (
                     <div className="w-full h-48 overflow-hidden">
-                      <img 
-                        src={post.image_url} 
+                      <img
+                        src={post.image_url}
                         alt={post.title}
                         className="w-full h-full object-cover hover:scale-105 transition-transform"
                       />
@@ -163,9 +158,7 @@ const BlogPage = () => {
                   )}
                   <CardHeader>
                     <div className="flex items-center justify-between mb-2">
-                      {post.category && (
-                        <Badge variant="secondary">{post.category}</Badge>
-                      )}
+                      {post.category && <Badge variant="secondary">{post.category}</Badge>}
                       {post.published_at && (
                         <span className="text-sm text-muted-foreground">
                           {format(new Date(post.published_at), "dd.MM.yyyy")}
