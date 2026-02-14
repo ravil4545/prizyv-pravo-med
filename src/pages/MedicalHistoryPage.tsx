@@ -112,10 +112,10 @@ const categoryBKeywords: Record<string, string[]> = {
 function calculateCategoryBChance(
   article: Article,
   articleLinks: DocumentArticleLink[],
-  assessments: ArticleAssessment[]
+  assessments: ArticleAssessment[],
 ): { categoryB: number; categoryA: number; noData: number; hasRelevantDocs: boolean; relevantDocsCount: number } {
   // Check if there's a saved assessment for this article
-  const assessment = assessments.find(a => a.article_id === article.id);
+  const assessment = assessments.find((a) => a.article_id === article.id);
   if (assessment && assessment.score_v !== null) {
     const score = assessment.score_v;
     return {
@@ -138,8 +138,10 @@ function calculateCategoryBChance(
   }
 
   // Use AI-calculated chances from article links
-  const linksWithChance = articleLinks.filter(link => link.ai_category_chance !== null && link.ai_category_chance > 0);
-  
+  const linksWithChance = articleLinks.filter(
+    (link) => link.ai_category_chance !== null && link.ai_category_chance > 0,
+  );
+
   if (linksWithChance.length === 0) {
     return {
       categoryB: 0,
@@ -151,7 +153,7 @@ function calculateCategoryBChance(
   }
 
   // Take the maximum AI-calculated chance from relevant links
-  const maxChance = Math.max(...linksWithChance.map(link => link.ai_category_chance || 0));
+  const maxChance = Math.max(...linksWithChance.map((link) => link.ai_category_chance || 0));
 
   return {
     categoryB: maxChance,
@@ -164,25 +166,25 @@ function calculateCategoryBChance(
 
 // Get document article links for a specific article
 function getArticleLinks(articleId: string, allLinks: DocumentArticleLink[]): DocumentArticleLink[] {
-  return allLinks.filter(link => link.article_id === articleId);
+  return allLinks.filter((link) => link.article_id === articleId);
 }
 
 // Get documents for an article using the junction table
 function getDocumentsForArticle(
-  articleId: string, 
-  allLinks: DocumentArticleLink[], 
-  allDocuments: UserDocument[]
+  articleId: string,
+  allLinks: DocumentArticleLink[],
+  allDocuments: UserDocument[],
 ): { document: UserDocument; link: DocumentArticleLink }[] {
-  const links = allLinks.filter(link => link.article_id === articleId);
+  const links = allLinks.filter((link) => link.article_id === articleId);
   const result: { document: UserDocument; link: DocumentArticleLink }[] = [];
-  
+
   for (const link of links) {
-    const doc = allDocuments.find(d => d.id === link.document_id);
+    const doc = allDocuments.find((d) => d.id === link.document_id);
     if (doc) {
       result.push({ document: doc, link });
     }
   }
-  
+
   return result;
 }
 
@@ -211,7 +213,9 @@ export default function MedicalHistoryPage() {
   }, [user]);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
       return;
@@ -242,7 +246,9 @@ export default function MedicalHistoryPage() {
   const loadUserDocuments = async () => {
     const { data, error } = await supabase
       .from("medical_documents_v2")
-      .select("id, title, file_url, uploaded_at, raw_text, document_type_id, meta, ai_recommendations, ai_fitness_category, ai_category_chance, linked_article_id")
+      .select(
+        "id, title, file_url, uploaded_at, raw_text, document_type_id, meta, ai_recommendations, ai_fitness_category, ai_category_chance, linked_article_id",
+      )
       .eq("user_id", user.id)
       .order("uploaded_at", { ascending: false });
 
@@ -253,16 +259,15 @@ export default function MedicalHistoryPage() {
 
   const loadDocumentArticleLinks = async () => {
     // Fetch all document article links for user's documents
-    const { data: docs } = await supabase
-      .from("medical_documents_v2")
-      .select("id")
-      .eq("user_id", user.id);
-    
+    const { data: docs } = await supabase.from("medical_documents_v2").select("id").eq("user_id", user.id);
+
     if (docs && docs.length > 0) {
-      const docIds = docs.map(d => d.id);
+      const docIds = docs.map((d) => d.id);
       const { data, error } = await supabase
         .from("document_article_links")
-        .select("id, document_id, article_id, ai_fitness_category, ai_category_chance, ai_recommendations, ai_explanation")
+        .select(
+          "id, document_id, article_id, ai_fitness_category, ai_category_chance, ai_recommendations, ai_explanation",
+        )
         .in("document_id", docIds);
 
       if (!error && data) {
@@ -285,17 +290,16 @@ export default function MedicalHistoryPage() {
   // Calculate article scores using junction table
   const articleScores = useMemo(() => {
     const scores: { article: Article; linksCount: number; maxChance: number }[] = [];
-    
+
     articles.forEach((article) => {
       const links = getArticleLinks(article.id, documentArticleLinks);
-      const linksWithChance = links.filter(link => link.ai_category_chance !== null && link.ai_category_chance > 0);
-      const maxChance = linksWithChance.length > 0 
-        ? Math.max(...linksWithChance.map(link => link.ai_category_chance || 0))
-        : 0;
-      
+      const linksWithChance = links.filter((link) => link.ai_category_chance !== null && link.ai_category_chance > 0);
+      const maxChance =
+        linksWithChance.length > 0 ? Math.max(...linksWithChance.map((link) => link.ai_category_chance || 0)) : 0;
+
       scores.push({ article, linksCount: links.length, maxChance });
     });
-    
+
     return scores;
   }, [articles, documentArticleLinks]);
 
@@ -321,14 +325,14 @@ export default function MedicalHistoryPage() {
 
   // Filter articles by search
   const filteredArticles = useMemo(() => {
-    const articlesToFilter = sortedArticles.map(s => s.article);
+    const articlesToFilter = sortedArticles.map((s) => s.article);
     if (!searchQuery.trim()) return articlesToFilter;
     const query = searchQuery.toLowerCase();
     return articlesToFilter.filter(
       (article) =>
         article.article_number.toLowerCase().includes(query) ||
         article.title.toLowerCase().includes(query) ||
-        (categoryLabels[article.category] || "").toLowerCase().includes(query)
+        (categoryLabels[article.category] || "").toLowerCase().includes(query),
     );
   }, [sortedArticles, searchQuery]);
 
@@ -365,11 +369,11 @@ export default function MedicalHistoryPage() {
   const summarizedRecommendations = useMemo(() => {
     // Collect all raw recommendations with document dates
     const rawRecommendations: { rec: string; docDate: Date | null; docId: string }[] = [];
-    
+
     selectedArticleLinks.forEach((link) => {
-      const doc = userDocuments.find(d => d.id === link.document_id);
+      const doc = userDocuments.find((d) => d.id === link.document_id);
       const docDate = doc?.uploaded_at ? new Date(doc.uploaded_at) : null;
-      
+
       if (link.ai_recommendations && Array.isArray(link.ai_recommendations)) {
         link.ai_recommendations.forEach((rec) => {
           rawRecommendations.push({ rec, docDate, docId: link.document_id });
@@ -408,10 +412,13 @@ export default function MedicalHistoryPage() {
       let matched = false;
       for (const [category, pattern] of Object.entries(categoryPatterns)) {
         if (pattern.test(rec)) {
-          if (!groupedRecs[category].recs.some(r => 
-            r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) || 
-            rec.toLowerCase().includes(r.toLowerCase().slice(0, 30))
-          )) {
+          if (
+            !groupedRecs[category].recs.some(
+              (r) =>
+                r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) ||
+                rec.toLowerCase().includes(r.toLowerCase().slice(0, 30)),
+            )
+          ) {
             groupedRecs[category].recs.push(rec);
           }
           if (docDate && (!groupedRecs[category].oldestDate || docDate < groupedRecs[category].oldestDate)) {
@@ -422,10 +429,13 @@ export default function MedicalHistoryPage() {
         }
       }
       if (!matched) {
-        if (!groupedRecs.other.recs.some(r => 
-          r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) || 
-          rec.toLowerCase().includes(r.toLowerCase().slice(0, 30))
-        )) {
+        if (
+          !groupedRecs.other.recs.some(
+            (r) =>
+              r.toLowerCase().includes(rec.toLowerCase().slice(0, 30)) ||
+              rec.toLowerCase().includes(r.toLowerCase().slice(0, 30)),
+          )
+        ) {
           groupedRecs.other.recs.push(rec);
         }
         if (docDate && (!groupedRecs.other.oldestDate || docDate < groupedRecs.other.oldestDate)) {
@@ -441,12 +451,15 @@ export default function MedicalHistoryPage() {
 
     // Helper to check if documents are outdated
     const isOutdated = (date: Date | null) => date && date < sixMonthsAgo;
-    const monthsOld = (date: Date | null) => date ? Math.floor((now.getTime() - date.getTime()) / (30 * 24 * 60 * 60 * 1000)) : 0;
+    const monthsOld = (date: Date | null) =>
+      date ? Math.floor((now.getTime() - date.getTime()) / (30 * 24 * 60 * 60 * 1000)) : 0;
 
     // Blood tests
     if (groupedRecs.bloodTests.recs.length > 0) {
       if (isOutdated(groupedRecs.bloodTests.oldestDate)) {
-        summarized.push(`Обновите анализы крови (последние данные ${monthsOld(groupedRecs.bloodTests.oldestDate)} мес. назад): общий анализ, биохимия, специфические показатели по заболеванию`);
+        summarized.push(
+          `Обновите анализы крови (последние данные ${monthsOld(groupedRecs.bloodTests.oldestDate)} мес. назад): общий анализ, биохимия, специфические показатели по заболеванию`,
+        );
       } else {
         summarized.push("Сдайте анализы крови: общий анализ, биохимия, специфические показатели по заболеванию");
       }
@@ -455,7 +468,9 @@ export default function MedicalHistoryPage() {
     // Urine tests
     if (groupedRecs.urineTests.recs.length > 0) {
       if (isOutdated(groupedRecs.urineTests.oldestDate)) {
-        summarized.push(`Обновите анализ мочи (давность ${monthsOld(groupedRecs.urineTests.oldestDate)} мес.): общий + специальные исследования`);
+        summarized.push(
+          `Обновите анализ мочи (давность ${monthsOld(groupedRecs.urineTests.oldestDate)} мес.): общий + специальные исследования`,
+        );
       } else {
         summarized.push("Сдайте анализы мочи: общий анализ и специальные исследования при необходимости");
       }
@@ -470,10 +485,12 @@ export default function MedicalHistoryPage() {
       if (/узи|ультразвук/.test(allImageRecs)) imagingTypes.push("УЗИ");
       if (/рентген|ренг|снимок/.test(allImageRecs)) imagingTypes.push("рентген");
       if (/флюорог/.test(allImageRecs)) imagingTypes.push("флюорография");
-      
+
       const imagingList = imagingTypes.length > 0 ? imagingTypes.join(", ") : "лучевую диагностику";
       if (isOutdated(groupedRecs.imaging.oldestDate)) {
-        summarized.push(`Повторите инструментальные исследования (${monthsOld(groupedRecs.imaging.oldestDate)} мес. назад): ${imagingList}`);
+        summarized.push(
+          `Повторите инструментальные исследования (${monthsOld(groupedRecs.imaging.oldestDate)} мес. назад): ${imagingList}`,
+        );
       } else {
         summarized.push(`Пройдите инструментальные исследования: ${imagingList}`);
       }
@@ -482,7 +499,9 @@ export default function MedicalHistoryPage() {
     // ECG
     if (groupedRecs.ecg.recs.length > 0) {
       if (isOutdated(groupedRecs.ecg.oldestDate)) {
-        summarized.push(`Обновите ЭКГ/кардиологическое обследование (давность ${monthsOld(groupedRecs.ecg.oldestDate)} мес.)`);
+        summarized.push(
+          `Обновите ЭКГ/кардиологическое обследование (давность ${monthsOld(groupedRecs.ecg.oldestDate)} мес.)`,
+        );
       } else {
         summarized.push("Пройдите ЭКГ или кардиологическое обследование");
       }
@@ -512,25 +531,31 @@ export default function MedicalHistoryPage() {
 
     // Hospitalization
     if (groupedRecs.hospitalization.recs.length > 0) {
-      summarized.push("Рассмотрите госпитализацию или стационарное обследование для углублённой диагностики и документирования");
+      summarized.push(
+        "Рассмотрите госпитализацию или стационарное обследование для углублённой диагностики и документирования",
+      );
     }
 
     // Documentation
     if (groupedRecs.documentation.recs.length > 0) {
-      summarized.push("Соберите полный пакет медицинской документации: выписки, заключения специалистов, результаты обследований");
+      summarized.push(
+        "Соберите полный пакет медицинской документации: выписки, заключения специалистов, результаты обследований",
+      );
     }
 
     // Other recommendations - keep unique ones that don't fit categories
-    groupedRecs.other.recs.slice(0, 3).forEach(rec => {
-      if (!summarized.some(s => s.toLowerCase().includes(rec.toLowerCase().slice(0, 20)))) {
+    groupedRecs.other.recs.slice(0, 3).forEach((rec) => {
+      if (!summarized.some((s) => s.toLowerCase().includes(rec.toLowerCase().slice(0, 20)))) {
         summarized.push(rec);
       }
     });
 
     // Add general recommendation about document freshness if many are old
-    const oldDocsCount = rawRecommendations.filter(r => r.docDate && r.docDate < sixMonthsAgo).length;
+    const oldDocsCount = rawRecommendations.filter((r) => r.docDate && r.docDate < sixMonthsAgo).length;
     if (oldDocsCount > rawRecommendations.length / 2 && rawRecommendations.length > 2) {
-      summarized.push("⚠️ Большинство документов старше 6 месяцев — рекомендуем обновить основные исследования для актуальности данных");
+      summarized.push(
+        "⚠️ Большинство документов старше 6 месяцев — рекомендуем обновить основные исследования для актуальности данных",
+      );
     }
 
     return summarized;
@@ -539,18 +564,16 @@ export default function MedicalHistoryPage() {
   // Pie chart data
   const pieChartData = useMemo(() => {
     if (!chanceData) return [];
-    
+
     if (chanceData.noData === 100) {
-      return [
-        { name: "Нет данных", value: 100, color: "#94a3b8" },
-      ];
+      return [{ name: "Нет данных", value: 100, color: "#94a3b8" }];
     }
 
     return [
       { name: "Категория В", value: chanceData.categoryB, color: "#10b981" },
       { name: "Категория А/Б", value: chanceData.categoryA, color: "#f59e0b" },
       { name: "Недостаточно данных", value: chanceData.noData, color: "#94a3b8" },
-    ].filter(item => item.value > 0);
+    ].filter((item) => item.value > 0);
   }, [chanceData]);
 
   if (loading) {
@@ -564,12 +587,12 @@ export default function MedicalHistoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2 sm:gap-3">
-              <div 
+              <div
                 className="p-2 sm:p-3 rounded-xl flex-shrink-0 animate-gradient-shift"
                 style={{
                   background: "linear-gradient(135deg, #6366f1, #ec4899)",
@@ -580,11 +603,14 @@ export default function MedicalHistoryPage() {
               </div>
               <span className="truncate">История болезни</span>
             </h1>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              Расписание болезней • {articles.length} статей
-            </p>
+            <p className="text-sm sm:text-base text-muted-foreground">Расписание болезней • {articles.length} статей</p>
           </div>
-          <Button variant="outline" size="sm" className="self-start sm:self-auto flex-shrink-0" onClick={() => navigate("/dashboard")}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start sm:self-auto flex-shrink-0"
+            onClick={() => navigate("/dashboard")}
+          >
             Назад
           </Button>
         </div>
@@ -613,7 +639,7 @@ export default function MedicalHistoryPage() {
                   {Object.entries(groupedArticles).map(([category, categoryArticles]) => (
                     <div key={category}>
                       <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                        <div 
+                        <div
                           className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: categoryColors[category] || "#94a3b8" }}
                         />
@@ -621,7 +647,7 @@ export default function MedicalHistoryPage() {
                       </div>
                       <div className="space-y-1">
                         {categoryArticles.map((article) => {
-                          const hasDocuments = documentArticleLinks.some(link => link.article_id === article.id);
+                          const hasDocuments = documentArticleLinks.some((link) => link.article_id === article.id);
                           return (
                             <button
                               key={article.id}
@@ -629,30 +655,33 @@ export default function MedicalHistoryPage() {
                               className={`
                                 w-full text-left px-3 py-2 rounded-lg transition-all duration-200
                                 flex items-center gap-2 group text-sm
-                                ${selectedArticle?.id === article.id 
-                                  ? "bg-primary text-primary-foreground shadow-md" 
-                                  : "hover:bg-muted"
+                                ${
+                                  selectedArticle?.id === article.id
+                                    ? "bg-primary text-primary-foreground shadow-md"
+                                    : "hover:bg-muted"
                                 }
                               `}
                             >
                               <span className={`flex-shrink-0 w-8 ${hasDocuments ? "font-bold" : "font-medium"}`}>
                                 {article.article_number}
                               </span>
-                              <span className={`truncate ${
-                                selectedArticle?.id === article.id 
-                                  ? "text-primary-foreground/90" 
-                                  : hasDocuments 
-                                    ? "text-foreground font-semibold" 
-                                    : "text-muted-foreground"
-                              }`}>
+                              <span
+                                className={`truncate ${
+                                  selectedArticle?.id === article.id
+                                    ? "text-primary-foreground/90"
+                                    : hasDocuments
+                                      ? "text-foreground font-semibold"
+                                      : "text-muted-foreground"
+                                }`}
+                              >
                                 {article.title}
                               </span>
-                              {hasDocuments && (
-                                <FileCheck className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
-                              )}
-                              <ChevronRight className={`h-4 w-4 flex-shrink-0 ml-auto transition-transform ${
-                                selectedArticle?.id === article.id ? "" : "opacity-0 group-hover:opacity-100"
-                              }`} />
+                              {hasDocuments && <FileCheck className="h-3.5 w-3.5 flex-shrink-0 text-primary" />}
+                              <ChevronRight
+                                className={`h-4 w-4 flex-shrink-0 ml-auto transition-transform ${
+                                  selectedArticle?.id === article.id ? "" : "opacity-0 group-hover:opacity-100"
+                                }`}
+                              />
                             </button>
                           );
                         })}
@@ -673,10 +702,10 @@ export default function MedicalHistoryPage() {
                   <CardHeader className="px-3 sm:px-6">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                       <div className="min-w-0">
-                        <Badge 
-                          style={{ 
+                        <Badge
+                          style={{
                             backgroundColor: categoryColors[selectedArticle.category] || "#94a3b8",
-                            color: "white"
+                            color: "white",
                           }}
                           className="mb-2 text-xs"
                         >
@@ -737,14 +766,12 @@ export default function MedicalHistoryPage() {
                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                   ))}
                                 </Pie>
-                                <Tooltip 
-                                  formatter={(value: number) => [`${value}%`, "Вероятность"]}
-                                />
-                                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                                <Tooltip formatter={(value: number) => [`${value}%`, "Вероятность"]} />
+                                <Legend wrapperStyle={{ fontSize: "12px" }} />
                               </PieChart>
                             </ResponsiveContainer>
                           </div>
-                          
+
                           <div className="space-y-3 sm:space-y-4">
                             <div className="p-3 sm:p-4 rounded-lg bg-muted/50">
                               <div className="flex items-center gap-3 mb-2">
@@ -753,9 +780,7 @@ export default function MedicalHistoryPage() {
                                 ) : (
                                   <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
                                 )}
-                                <span className="text-xl sm:text-2xl font-bold">
-                                  {chanceData?.categoryB || 0}%
-                                </span>
+                                <span className="text-xl sm:text-2xl font-bold">{chanceData?.categoryB || 0}%</span>
                               </div>
                               <p className="text-xs sm:text-sm text-muted-foreground">
                                 Вероятность категории «В» на основе документов
@@ -765,15 +790,17 @@ export default function MedicalHistoryPage() {
                             <div className="space-y-2 text-sm">
                               <p className="flex items-center gap-2">
                                 <FileText className="h-4 w-4 text-primary" />
-                                <span>Найдено релевантных документов: <strong>{chanceData?.relevantDocsCount || 0}</strong></span>
+                                <span>
+                                  Найдено релевантных документов: <strong>{chanceData?.relevantDocsCount || 0}</strong>
+                                </span>
                               </p>
-                              
+
                               {chanceData && chanceData.categoryB > 0 && (
                                 <p className="text-muted-foreground text-xs mt-4">
                                   * Для повышения шансов рекомендуется:
                                 </p>
                               )}
-                              
+
                               {chanceData && chanceData.categoryB < 70 && chanceData.categoryB > 0 && (
                                 <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
                                   <li>Добавить документы с давностью диагноза более 6 месяцев</li>
@@ -827,8 +854,8 @@ export default function MedicalHistoryPage() {
                         <p className="text-xs sm:text-sm">
                           Загрузите документы: <strong className="break-words">{selectedArticle.title}</strong>
                         </p>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           className="mt-4"
                           onClick={() => navigate("/medical-documents")}
@@ -839,7 +866,7 @@ export default function MedicalHistoryPage() {
                     ) : (
                       <div className="space-y-2 sm:space-y-3">
                         {documentsWithLinks.slice(0, 10).map(({ document: doc, link }) => (
-                          <div 
+                          <div
                             key={`${doc.id}-${link.id}`}
                             className="flex flex-col gap-2 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                           >
@@ -850,14 +877,21 @@ export default function MedicalHistoryPage() {
                                 <p className="text-xs text-muted-foreground">
                                   {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
                                   {link.ai_category_chance !== null && (
-                                    <span className="ml-2 text-primary font-medium">• {link.ai_category_chance}% шанс В</span>
+                                    <span className="ml-2 text-primary font-medium">
+                                      • {link.ai_category_chance}% шанс В
+                                    </span>
                                   )}
                                 </p>
                               </div>
-                              <Button variant="ghost" size="sm" className="flex-shrink-0 text-xs" onClick={async () => {
-                                const url = await getSignedDocumentUrl(doc.file_url);
-                                if (url) window.open(url, '_blank');
-                              }}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="flex-shrink-0 text-xs"
+                                onClick={async () => {
+                                  const url = await getSignedDocumentUrl(doc.file_url);
+                                  if (url) window.open(url, "_blank");
+                                }}
+                              >
                                 Открыть
                               </Button>
                             </div>
@@ -873,8 +907,8 @@ export default function MedicalHistoryPage() {
                             И ещё {documentsWithLinks.length - 10} документов...
                           </p>
                         )}
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           className="w-full"
                           onClick={() => navigate("/medical-documents")}
