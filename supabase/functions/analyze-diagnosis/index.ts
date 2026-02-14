@@ -27,7 +27,7 @@ serve(async (req) => {
     const prompt = `Проанализируй следующий диагноз и определи предварительную категорию годности к военной службе согласно Расписанию болезней РФ:
 
 Диагноз: ${diagnosisName}
-${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ''}
+${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ""}
 
 На основе Расписания болезней определи:
 1. Категорию годности (А, Б, В, Г, Д)
@@ -51,7 +51,7 @@ ${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ''}
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -59,12 +59,13 @@ ${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ''}
         messages: [
           {
             role: "system",
-            content: "Ты медицинский эксперт, специализирующийся на военно-врачебной экспертизе. Определяй категорию годности строго по Расписанию болезней. Отвечай в формате JSON."
+            content:
+              "Ты медицинский эксперт, специализирующийся на военно-врачебной экспертизе. Определяй категорию годности строго по Расписанию болезней. Отвечай в формате JSON.",
           },
           {
             role: "user",
-            content: prompt
-          }
+            content: prompt,
+          },
         ],
         temperature: 0.2,
       }),
@@ -78,7 +79,7 @@ ${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ''}
 
     const data = await response.json();
     const content = data.choices[0].message.content;
-    
+
     let result;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -92,30 +93,27 @@ ${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ''}
       result = {
         category: "Требуется дополнительное обследование",
         article: "Не определена",
-        explanation: "Не удалось автоматически определить категорию. Обратитесь к специалисту."
+        explanation: "Не удалось автоматически определить категорию. Обратитесь к специалисту.",
       };
     }
 
     // Форматируем результат для отображения
-    const formattedCategory = `${result.category} - ${result.explanation}${result.article !== 'Не определена' ? ` (Статья ${result.article})` : ''}`;
+    const formattedCategory = `${result.category} - ${result.explanation}${result.article !== "Не определена" ? ` (Статья ${result.article})` : ""}`;
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         category: formattedCategory,
-        details: result
+        details: result,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     console.error("Error in analyze-diagnosis:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
