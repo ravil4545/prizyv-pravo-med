@@ -71,3 +71,13 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Настройка email-подтверждения (Supabase)
+
+Тема и текст письма подтверждения регистрации настраиваются в Supabase Dashboard:
+
+1. Перейдите в **Authentication → Email Templates → Confirm signup**
+2. Задайте:
+   - **Subject**: `nepriziv.ru подтверждение регистрации`
+   - В теле письма используйте фразу: `nepriziv.ru подтверждение регистрации`
+3. Сохраните изменения.
