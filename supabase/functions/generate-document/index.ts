@@ -27,22 +27,28 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Получаем данные профиля
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    // For questionnaire and obsledovaniya, profile is not required
+    let profile: any = null;
+    let diagnoses: any[] = [];
 
-    if (profileError) {
-      console.error("Error fetching profile:", profileError);
-      throw new Error("Не удалось загрузить данные профиля");
+    if (docType !== "questionnaire" && docType !== "obsledovaniya") {
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+        throw new Error("Не удалось загрузить данные профиля");
+      }
+      profile = profileData;
+
+      const { data: diagData } = await supabase.from("user_diagnoses").select("*").eq("user_id", userId);
+      diagnoses = diagData || [];
     }
 
-    // Получаем диагнозы пользователя
-    const { data: diagnoses } = await supabase.from("user_diagnoses").select("*").eq("user_id", userId);
-
-    console.log("Profile data loaded:", { profile, diagnoses });
+    console.log("Document generation:", { docType, format, hasProfile: !!profile });
 
     // Генерируем контент документа в зависимости от типа
     let textContent = "";
