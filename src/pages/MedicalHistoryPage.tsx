@@ -623,15 +623,41 @@ export default function MedicalHistoryPage() {
     return lines.join("\n");
   }, [structuredExaminations]);
 
-  // Global recommendations aggregated from ALL document links
+  // Global recommendations based ONLY on questionnaire documents
   const globalExaminationsText = useMemo(() => {
-    if (documentArticleLinks.length === 0) return "";
+    // Find questionnaire documents only
+    const questionnaireDocs = userDocuments.filter(
+      (doc) => doc.meta && typeof doc.meta === "object" && (doc.meta as any).is_questionnaire
+    );
+
+    if (questionnaireDocs.length === 0) return "";
+
+    // Collect recommendations from questionnaire document links only
+    const questionnaireDocIds = new Set(questionnaireDocs.map((d) => d.id));
+    const questionnaireLinks = documentArticleLinks.filter((link) => questionnaireDocIds.has(link.document_id));
 
     const allRecs: string[] = [];
-    documentArticleLinks.forEach((link) => {
+
+    // Also use ai_recommendations directly from questionnaire documents
+    questionnaireDocs.forEach((doc) => {
+      if (doc.ai_recommendations && Array.isArray(doc.ai_recommendations)) {
+        doc.ai_recommendations.forEach((rec) => {
+          const lower = rec.toLowerCase();
+          // Filter out treatment recommendations
+          if (/лечени|терапи|принимать|препарат|таблетк|курс лечения|назначен/i.test(lower)) return;
+          if (!allRecs.some(r => r.toLowerCase().includes(lower.slice(0, 30)) || lower.includes(r.toLowerCase().slice(0, 30)))) {
+            allRecs.push(rec);
+          }
+        });
+      }
+    });
+
+    questionnaireLinks.forEach((link) => {
       if (link.ai_recommendations && Array.isArray(link.ai_recommendations)) {
         link.ai_recommendations.forEach((rec) => {
           const lower = rec.toLowerCase();
+          // Filter out treatment recommendations
+          if (/лечени|терапи|принимать|препарат|таблетк|курс лечения|назначен/i.test(lower)) return;
           if (!allRecs.some(r => r.toLowerCase().includes(lower.slice(0, 30)) || lower.includes(r.toLowerCase().slice(0, 30)))) {
             allRecs.push(rec);
           }
@@ -645,14 +671,51 @@ export default function MedicalHistoryPage() {
     const examinations: string[] = [];
     const consultations: string[] = [];
 
+    // Extract specific specialist names for consultations
+    const specialistPatterns: { pattern: RegExp; name: string }[] = [
+      { pattern: /невролог/i, name: "Невролог" },
+      { pattern: /кардиолог/i, name: "Кардиолог" },
+      { pattern: /терапевт/i, name: "Терапевт" },
+      { pattern: /хирург/i, name: "Хирург" },
+      { pattern: /ортопед/i, name: "Ортопед" },
+      { pattern: /офтальмолог|окулист/i, name: "Офтальмолог" },
+      { pattern: /лор|отоларинголог/i, name: "ЛОР (отоларинголог)" },
+      { pattern: /психиатр/i, name: "Психиатр" },
+      { pattern: /психотерапевт/i, name: "Психотерапевт" },
+      { pattern: /дерматолог/i, name: "Дерматолог" },
+      { pattern: /гастроэнтеролог/i, name: "Гастроэнтеролог" },
+      { pattern: /эндокринолог/i, name: "Эндокринолог" },
+      { pattern: /уролог/i, name: "Уролог" },
+      { pattern: /пульмонолог/i, name: "Пульмонолог" },
+      { pattern: /аллерголог/i, name: "Аллерголог" },
+      { pattern: /онколог/i, name: "Онколог" },
+      { pattern: /стоматолог/i, name: "Стоматолог" },
+      { pattern: /ревматолог/i, name: "Ревматолог" },
+      { pattern: /нефролог/i, name: "Нефролог" },
+    ];
+
+    const addedSpecialists = new Set<string>();
+
     allRecs.forEach((rec) => {
       const lower = rec.toLowerCase();
-      if (/консультац|врач|специалист|невролог|кардиолог|терапевт|хирург|ортопед|офтальмолог|лор|психиатр|дерматолог|гастроэнтеролог|эндокринолог|уролог|пульмонолог/.test(lower)) {
-        consultations.push(rec);
-      } else if (/мрт|кт|узи|рентген|экг|кардиограм|холтер|томограф|флюорог|инструментальн|лучев|обследован|госпитализ|стационар/.test(lower)) {
+      if (/консультац|врач|специалист/.test(lower)) {
+        // Extract individual specialists
+        specialistPatterns.forEach(({ pattern, name }) => {
+          if (pattern.test(lower) && !addedSpecialists.has(name)) {
+            consultations.push(`Консультация ${name.toLowerCase()}а`);
+            addedSpecialists.add(name);
+          }
+        });
+        // If no specific specialist matched, add the generic rec
+        if (!specialistPatterns.some(({ pattern }) => pattern.test(lower))) {
+          consultations.push(rec);
+        }
+      } else if (/мрт|кт|узи|рентген|экг|кардиограм|холтер|томограф|флюорог|инструментальн|лучев|обследован|госпитализ|стационар/i.test(lower)) {
         examinations.push(rec);
       } else {
-        analyses.push(rec);
+        // For analyses - extract just the name
+        const cleanedRec = rec.replace(/^(сдать|пройти|выполнить|сделать)\s+/i, "").replace(/\s*[-–—]\s*.*$/, "");
+        analyses.push(cleanedRec);
       }
     });
 
@@ -673,7 +736,7 @@ export default function MedicalHistoryPage() {
       consultations.forEach((r) => { lines.push(`${num}. ${r}`); num++; });
     }
     return lines.join("\n");
-  }, [documentArticleLinks]);
+  }, [documentArticleLinks, userDocuments]);
 
   // Sync global exams text
   useEffect(() => {
@@ -874,7 +937,7 @@ export default function MedicalHistoryPage() {
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
                   <Stethoscope className="h-5 w-5" />
                   План обследований
-                  <Badge variant="secondary" className="text-[10px]">На основании всех документов</Badge>
+                  <Badge variant="secondary" className="text-[10px]">На основании опросника</Badge>
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Button
