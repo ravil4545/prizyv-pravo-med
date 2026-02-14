@@ -13,60 +13,55 @@ const corsHeaders = {
 };
 
 // Retry helper with exponential backoff for image processing errors
-async function callAIWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3
-): Promise<Response> {
+async function callAIWithRetry(url: string, options: RequestInit, maxRetries: number = 3): Promise<Response> {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`AI API call attempt ${attempt}/${maxRetries}`);
       const response = await fetch(url, options);
-      
+
       // If response is OK, return it
       if (response.ok) {
         return response;
       }
-      
+
       // For non-retriable errors, return immediately
       if (response.status === 429 || response.status === 402) {
         return response;
       }
-      
+
       // Check if it's an image processing error (retriable)
       const errorText = await response.text();
       console.error(`AI API error (attempt ${attempt}):`, response.status, errorText);
-      
-      const isImageProcessingError = 
+
+      const isImageProcessingError =
         errorText.includes("Unable to process input image") ||
         errorText.includes("Could not process image") ||
         errorText.includes("Invalid image") ||
         (response.status === 400 && errorText.toLowerCase().includes("image"));
-      
+
       if (isImageProcessingError && attempt < maxRetries) {
         // Wait with exponential backoff: 1s, 2s, 4s
         const delayMs = Math.pow(2, attempt - 1) * 1000;
         console.log(`Image processing error, retrying in ${delayMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
-      
+
       // Non-retriable error or last attempt
       throw new Error(`AI API error: ${response.status} - ${errorText}`);
-      
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
       if (attempt < maxRetries) {
         const delayMs = Math.pow(2, attempt - 1) * 1000;
         console.log(`Request failed, retrying in ${delayMs}ms...`, lastError.message);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
   }
-  
+
   throw lastError || new Error("All retry attempts failed");
 }
 
@@ -100,8 +95,8 @@ serve(async (req) => {
       .select("id, article_number, title, category")
       .eq("is_active", true);
 
-    const documentTypesStr = documentTypes?.map(t => `${t.code}: ${t.name}`).join(", ") || "";
-    const articlesStr = articles?.map(a => `Статья ${a.article_number}: ${a.title}`).join("\n") || "";
+    const documentTypesStr = documentTypes?.map((t) => `${t.code}: ${t.name}`).join(", ") || "";
+    const articlesStr = articles?.map((a) => `Статья ${a.article_number}: ${a.title}`).join("\n") || "";
 
     // Базовый промпт с правилами
     const basePrompt = `Ты медицинский эксперт-документовед высшей категории, специализирующийся на анализе медицинских документов для определения годности к военной службе по Постановлению Правительства РФ №565 (Расписание болезней).
@@ -128,8 +123,8 @@ serve(async (req) => {
 
     if (isHandwritten && manualText) {
       // Анализ рукописного документа на основе текста, введённого пользователем
-      console.log('Starting handwritten document analysis based on user-entered text');
-      
+      console.log("Starting handwritten document analysis based on user-entered text");
+
       prompt = `${basePrompt}
 
 ЗАДАЧА: Проанализируй информацию, введённую пользователем из рукописного медицинского документа:
@@ -212,15 +207,15 @@ ${manualText}
         messages: [
           {
             role: "user",
-            content: prompt
-          }
+            content: prompt,
+          },
         ],
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
       };
     } else {
       // Обычный анализ документа с изображением
-      console.log('Starting comprehensive medical document analysis with Lovable AI');
-      
+      console.log("Starting comprehensive medical document analysis with Lovable AI");
+
       prompt = `${basePrompt}
 
 ЗАДАЧА: Проанализируй этот медицинский документ и выполни следующие действия:
@@ -322,20 +317,18 @@ ${manualText}
 }`;
 
       // Extract base64 data without data URL prefix if present
-      let base64Data = imageBase64.includes('base64,') 
-        ? imageBase64.split('base64,')[1] 
-        : imageBase64;
-      
+      let base64Data = imageBase64.includes("base64,") ? imageBase64.split("base64,")[1] : imageBase64;
+
       // Clean base64 string - remove any whitespace or newlines
-      base64Data = base64Data.replace(/\s/g, '');
-      
+      base64Data = base64Data.replace(/\s/g, "");
+
       // Validate base64 length
-      console.log('Image base64 length:', base64Data.length);
-      
+      console.log("Image base64 length:", base64Data.length);
+
       if (!base64Data || base64Data.length < 100) {
         throw new Error("Invalid image data: base64 string is too short or empty");
       }
-      
+
       // Check if base64 is valid
       try {
         // Test decode a small portion to verify it's valid base64
@@ -353,18 +346,18 @@ ${manualText}
             content: [
               {
                 type: "text",
-                text: prompt
+                text: prompt,
               },
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/jpeg;base64,${base64Data}`
-                }
-              }
-            ]
-          }
+                  url: `data:image/jpeg;base64,${base64Data}`,
+                },
+              },
+            ],
+          },
         ],
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
       };
     }
 
@@ -376,31 +369,32 @@ ${manualText}
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(requestBody),
         },
-        3 // max 3 retries
+        3, // max 3 retries
       );
     } catch (retryError) {
       console.error("All AI API retry attempts failed:", retryError);
-      
+
       // Check if it was an image processing error
       const errorMessage = retryError instanceof Error ? retryError.message : String(retryError);
       if (errorMessage.includes("image") || errorMessage.includes("Unable to process")) {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "image_processing_error",
-            message: "Не удалось распознать изображение. Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим ручного ввода для рукописных документов."
+            message:
+              "Не удалось распознать изображение. Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим ручного ввода для рукописных документов.",
           }),
           {
             status: 422,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          },
         );
       }
-      
+
       throw retryError;
     }
 
@@ -408,30 +402,30 @@ ${manualText}
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "rate_limit",
-            message: "Превышен лимит запросов. Попробуйте позже."
+            message: "Превышен лимит запросов. Попробуйте позже.",
           }),
           {
             status: 429,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          },
         );
       }
-      
+
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "payment_required",
-            message: "Требуется пополнение баланса AI."
+            message: "Требуется пополнение баланса AI.",
           }),
           {
             status: 402,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          },
         );
       }
-      
+
       const errorText = await response.text();
       console.error("AI API error:", response.status, errorText);
       throw new Error(`AI API error: ${response.status}`);
@@ -439,7 +433,7 @@ ${manualText}
 
     const data = await response.json();
     const content = data.choices[0].message.content;
-    
+
     let result;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -460,14 +454,14 @@ ${manualText}
         categoryBChance: 0,
         explanation: "Не удалось автоматически проанализировать документ.",
         recommendations: ["Загрузите более чёткое изображение документа"],
-        suggestedTitle: "Медицинский документ"
+        suggestedTitle: "Медицинский документ",
       };
     }
 
     // Находим ID типа документа по коду
     let documentTypeId = null;
     if (result.documentTypeCode && documentTypes) {
-      const foundType = documentTypes.find(t => t.code === result.documentTypeCode);
+      const foundType = documentTypes.find((t) => t.code === result.documentTypeCode);
       documentTypeId = foundType?.id || null;
     }
 
@@ -475,7 +469,7 @@ ${manualText}
     let primaryArticleId = null;
     const primaryArticleNumber = result.primaryArticleNumber || result.linkedArticleNumber;
     if (primaryArticleNumber && articles) {
-      const foundArticle = articles.find(a => a.article_number === String(primaryArticleNumber));
+      const foundArticle = articles.find((a) => a.article_number === String(primaryArticleNumber));
       primaryArticleId = foundArticle?.id || null;
     }
 
@@ -487,9 +481,10 @@ ${manualText}
         .select("meta, title")
         .eq("id", documentId)
         .single();
-      
-      const hasParts = currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts) && currentDoc.meta.parts.length > 1;
-      
+
+      const hasParts =
+        currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts) && currentDoc.meta.parts.length > 1;
+
       const updateData: Record<string, any> = {
         raw_text: result.extractedText,
         is_classified: true,
@@ -497,7 +492,7 @@ ${manualText}
         ai_category_chance: result.categoryBChance || 0,
         ai_recommendations: result.recommendations || [],
         ai_explanation: result.explanation,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       if (result.documentDate) {
@@ -505,10 +500,10 @@ ${manualText}
       }
       if (documentTypeId) {
         updateData.document_type_id = documentTypeId;
-        
+
         // Если есть parts в meta, обновляем тип первой части
         if (currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts)) {
-          const foundType = documentTypes?.find(t => t.id === documentTypeId);
+          const foundType = documentTypes?.find((t) => t.id === documentTypeId);
           const updatedParts = [...currentDoc.meta.parts];
           if (updatedParts[0]) {
             updatedParts[0].type_id = documentTypeId;
@@ -550,8 +545,8 @@ ${manualText}
         const linksToInsert = [];
         for (const articleLink of result.linkedArticles) {
           const articleNum = String(articleLink.articleNumber);
-          const foundArticle = articles?.find(a => a.article_number === articleNum);
-          
+          const foundArticle = articles?.find((a) => a.article_number === articleNum);
+
           if (foundArticle) {
             linksToInsert.push({
               document_id: documentId,
@@ -559,15 +554,13 @@ ${manualText}
               ai_fitness_category: articleLink.fitnessCategory,
               ai_category_chance: articleLink.categoryBChance || 0,
               ai_recommendations: articleLink.recommendations || [],
-              ai_explanation: articleLink.explanation || `Диагноз: ${articleLink.diagnosisFound}`
+              ai_explanation: articleLink.explanation || `Диагноз: ${articleLink.diagnosisFound}`,
             });
           }
         }
 
         if (linksToInsert.length > 0) {
-          const { error: insertError } = await supabase
-            .from("document_article_links")
-            .insert(linksToInsert);
+          const { error: insertError } = await supabase.from("document_article_links").insert(linksToInsert);
 
           if (insertError) {
             console.error("Failed to insert article links:", insertError);
@@ -583,16 +576,14 @@ ${manualText}
           .eq("document_id", documentId);
 
         if (!deleteError) {
-          const { error: insertError } = await supabase
-            .from("document_article_links")
-            .insert({
-              document_id: documentId,
-              article_id: primaryArticleId,
-              ai_fitness_category: result.fitnessCategory,
-              ai_category_chance: result.categoryBChance || 0,
-              ai_recommendations: result.recommendations || [],
-              ai_explanation: result.explanation
-            });
+          const { error: insertError } = await supabase.from("document_article_links").insert({
+            document_id: documentId,
+            article_id: primaryArticleId,
+            ai_fitness_category: result.fitnessCategory,
+            ai_category_chance: result.categoryBChance || 0,
+            ai_recommendations: result.recommendations || [],
+            ai_explanation: result.explanation,
+          });
 
           if (insertError) {
             console.error("Failed to insert single article link:", insertError);
@@ -615,23 +606,23 @@ ${manualText}
         categoryBChance: result.categoryBChance || 0,
         explanation: result.explanation,
         recommendations: result.recommendations || [],
-        suggestedTitle: result.suggestedTitle
+        suggestedTitle: result.suggestedTitle,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     console.error("Error in analyze-medical-document:", error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: "processing_error",
-        message: error instanceof Error ? error.message : "Произошла ошибка при анализе документа"
+        message: error instanceof Error ? error.message : "Произошла ошибка при анализе документа",
       }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });
