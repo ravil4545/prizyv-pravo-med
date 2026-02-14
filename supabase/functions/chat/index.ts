@@ -1,16 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-// CORS configuration - restrict to production domain in production
-const getAllowedOrigin = () => {
-  const origin = Deno.env.get("ALLOWED_ORIGIN");
-  return origin || "*"; // Default to * for development
+// CORS configuration - allow production and preview origins
+const getAllowedOrigin = (req?: Request) => {
+  const requestOrigin = req?.headers.get("origin") || "";
+  const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
+  
+  // Allow the configured origin
+  if (allowedOrigin && requestOrigin === allowedOrigin) return requestOrigin;
+  // Allow Lovable preview domains
+  if (requestOrigin.endsWith(".lovable.app")) return requestOrigin;
+  // Allow localhost for development
+  if (requestOrigin.startsWith("http://localhost")) return requestOrigin;
+  // Fallback
+  return allowedOrigin || "*";
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": getAllowedOrigin(),
+const getCorsHeaders = (req?: Request) => ({
+  "Access-Control-Allow-Origin": getAllowedOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+});
 
 // Input validation schema
 const messageSchema = z.object({
@@ -24,6 +33,8 @@ const chatRequestSchema = z.object({
 });
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -43,23 +54,26 @@ serve(async (req) => {
 
     const { messages, medicalContext } = validation.data;
 
-    // Require authentication for all chat requests
+    // Authentication: required for medicalContext, optional for basic chat
     const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Требуется аутентификация" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    let authenticatedUser = null;
+
+    if (authHeader?.startsWith("Bearer ")) {
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        global: { headers: { Authorization: authHeader } },
       });
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data?.user) {
+        authenticatedUser = data.user;
+      }
     }
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data?.user) {
-      return new Response(JSON.stringify({ error: "Неверный токен авторизации" }), {
+
+    // Medical context requires authentication
+    if (medicalContext && !authenticatedUser) {
+      return new Response(JSON.stringify({ error: "Требуется аутентификация для доступа к медицинским данным" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -140,6 +154,8 @@ serve(async (req) => {
 ${medicalContext}`;
     }
 
+    console.log("[Chat] Calling OpenRouter with model x-ai/grok-4, messages:", messages.length);
+
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -155,7 +171,12 @@ ${medicalContext}`;
       }),
     });
 
+    console.log("[Chat] OpenRouter response status:", response.status);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Chat] AI gateway error:", response.status, errorText);
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Превышен лимит запросов. Пожалуйста, попробуйте позже." }), {
           status: 429,
@@ -169,9 +190,7 @@ ${medicalContext}`;
         });
       }
 
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "Ошибка сервиса AI" }), {
+      return new Response(JSON.stringify({ error: `Ошибка сервиса AI: ${response.status}` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -181,7 +200,8 @@ ${medicalContext}`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
-    console.error("Chat error:", error);
+    const corsHeaders = getCorsHeaders(req);
+    console.error("[Chat] Error:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Неизвестная ошибка" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
