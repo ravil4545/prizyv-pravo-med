@@ -8,7 +8,7 @@ const SIGNED_URL_EXPIRY = 3600; // 1 hour
 export function extractFilePath(fileUrl: string): string {
   // If it's already a relative path (no http)
   if (!fileUrl.startsWith("http")) return fileUrl;
-  
+
   // Extract path after /object/public/medical-documents/ or /object/sign/medical-documents/
   const match = fileUrl.match(/\/(?:object\/(?:public|sign)\/)?medical-documents\/(.+)/);
   return match ? match[1] : fileUrl;
@@ -19,10 +19,8 @@ export function extractFilePath(fileUrl: string): string {
  */
 export async function getSignedDocumentUrl(fileUrl: string): Promise<string | null> {
   const filePath = extractFilePath(fileUrl);
-  
-  const { data, error } = await supabase.storage
-    .from("medical-documents")
-    .createSignedUrl(filePath, SIGNED_URL_EXPIRY);
+
+  const { data, error } = await supabase.storage.from("medical-documents").createSignedUrl(filePath, SIGNED_URL_EXPIRY);
 
   if (error) {
     console.error("Error creating signed URL:", error);
@@ -38,11 +36,9 @@ export async function getSignedDocumentUrl(fileUrl: string): Promise<string | nu
 export async function uploadMedicalDocument(
   fileName: string,
   file: Blob,
-  contentType = "application/pdf"
+  contentType = "application/pdf",
 ): Promise<string> {
-  const { error } = await supabase.storage
-    .from("medical-documents")
-    .upload(fileName, file, { contentType });
+  const { error } = await supabase.storage.from("medical-documents").upload(fileName, file, { contentType });
 
   if (error) throw error;
 
