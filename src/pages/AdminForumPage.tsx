@@ -58,18 +58,17 @@ const AdminForumPage = () => {
   }, []);
 
   const checkAdmin = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       navigate("/auth");
       return;
     }
 
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id);
+    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
 
-    const isAdmin = roles?.some(r => r.role === "admin");
+    const isAdmin = roles?.some((r) => r.role === "admin");
     if (!isAdmin) {
       toast({
         title: "Доступ запрещён",
@@ -96,7 +95,7 @@ const AdminForumPage = () => {
             description: `Пользователь создал новую тему: ${payload.new.title}`,
           });
           loadPosts();
-        }
+        },
       )
       .subscribe();
 
@@ -107,10 +106,7 @@ const AdminForumPage = () => {
 
   const loadPosts = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("forum_posts")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("forum_posts").select("*").order("created_at", { ascending: false });
 
     if (error) {
       toast({
@@ -125,17 +121,13 @@ const AdminForumPage = () => {
     // Fetch profile names separately
     const postsWithNames = await Promise.all(
       (data || []).map(async (post) => {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", post.user_id)
-          .single();
-        
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", post.user_id).single();
+
         return {
           ...post,
           author_name: profile?.full_name || "Неизвестен",
         };
-      })
+      }),
     );
 
     setPosts(postsWithNames);
@@ -143,10 +135,7 @@ const AdminForumPage = () => {
   };
 
   const loadComments = async () => {
-    const { data, error } = await supabase
-      .from("forum_comments")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("forum_comments").select("*").order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error loading comments:", error);
@@ -157,33 +146,22 @@ const AdminForumPage = () => {
     const commentsWithDetails = await Promise.all(
       (data || []).map(async (comment) => {
         const [profileResult, postResult] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", comment.user_id)
-            .single(),
-          supabase
-            .from("forum_posts")
-            .select("title")
-            .eq("id", comment.post_id)
-            .single()
+          supabase.from("profiles").select("full_name").eq("id", comment.user_id).single(),
+          supabase.from("forum_posts").select("title").eq("id", comment.post_id).single(),
         ]);
-        
+
         return {
           ...comment,
           author_name: profileResult.data?.full_name || "Неизвестный",
           post_title: postResult.data?.title || "Удалённая тема",
         };
-      })
+      }),
     );
     setComments(commentsWithDetails);
   };
 
   const updatePostStatus = async (postId: string, status: string) => {
-    const { error } = await supabase
-      .from("forum_posts")
-      .update({ status })
-      .eq("id", postId);
+    const { error } = await supabase.from("forum_posts").update({ status }).eq("id", postId);
 
     if (error) {
       toast({
@@ -207,10 +185,7 @@ const AdminForumPage = () => {
     }
 
     // First delete all comments for this post
-    const { error: commentsError } = await supabase
-      .from("forum_comments")
-      .delete()
-      .eq("post_id", postId);
+    const { error: commentsError } = await supabase.from("forum_comments").delete().eq("post_id", postId);
 
     if (commentsError) {
       toast({
@@ -222,10 +197,7 @@ const AdminForumPage = () => {
     }
 
     // Then delete the post
-    const { error } = await supabase
-      .from("forum_posts")
-      .delete()
-      .eq("id", postId);
+    const { error } = await supabase.from("forum_posts").delete().eq("id", postId);
 
     if (error) {
       toast({
@@ -249,10 +221,7 @@ const AdminForumPage = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from("forum_comments")
-      .delete()
-      .eq("id", commentId);
+    const { error } = await supabase.from("forum_comments").delete().eq("id", commentId);
 
     if (error) {
       toast({
@@ -270,10 +239,7 @@ const AdminForumPage = () => {
   };
 
   const approveComment = async (commentId: string) => {
-    const { error } = await supabase
-      .from("forum_comments")
-      .update({ status: "approved" })
-      .eq("id", commentId);
+    const { error } = await supabase.from("forum_comments").update({ status: "approved" }).eq("id", commentId);
 
     if (error) {
       toast({
@@ -301,10 +267,10 @@ const AdminForumPage = () => {
 
     const { error } = await supabase
       .from("forum_posts")
-      .update({ 
-        title: editTitle, 
+      .update({
+        title: editTitle,
         content: editContent,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq("id", editingPost.id);
 
@@ -358,9 +324,7 @@ const AdminForumPage = () => {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Управление форумом</h1>
-              <p className="text-muted-foreground">
-                Модерация тем и сообщений
-              </p>
+              <p className="text-muted-foreground">Модерация тем и сообщений</p>
             </div>
             <Button variant="ghost" onClick={() => navigate("/dashboard")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -372,152 +336,125 @@ const AdminForumPage = () => {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="posts">
                 Темы
-                {posts.filter(p => p.status === 'pending').length > 0 && (
+                {posts.filter((p) => p.status === "pending").length > 0 && (
                   <Badge variant="destructive" className="ml-2">
-                    {posts.filter(p => p.status === 'pending').length}
+                    {posts.filter((p) => p.status === "pending").length}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="comments">
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Комментарии
-                {comments.filter(c => c.status === 'pending').length > 0 && (
+                {comments.filter((c) => c.status === "pending").length > 0 && (
                   <Badge variant="destructive" className="ml-2">
-                    {comments.filter(c => c.status === 'pending').length}
+                    {comments.filter((c) => c.status === "pending").length}
                   </Badge>
                 )}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="posts">
-            <div className="grid gap-4">
-              {posts.map((post) => (
-                <Card key={post.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>Автор: {post.author_name}</span>
-                          <span>Категория: {post.topic_type}</span>
-                          <span>{new Date(post.created_at).toLocaleString("ru")}</span>
-                        </div>
-                      </div>
-                      {getStatusBadge(post.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm mb-4 line-clamp-2">{post.content}</p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedPost(post)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Просмотр
-                      </Button>
-                      {post.status === "pending" && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => updatePostStatus(post.id, "approved")}
-                          >
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Одобрить
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => updatePostStatus(post.id, "rejected")}
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Отклонить
-                          </Button>
-                        </>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => startEditing(post)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Изменить
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deletePost(post.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Удалить
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            </TabsContent>
-
-            <TabsContent value="comments">
-            <div className="space-y-4">
-              {comments.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Нет комментариев</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                comments.map((comment) => (
-                  <Card key={comment.id}>
+              <div className="grid gap-4">
+                {posts.map((post) => (
+                  <Card key={post.id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant={comment.status === "approved" ? "default" : "secondary"}>
-                              {comment.status === "approved" ? "Одобрен" : "На модерации"}
-                            </Badge>
-                            <p className="text-sm text-muted-foreground">
-                              {comment.author_name}
-                            </p>
+                          <CardTitle className="text-xl mb-2">{post.title}</CardTitle>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span>Автор: {post.author_name}</span>
+                            <span>Категория: {post.topic_type}</span>
+                            <span>{new Date(post.created_at).toLocaleString("ru")}</span>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            К теме: {comment.post_title}
-                          </p>
                         </div>
-                        <div className="flex gap-2">
-                          {comment.status !== "approved" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => approveComment(comment.id)}
-                            >
-                              <CheckCircle className="mr-2 h-4 w-4" />
-                              Одобрить
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deleteComment(comment.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Удалить
-                          </Button>
-                        </div>
+                        {getStatusBadge(post.status)}
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <p className="whitespace-pre-wrap">{comment.content}</p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {new Date(comment.created_at).toLocaleString("ru-RU")}
-                      </p>
+                      <p className="text-sm mb-4 line-clamp-2">{post.content}</p>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setSelectedPost(post)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Просмотр
+                        </Button>
+                        {post.status === "pending" && (
+                          <>
+                            <Button size="sm" onClick={() => updatePostStatus(post.id, "approved")}>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Одобрить
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => updatePostStatus(post.id, "rejected")}
+                            >
+                              <XCircle className="mr-2 h-4 w-4" />
+                              Отклонить
+                            </Button>
+                          </>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => startEditing(post)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Изменить
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => deletePost(post.id)}>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Удалить
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="comments">
+              <div className="space-y-4">
+                {comments.length === 0 ? (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">Нет комментариев</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  comments.map((comment) => (
+                    <Card key={comment.id}>
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant={comment.status === "approved" ? "default" : "secondary"}>
+                                {comment.status === "approved" ? "Одобрен" : "На модерации"}
+                              </Badge>
+                              <p className="text-sm text-muted-foreground">{comment.author_name}</p>
+                            </div>
+                            <p className="text-sm text-muted-foreground">К теме: {comment.post_title}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            {comment.status !== "approved" && (
+                              <Button size="sm" variant="outline" onClick={() => approveComment(comment.id)}>
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Одобрить
+                              </Button>
+                            )}
+                            <Button size="sm" variant="destructive" onClick={() => deleteComment(comment.id)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Удалить
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="whitespace-pre-wrap">{comment.content}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {new Date(comment.created_at).toLocaleString("ru-RU")}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </TabsContent>
           </Tabs>
         </div>
@@ -535,15 +472,17 @@ const AdminForumPage = () => {
               <span>Категория: {selectedPost?.topic_type}</span>
               {selectedPost && getStatusBadge(selectedPost.status)}
             </div>
-            <p className="prose prose-slate dark:prose-invert max-w-none 
+            <p
+              className="prose prose-slate dark:prose-invert max-w-none 
               prose-headings:font-bold prose-headings:text-foreground 
               prose-p:text-base prose-p:leading-relaxed prose-p:text-foreground
               prose-strong:font-semibold prose-strong:text-foreground
               prose-li:text-base prose-li:leading-relaxed
               prose-ul:my-2 prose-ol:my-2
               prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-              prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic">
-              {selectedPost?.content.includes('<p>') || selectedPost?.content.includes('<h') ? (
+              prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic"
+            >
+              {selectedPost?.content.includes("<p>") || selectedPost?.content.includes("<h") ? (
                 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedPost.content) }} />
               ) : (
                 <span className="whitespace-pre-wrap">{selectedPost?.content}</span>
@@ -556,10 +495,7 @@ const AdminForumPage = () => {
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Одобрить
                   </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => updatePostStatus(selectedPost.id, "rejected")}
-                  >
+                  <Button variant="destructive" onClick={() => updatePostStatus(selectedPost.id, "rejected")}>
                     <XCircle className="mr-2 h-4 w-4" />
                     Отклонить
                   </Button>
@@ -575,10 +511,7 @@ const AdminForumPage = () => {
                 <Edit className="mr-2 h-4 w-4" />
                 Изменить
               </Button>
-              <Button
-                variant="destructive"
-                onClick={() => deletePost(selectedPost!.id)}
-              >
+              <Button variant="destructive" onClick={() => deletePost(selectedPost!.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Удалить
               </Button>
@@ -614,9 +547,7 @@ const AdminForumPage = () => {
               <Button variant="outline" onClick={() => setEditingPost(null)}>
                 Отмена
               </Button>
-              <Button onClick={saveEdit}>
-                Сохранить
-              </Button>
+              <Button onClick={saveEdit}>Сохранить</Button>
             </div>
           </div>
         </DialogContent>
