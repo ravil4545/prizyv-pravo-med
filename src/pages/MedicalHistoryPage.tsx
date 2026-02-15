@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check, Stethoscope } from "lucide-react";
+import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check, Stethoscope, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getSignedDocumentUrl } from "@/lib/storage";
 import { toast } from "sonner";
@@ -1096,11 +1097,19 @@ export default function MedicalHistoryPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="px-3 sm:px-6">
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      <pre className="whitespace-pre-wrap font-sans text-foreground bg-transparent p-0 border-0 text-xs sm:text-sm leading-relaxed overflow-x-auto">
-                        {selectedArticle.body}
-                      </pre>
-                    </div>
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-primary hover:underline w-full justify-between py-1">
+                        <span>📜 Полный текст статьи</span>
+                        <ChevronDown className="h-4 w-4 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="prose prose-sm dark:prose-invert max-w-none mt-3">
+                          <pre className="whitespace-pre-wrap font-sans text-foreground bg-muted/50 rounded-lg p-3 sm:p-4 border text-xs sm:text-sm leading-relaxed overflow-x-auto max-h-[60vh] overflow-y-auto">
+                            {selectedArticle.body}
+                          </pre>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </CardContent>
                 </Card>
 
