@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.enhance-document]
 verify_jwt = false
+
+[functions.import-articles]
+verify_jwt = false
