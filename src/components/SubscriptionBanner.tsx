@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Crown, FileText, MessageSquare, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUQ7H75NO3.260215";
+const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215";
 
 interface SubscriptionBannerProps {
   compact?: boolean;
