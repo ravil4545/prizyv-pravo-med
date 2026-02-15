@@ -46,7 +46,7 @@ export default function SubscriptionBanner({ compact = false }: SubscriptionBann
   const allExhausted = docsExhausted && aiExhausted;
 
   return (
-    <Card className={allExhausted ? "border-destructive/50 bg-destructive/5" : "border-amber-500/30 bg-amber-500/5"}>
+    <Card className={`relative z-10 ${allExhausted ? "border-destructive/50 bg-destructive/5" : "border-amber-500/30 bg-amber-500/5"}`}>
       <CardContent className={compact ? "p-3" : "p-4"}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2 flex-1 min-w-0">
@@ -79,18 +79,23 @@ export default function SubscriptionBanner({ compact = false }: SubscriptionBann
 
           <Button
             size={compact ? "sm" : "default"}
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shrink-0"
-            onClick={async () => {
-              // Notify admin about payment click
-              try {
-                const { data: { session } } = await supabase.auth.getSession();
-                await supabase.functions.invoke('notify-payment-click', {
-                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-                });
-              } catch (e) {
-                console.error('Notification error:', e);
-              }
+            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shrink-0 cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              // Open payment link immediately, don't wait for async
               window.open(YOOMONEY_PAYMENT_URL, "_blank");
+              // Fire notification in background
+              (async () => {
+                try {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  await supabase.functions.invoke('notify-payment-click', {
+                    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                  });
+                } catch (err) {
+                  console.error('Notification error:', err);
+                }
+              })();
             }}
           >
             <Crown className="h-4 w-4 mr-2" />
