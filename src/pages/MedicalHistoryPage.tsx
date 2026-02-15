@@ -782,7 +782,10 @@ export default function MedicalHistoryPage() {
           }),
         }
       );
-      if (!response.ok) throw new Error("Ошибка генерации документа");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Ошибка генерации документа (${response.status})`);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -793,7 +796,7 @@ export default function MedicalHistoryPage() {
       toast.success("Документ скачан");
     } catch (error) {
       console.error("Error generating doc:", error);
-      toast.error("Ошибка при генерации документа");
+      toast.error(error instanceof Error ? error.message : "Ошибка при генерации документа");
     } finally {
       setIsGeneratingGlobalDoc(false);
     }
@@ -846,7 +849,10 @@ export default function MedicalHistoryPage() {
         }
       );
 
-      if (!response.ok) throw new Error("Ошибка генерации документа");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Ошибка генерации документа (${response.status})`);
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
