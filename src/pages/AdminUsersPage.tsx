@@ -61,23 +61,13 @@ const AdminUsersPage = () => {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       // 1. Fetch ALL registered users from auth via edge function (primary source)
-      const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/admin-users`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({ action: "list" }),
-        }
-      );
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke("admin-users", {
+        body: { action: "list" },
+      });
 
-      if (!response.ok) throw new Error("Ошибка загрузки пользователей");
-      const { users: authUsers } = await response.json();
+      if (edgeError) throw new Error(edgeError.message || "Ошибка загрузки пользователей");
+      const authUsers = edgeData?.users || [];
 
       // 2. Fetch profiles and subscriptions in parallel
       const [profilesRes, subsRes] = await Promise.all([
