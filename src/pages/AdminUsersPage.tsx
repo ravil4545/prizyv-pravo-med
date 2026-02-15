@@ -61,45 +61,9 @@ const AdminUsersPage = () => {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // Fetch profiles with subscription data
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, phone, created_at");
-
-      if (profilesError) throw profilesError;
-
-      const { data: subscriptions, error: subsError } = await supabase
-        .from("user_subscriptions")
-        .select("*");
-
-      if (subsError) throw subsError;
-
-      // Build a map of subscriptions by user_id
-      const subsMap = new Map<string, any>();
-      subscriptions?.forEach(s => subsMap.set(s.user_id, s));
-
-      // We need emails from auth — use profiles + subscription data
-      // Since we can't query auth.users directly, we'll get emails from user metadata
-      // For now, use profile data and supplement with subscription info
-      const userRows: UserRow[] = (profiles || []).map(p => {
-        const sub = subsMap.get(p.id);
-        return {
-          id: p.id,
-          email: "", // Will be filled below
-          created_at: p.created_at || "",
-          full_name: p.full_name,
-          phone: p.phone,
-          is_paid: sub?.is_paid || false,
-          paid_until: sub?.paid_until || null,
-          admin_override: sub?.admin_override || false,
-          document_uploads_used: sub?.document_uploads_used || 0,
-          ai_questions_used: sub?.ai_questions_used || 0,
-          subscription_id: sub?.id || null,
-        };
-      });
-
-      // Fetch emails via edge function that uses service role
       const { data: { session } } = await supabase.auth.getSession();
+
+      // 1. Fetch ALL registered users from auth via edge function (primary source)
       const response = await fetch(
         `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/admin-users`,
         {
@@ -112,14 +76,39 @@ const AdminUsersPage = () => {
         }
       );
 
-      if (response.ok) {
-        const { users: authUsers } = await response.json();
-        const emailMap = new Map<string, string>();
-        authUsers?.forEach((u: any) => emailMap.set(u.id, u.email));
-        userRows.forEach(u => {
-          u.email = emailMap.get(u.id) || "—";
-        });
-      }
+      if (!response.ok) throw new Error("Ошибка загрузки пользователей");
+      const { users: authUsers } = await response.json();
+
+      // 2. Fetch profiles and subscriptions in parallel
+      const [profilesRes, subsRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, phone"),
+        supabase.from("user_subscriptions").select("*"),
+      ]);
+
+      const profilesMap = new Map<string, any>();
+      profilesRes.data?.forEach(p => profilesMap.set(p.id, p));
+
+      const subsMap = new Map<string, any>();
+      subsRes.data?.forEach(s => subsMap.set(s.user_id, s));
+
+      // 3. Build rows from auth users (all registered), enriching with profile/subscription
+      const userRows: UserRow[] = (authUsers || []).map((au: any) => {
+        const profile = profilesMap.get(au.id);
+        const sub = subsMap.get(au.id);
+        return {
+          id: au.id,
+          email: au.email || "—",
+          created_at: au.created_at || "",
+          full_name: profile?.full_name || null,
+          phone: profile?.phone || null,
+          is_paid: sub?.is_paid || false,
+          paid_until: sub?.paid_until || null,
+          admin_override: sub?.admin_override || false,
+          document_uploads_used: sub?.document_uploads_used || 0,
+          ai_questions_used: sub?.ai_questions_used || 0,
+          subscription_id: sub?.id || null,
+        };
+      });
 
       setUsers(userRows);
     } catch (error) {
