@@ -261,32 +261,8 @@ export default function MedicalQuestionnairePage() {
     try {
       const documentText = generateDocumentText();
 
-      // 1. Generate DOCX via edge function
-      const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            docType: "questionnaire",
-            format: "docx",
-            customContent: documentText,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error("Ошибка генерации документа");
-
-      const docxBlob = await response.blob();
-
-      // 2. Convert DOCX to PDF for storage (create a simple PDF with the text)
+      // 1. Create PDF for storage
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-      // Add Cyrillic-safe text rendering
       pdf.setFontSize(10);
       const pageWidth = pdf.internal.pageSize.getWidth();
       const margin = 15;
@@ -299,7 +275,6 @@ export default function MedicalQuestionnairePage() {
           pdf.addPage();
           y = 20;
         }
-        // Simple wrapping
         const splitLines = pdf.splitTextToSize(line, maxWidth);
         for (const sl of splitLines) {
           if (y > 270) {
@@ -314,14 +289,14 @@ export default function MedicalQuestionnairePage() {
       const pdfBlob = pdf.output("blob");
       const fileName = `${user.id}/questionnaire_${Date.now()}.pdf`;
 
-      // 3. Upload PDF to storage
+      // 2. Upload PDF to storage
       const { error: uploadError } = await supabase.storage
         .from("medical-documents")
         .upload(fileName, pdfBlob, { contentType: "application/pdf" });
 
       if (uploadError) throw uploadError;
 
-      // 4. Create medical document record with questionnaire marker
+      // 3. Create medical document record with questionnaire marker
       const { data: insertedDoc, error: insertError } = await supabase
         .from("medical_documents_v2")
         .insert({
@@ -337,17 +312,43 @@ export default function MedicalQuestionnairePage() {
 
       if (insertError) throw insertError;
 
-      // 5. Also download DOCX for user
-      const docxUrl = URL.createObjectURL(docxBlob);
-      const a = document.createElement("a");
-      a.href = docxUrl;
-      a.download = `medical_questionnaire_${new Date().toLocaleDateString("ru-RU").replace(/\./g, "-")}.docx`;
-      a.click();
-      URL.revokeObjectURL(docxUrl);
+      // 4. Download DOCX for user (non-blocking)
+      try {
+        const response = await fetch(
+          `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              docType: "questionnaire",
+              format: "docx",
+              customContent: documentText,
+            }),
+          }
+        );
 
-      toast.success("Опросник сохранён и загружен в документы! DOCX скачан. Запускаем AI-анализ...");
+        if (response.ok) {
+          const docxBlob = await response.blob();
+          const docxUrl = URL.createObjectURL(docxBlob);
+          const a = document.createElement("a");
+          a.href = docxUrl;
+          a.download = `medical_questionnaire_${new Date().toLocaleDateString("ru-RU").replace(/\./g, "-")}.docx`;
+          a.click();
+          URL.revokeObjectURL(docxUrl);
+        } else {
+          console.warn("DOCX generation failed, skipping download");
+        }
+      } catch (docxErr) {
+        console.warn("DOCX download error (non-critical):", docxErr);
+      }
 
-      // 6. Trigger AI analysis
+      toast.success("Опросник сохранён! Запускаем AI-анализ...");
+
+      // 5. Trigger AI analysis (non-blocking)
       if (insertedDoc) {
         supabase.functions.invoke("analyze-medical-document", {
           body: {
