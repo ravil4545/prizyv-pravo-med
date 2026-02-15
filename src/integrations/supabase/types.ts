@@ -976,6 +976,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_subscriptions: {
+        Row: {
+          admin_override: boolean
+          ai_questions_used: number
+          created_at: string
+          document_uploads_used: number
+          free_ai_limit: number
+          free_document_limit: number
+          id: string
+          is_paid: boolean
+          paid_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_override?: boolean
+          ai_questions_used?: number
+          created_at?: string
+          document_uploads_used?: number
+          free_ai_limit?: number
+          free_document_limit?: number
+          id?: string
+          is_paid?: boolean
+          paid_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_override?: boolean
+          ai_questions_used?: number
+          created_at?: string
+          document_uploads_used?: number
+          free_ai_limit?: number
+          free_document_limit?: number
+          id?: string
+          is_paid?: boolean
+          paid_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_test_results: {
         Row: {
           ai_summary: string | null
