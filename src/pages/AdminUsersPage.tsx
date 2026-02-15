@@ -125,7 +125,7 @@ const AdminUsersPage = () => {
             admin_override: !currentOverride,
             is_paid: !currentOverride,
             paid_until: !currentOverride
-              ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+              ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
               : null,
           });
         if (insertError) throw insertError;
@@ -136,7 +136,7 @@ const AdminUsersPage = () => {
             admin_override: !currentOverride,
             is_paid: !currentOverride,
             paid_until: !currentOverride
-              ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+              ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
               : null,
           })
           .eq("user_id", userId);
