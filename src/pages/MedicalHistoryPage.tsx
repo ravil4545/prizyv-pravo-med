@@ -35,6 +35,7 @@ interface UserDocument {
   ai_recommendations: string[] | null;
   ai_fitness_category: string | null;
   ai_category_chance: number | null;
+  ai_explanation: string | null;
   linked_article_id: string | null;
 }
 
@@ -256,7 +257,7 @@ export default function MedicalHistoryPage() {
     const { data, error } = await supabase
       .from("medical_documents_v2")
       .select(
-        "id, title, file_url, uploaded_at, raw_text, document_type_id, meta, ai_recommendations, ai_fitness_category, ai_category_chance, linked_article_id",
+        "id, title, file_url, uploaded_at, raw_text, document_type_id, meta, ai_recommendations, ai_fitness_category, ai_category_chance, ai_explanation, linked_article_id",
       )
       .eq("user_id", user.id)
       .order("uploaded_at", { ascending: false });
@@ -739,6 +740,19 @@ export default function MedicalHistoryPage() {
     return lines.join("\n");
   }, [documentArticleLinks, userDocuments]);
 
+  // AI explanation from questionnaire documents
+  const questionnaireExplanation = useMemo(() => {
+    const questionnaireDocs = userDocuments.filter(
+      (doc) => doc.meta && typeof doc.meta === "object" && (doc.meta as any).is_questionnaire
+    );
+    // Get the most recent questionnaire with an explanation
+    for (const doc of questionnaireDocs) {
+      const explanation = (doc as any).ai_explanation;
+      if (explanation) return explanation as string;
+    }
+    return "";
+  }, [userDocuments]);
+
   // Sync global exams text
   useEffect(() => {
     setEditedGlobalExamsText(globalExaminationsText);
@@ -990,6 +1004,26 @@ export default function MedicalHistoryPage() {
               ) : (
                 <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed font-sans">{globalExaminationsText}</pre>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* AI Diagnostic Reasoning from Questionnaire */}
+        {questionnaireExplanation && (
+          <Card className="mb-6 border-2 border-amber-500/50 shadow-lg">
+            <CardHeader className="px-3 sm:px-6 pb-3">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <BookOpen className="h-5 w-5" />
+                Обоснование ИИ
+                <Badge variant="secondary" className="text-[10px]">На основании опросника</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              <div className="bg-muted/50 rounded-lg p-3 sm:p-4 border">
+                <p className="text-xs sm:text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                  {questionnaireExplanation}
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
