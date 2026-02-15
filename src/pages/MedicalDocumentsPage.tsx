@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PdfViewer from "@/components/PdfViewer";
+import DocxViewer from "@/components/DocxViewer";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Configure PDF.js worker
@@ -98,8 +99,9 @@ interface MedicalDocument {
 type SortField = "uploaded_at" | "document_date" | "title";
 type SortDirection = "asc" | "desc";
 
-function SignedPdfViewer({ fileUrl }: { fileUrl: string }) {
+function SignedDocumentViewer({ fileUrl }: { fileUrl: string }) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const isDocx = fileUrl.toLowerCase().endsWith('.docx');
   useEffect(() => {
     getSignedDocumentUrl(fileUrl).then(setSignedUrl);
   }, [fileUrl]);
@@ -109,6 +111,9 @@ function SignedPdfViewer({ fileUrl }: { fileUrl: string }) {
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
+  if (isDocx) {
+    return <DocxViewer url={signedUrl} />;
+  }
   return <PdfViewer url={signedUrl} />;
 }
 
@@ -612,17 +617,75 @@ export default function MedicalDocumentsPage() {
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
     if (!user) return;
 
-    const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-    const validFiles = files.filter((f) => validTypes.includes(f.type));
+    const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+    const validFiles = files.filter((f) => validTypes.includes(f.type) || f.name.toLowerCase().endsWith('.docx'));
 
     if (validFiles.length === 0) {
       toast({
         title: "Неподдерживаемый формат",
-        description: "Загружайте PDF или изображения (JPEG, PNG, WebP)",
+        description: "Загружайте PDF, DOCX или изображения (JPEG, PNG, WebP)",
         variant: "destructive",
       });
       return;
     }
+
+    // Separate DOCX files - they get uploaded directly without conversion
+    const docxFiles = validFiles.filter((f) => f.name.toLowerCase().endsWith('.docx') || f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    const otherFiles = validFiles.filter((f) => !f.name.toLowerCase().endsWith('.docx') && f.type !== "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
+    // Upload DOCX files directly
+    if (docxFiles.length > 0) {
+      setUploading(true);
+      try {
+        for (const file of docxFiles) {
+          setUploadProgress(`Загрузка ${file.name}...`);
+          const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.docx`;
+          const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, file, {
+            contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          });
+          if (uploadError) throw uploadError;
+
+          // Extract text from DOCX using mammoth
+          let extractedText = "";
+          try {
+            const mammoth = await import("mammoth");
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.default.extractRawText({ arrayBuffer });
+            extractedText = result.value;
+          } catch (e) {
+            console.error("Failed to extract DOCX text:", e);
+          }
+
+          const { data: insertedDoc, error: insertError } = await supabase
+            .from("medical_documents_v2")
+            .insert({
+              user_id: user.id,
+              title: file.name.replace(/\.docx$/i, ""),
+              file_url: fileName,
+              is_classified: false,
+              raw_text: extractedText || null,
+            })
+            .select()
+            .single();
+          if (insertError) throw insertError;
+
+          toast({ title: "Документ загружен", description: `${file.name}. Запускаем AI-анализ...` });
+
+          // Analyze using extracted text (handwritten mode)
+          if (insertedDoc && extractedText) {
+            analyzeHandwrittenDocument(insertedDoc.id, extractedText);
+          }
+        }
+      } catch (error: any) {
+        toast({ title: "Ошибка загрузки", description: error.message, variant: "destructive" });
+      } finally {
+        setUploading(false);
+        setUploadProgress("");
+        loadDocuments();
+      }
+    }
+
+    if (otherFiles.length === 0) return;
 
     setUploading(true);
     setEnhancing(true);
@@ -632,9 +695,9 @@ export default function MedicalDocumentsPage() {
         // Многостраничный режим - объединяем все в один PDF
         const enhancedImages: { base64: string; width: number; height: number }[] = [];
 
-        for (let i = 0; i < validFiles.length; i++) {
-          const file = validFiles[i];
-          setUploadProgress(`Обработка файла ${i + 1} из ${validFiles.length}...`);
+        for (let i = 0; i < otherFiles.length; i++) {
+          const file = otherFiles[i];
+          setUploadProgress(`Обработка файла ${i + 1} из ${otherFiles.length}...`);
 
           // Конвертируем в JPEG
           const { base64 } = await convertToJpeg(file);
@@ -667,7 +730,7 @@ export default function MedicalDocumentsPage() {
           .from("medical_documents_v2")
           .insert({
             user_id: user.id,
-            title: `Документ_${validFiles.length}_стр_${format(new Date(), "dd.MM.yyyy")}`,
+            title: `Документ_${otherFiles.length}_стр_${format(new Date(), "dd.MM.yyyy")}`,
             file_url: storedPath,
             is_classified: false,
           })
@@ -678,7 +741,7 @@ export default function MedicalDocumentsPage() {
 
         toast({
           title: "Документ загружен",
-          description: `${validFiles.length} страниц объединено в PDF. Запускаем AI-анализ...`,
+          description: `${otherFiles.length} страниц объединено в PDF. Запускаем AI-анализ...`,
         });
 
         // Запускаем AI анализ на первой странице
@@ -687,9 +750,9 @@ export default function MedicalDocumentsPage() {
         }
       } else {
         // Одностраничный режим - каждый файл отдельно
-        for (let i = 0; i < validFiles.length; i++) {
-          const file = validFiles[i];
-          setUploadProgress(`Обработка файла ${i + 1} из ${validFiles.length}...`);
+        for (let i = 0; i < otherFiles.length; i++) {
+          const file = otherFiles[i];
+          setUploadProgress(`Обработка файла ${i + 1} из ${otherFiles.length}...`);
 
           try {
             // Конвертируем в JPEG
@@ -1142,7 +1205,8 @@ export default function MedicalDocumentsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${doc.title || "document"}.jpg`;
+      const ext = doc.file_url.toLowerCase().endsWith('.docx') ? '.docx' : doc.file_url.toLowerCase().endsWith('.pdf') ? '.pdf' : '.jpg';
+      a.download = `${doc.title || "document"}${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1492,7 +1556,7 @@ export default function MedicalDocumentsPage() {
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
                       onChange={(e) => handleFileInput(e, uploadMode)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -1548,7 +1612,7 @@ export default function MedicalDocumentsPage() {
                   </div>
 
                   <p className="text-xs text-center text-muted-foreground mt-4">
-                    Поддерживаемые форматы: PDF, JPEG, PNG, WebP
+                    Поддерживаемые форматы: PDF, DOCX, JPEG, PNG, WebP
                   </p>
                 </div>
               )}
@@ -1783,7 +1847,7 @@ export default function MedicalDocumentsPage() {
                                   <ScrollArea className="max-h-[calc(90vh-100px)]">
                                     <div className="space-y-4 sm:space-y-6 pr-4 overflow-hidden">
                                       {/* Document Viewer with PDF support */}
-                                      <SignedPdfViewer fileUrl={doc.file_url} />
+                                      <SignedDocumentViewer fileUrl={doc.file_url} />
 
                                       {/* AI Analysis Results */}
                                       {doc.is_classified && (
