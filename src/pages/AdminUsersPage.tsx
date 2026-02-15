@@ -24,6 +24,7 @@ interface UserRow {
   document_uploads_used: number;
   ai_questions_used: number;
   subscription_id: string | null;
+  payment_link_clicked_at: string | null;
 }
 
 const AdminUsersPage = () => {
@@ -97,6 +98,7 @@ const AdminUsersPage = () => {
           document_uploads_used: sub?.document_uploads_used || 0,
           ai_questions_used: sub?.ai_questions_used || 0,
           subscription_id: sub?.id || null,
+          payment_link_clicked_at: sub?.payment_link_clicked_at || null,
         };
       });
 
@@ -207,6 +209,7 @@ const AdminUsersPage = () => {
                       <TableHead>Телефон</TableHead>
                       <TableHead>Загрузок</TableHead>
                       <TableHead>Вопросов AI</TableHead>
+                      <TableHead>Переход к оплате</TableHead>
                       <TableHead>Статус</TableHead>
                       <TableHead>Оплачено до</TableHead>
                       <TableHead>Режим</TableHead>
@@ -215,7 +218,7 @@ const AdminUsersPage = () => {
                   <TableBody>
                     {filteredUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                           Пользователи не найдены
                         </TableCell>
                       </TableRow>
@@ -232,6 +235,11 @@ const AdminUsersPage = () => {
                           <TableCell className="text-sm">{user.phone || "—"}</TableCell>
                           <TableCell className="text-center">{user.document_uploads_used}</TableCell>
                           <TableCell className="text-center">{user.ai_questions_used}</TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {user.payment_link_clicked_at
+                              ? new Date(user.payment_link_clicked_at).toLocaleString("ru-RU")
+                              : "—"}
+                          </TableCell>
                           <TableCell>
                             {user.admin_override || user.is_paid ? (
                               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
