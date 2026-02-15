@@ -987,6 +987,7 @@ export type Database = {
           id: string
           is_paid: boolean
           paid_until: string | null
+          payment_link_clicked_at: string | null
           updated_at: string
           user_id: string
         }
@@ -1000,6 +1001,7 @@ export type Database = {
           id?: string
           is_paid?: boolean
           paid_until?: string | null
+          payment_link_clicked_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1013,6 +1015,7 @@ export type Database = {
           id?: string
           is_paid?: boolean
           paid_until?: string | null
+          payment_link_clicked_at?: string | null
           updated_at?: string
           user_id?: string
         }
