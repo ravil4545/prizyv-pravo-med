@@ -327,6 +327,27 @@ const DashboardPage = () => {
                     </p>
                   </CardContent>
                 </Card>
+
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/users")}>
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-destructive/10 rounded-lg">
+                        <User className="h-6 w-6 text-destructive" />
+                      </div>
+                      <div>
+                        <CardTitle>Пользователи и подписки</CardTitle>
+                        <CardDescription>
+                          Управление доступом пользователей
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">
+                      Список пользователей, статус оплаты, переключение режимов
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -121,6 +122,7 @@ function SignedDocumentViewer({ fileUrl }: { fileUrl: string }) {
 export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { canUploadDocument, incrementDocumentUploads, isActive, remainingDocUploads } = useSubscription();
   const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
@@ -348,6 +350,7 @@ export default function MedicalDocumentsPage() {
         title: "Документ загружен",
         description: `${handwrittenFiles.length} стр. Запускаем AI-анализ введённого текста...`,
       });
+      await incrementDocumentUploads();
 
       // Запускаем AI анализ на введённом тексте
       if (insertedDoc) {
@@ -618,6 +621,16 @@ export default function MedicalDocumentsPage() {
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
     if (!user) return;
 
+    if (!canUploadDocument()) {
+      toast({
+        title: "Лимит исчерпан",
+        description: "Вы использовали все бесплатные загрузки. Оформите подписку для продолжения.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+
     const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     const validFiles = files.filter((f) => validTypes.includes(f.type) || f.name.toLowerCase().endsWith('.docx'));
 
@@ -671,6 +684,7 @@ export default function MedicalDocumentsPage() {
           if (insertError) throw insertError;
 
           toast({ title: "Документ загружен", description: `${file.name}. Запускаем AI-анализ...` });
+          await incrementDocumentUploads();
 
           // Analyze using extracted text (handwritten mode)
           if (insertedDoc && extractedText) {
@@ -744,6 +758,7 @@ export default function MedicalDocumentsPage() {
           title: "Документ загружен",
           description: `${otherFiles.length} страниц объединено в PDF. Запускаем AI-анализ...`,
         });
+        await incrementDocumentUploads();
 
         // Запускаем AI анализ на первой странице
         if (insertedDoc && enhancedImages.length > 0) {
@@ -797,6 +812,7 @@ export default function MedicalDocumentsPage() {
               title: "Документ загружен",
               description: "Запускаем AI-анализ...",
             });
+            await incrementDocumentUploads();
 
             // Запускаем AI анализ
             if (insertedDoc) {

@@ -23,6 +23,7 @@ import AdminBlogPage from "./pages/AdminBlogPage";
 import AdminTestimonialsPage from "./pages/AdminTestimonialsPage";
 import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import AdminArticlesPage from "./pages/AdminArticlesPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import ProfilePage from "./pages/ProfilePage";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage";
 import MedicalHistoryPage from "./pages/MedicalHistoryPage";
@@ -68,6 +69,7 @@ const App = () => (
           <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
           <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/admin/articles" element={<AdminArticlesPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

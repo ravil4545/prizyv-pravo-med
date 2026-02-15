@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInMonths } from "date-fns";
@@ -30,6 +31,7 @@ interface Conversation {
 }
 
 const AIChatDashboardPage = () => {
+  const { canAskAI, incrementAIQuestions, isActive, remainingAIQuestions } = useSubscription();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -308,6 +310,16 @@ const AIChatDashboardPage = () => {
   const sendMessage = async () => {
     if (!input.trim()) return;
 
+    if (!canAskAI()) {
+      toast({
+        title: "Лимит исчерпан",
+        description: "Вы использовали все бесплатные вопросы AI. Оформите подписку для продолжения.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+
     if (!currentConversationId) {
       await createNewConversation();
     }
@@ -387,6 +399,7 @@ const AIChatDashboardPage = () => {
 
       const assistantMessage: Message = { role: "assistant", content: assistantContent };
       await saveMessage(assistantMessage);
+      await incrementAIQuestions();
     } catch (error) {
       console.error("Error sending message:", error);
       toast({
