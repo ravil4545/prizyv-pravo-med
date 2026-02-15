@@ -666,7 +666,26 @@ ${examinationsList}
       };
 
       if (result.documentDate) {
-        updateData.document_date = result.documentDate;
+        // Parse date from various formats (DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, etc.)
+        let parsedDate: string | null = null;
+        const dateStr = String(result.documentDate).trim();
+        
+        // Try DD.MM.YYYY or DD/MM/YYYY format
+        const dmyMatch = dateStr.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+        if (dmyMatch) {
+          const [, day, month, year] = dmyMatch;
+          parsedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+        // Try YYYY-MM-DD format (already correct)
+        else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          parsedDate = dateStr;
+        }
+        
+        if (parsedDate) {
+          updateData.document_date = parsedDate;
+        } else {
+          console.warn("Could not parse document date:", dateStr);
+        }
       }
       if (documentTypeId) {
         updateData.document_type_id = documentTypeId;
