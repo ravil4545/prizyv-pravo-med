@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
+import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInMonths } from "date-fns";
@@ -484,9 +485,13 @@ const AIChatDashboardPage = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 pb-24 md:pb-8 gap-4 overflow-hidden">
+        <div className="md:hidden mb-2">
+          <SubscriptionBanner compact />
+        </div>
         {/* Desktop Sidebar */}
         {!isMobile && (
-          <div className="hidden md:block w-64 flex-shrink-0">
+          <div className="hidden md:block w-64 flex-shrink-0 space-y-4">
+            <SubscriptionBanner compact />
             <Card className="h-full">
               <CardContent className="p-4">
                 <SidebarContent />
