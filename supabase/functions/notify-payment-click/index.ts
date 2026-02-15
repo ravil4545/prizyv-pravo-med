@@ -14,6 +14,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get user from auth header
@@ -33,6 +34,7 @@ serve(async (req) => {
 
     // Get profile info
     let fullName = '';
+    let phone = '';
     if (userId !== 'unknown') {
       const { data: profile } = await supabase
         .from('profiles')
@@ -41,26 +43,72 @@ serve(async (req) => {
         .single();
       if (profile) {
         fullName = profile.full_name || '';
+        phone = profile.phone || '';
       }
     }
 
     const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 
-    // Send email notification via Supabase Auth admin API (using inbuilt email)
-    // Since we don't have a dedicated email service, we'll use a simple approach:
-    // Store notification in contact_submissions as a workaround
-    const { error } = await supabase
+    // Record click in user_subscriptions
+    if (userId !== 'unknown') {
+      await supabase
+        .from('user_subscriptions')
+        .update({ payment_link_clicked_at: new Date().toISOString() })
+        .eq('user_id', userId);
+    }
+
+    // Save to contact_submissions as backup
+    const { error: dbError } = await supabase
       .from('contact_submissions')
       .insert({
         name: `Оплата подписки: ${fullName || userEmail}`,
-        phone: '-',
+        phone: phone || '-',
         email: 'ravil4545@gmail.com',
-        message: `Пользователь перешёл на страницу оплаты подписки.\n\nEmail: ${userEmail}\nID: ${userId}\nИмя: ${fullName || 'не указано'}\nДата: ${now}`,
+        message: `Пользователь перешёл на страницу оплаты подписки.\n\nEmail: ${userEmail}\nID: ${userId}\nИмя: ${fullName || 'не указано'}\nТелефон: ${phone || 'не указан'}\nДата: ${now}`,
         status: 'payment_click',
       });
 
-    if (error) {
-      console.error('Error saving notification:', error);
+    if (dbError) {
+      console.error('Error saving to DB:', dbError);
+    }
+
+    // Send email via Resend
+    if (resendApiKey) {
+      try {
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'НеПризыв <onboarding@resend.dev>',
+            to: ['ravil4545@gmail.com'],
+            subject: `💳 Переход к оплате: ${fullName || userEmail}`,
+            html: `
+              <h2>Пользователь перешёл на страницу оплаты</h2>
+              <table style="border-collapse:collapse;">
+                <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${userEmail}</td></tr>
+                <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${fullName || 'не указано'}</td></tr>
+                <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${phone || 'не указан'}</td></tr>
+                <tr><td style="padding:4px 12px;font-weight:bold;">ID:</td><td style="padding:4px 12px;">${userId}</td></tr>
+                <tr><td style="padding:4px 12px;font-weight:bold;">Дата:</td><td style="padding:4px 12px;">${now}</td></tr>
+              </table>
+            `,
+          }),
+        });
+        
+        if (!emailRes.ok) {
+          const errBody = await emailRes.text();
+          console.error('Resend error:', emailRes.status, errBody);
+        } else {
+          console.log('Email sent successfully');
+        }
+      } catch (emailErr) {
+        console.error('Email send error:', emailErr);
+      }
+    } else {
+      console.warn('RESEND_API_KEY not configured, skipping email');
     }
 
     return new Response(
