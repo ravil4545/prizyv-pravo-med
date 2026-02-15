@@ -3,8 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Crown, FileText, MessageSquare, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/to/"; // TODO: заменить на реальную ссылку
+const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215";
 
 interface SubscriptionBannerProps {
   compact?: boolean;
@@ -79,7 +80,18 @@ export default function SubscriptionBanner({ compact = false }: SubscriptionBann
           <Button
             size={compact ? "sm" : "default"}
             className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shrink-0"
-            onClick={() => window.open(YOOMONEY_PAYMENT_URL, "_blank")}
+            onClick={async () => {
+              // Notify admin about payment click
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                await supabase.functions.invoke('notify-payment-click', {
+                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                });
+              } catch (e) {
+                console.error('Notification error:', e);
+              }
+              window.open(YOOMONEY_PAYMENT_URL, "_blank");
+            }}
           >
             <Crown className="h-4 w-4 mr-2" />
             Оформить подписку
