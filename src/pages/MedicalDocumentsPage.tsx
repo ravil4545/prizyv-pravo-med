@@ -825,15 +825,62 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  const handleAnalysisError = (data: any) => {
+    let toastTitle = "Ошибка анализа";
+    let toastDescription = data.message || "Попробуйте позже";
+    switch (data.error) {
+      case "image_processing_error":
+        toastTitle = "Не удалось распознать изображение";
+        toastDescription = "Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим «Рукописный документ» для ручного ввода текста.";
+        break;
+      case "rate_limit":
+        toastTitle = "Превышен лимит запросов";
+        toastDescription = "Подождите несколько минут и попробуйте снова.";
+        break;
+      case "payment_required":
+        toastTitle = "Ошибка сервиса AI";
+        toastDescription = "Временные проблемы с сервисом. Попробуйте позже.";
+        break;
+    }
+    toast({ title: toastTitle, description: toastDescription, variant: "destructive" });
+  };
+
   const analyzeDocument = async (documentId: string, imageBase64?: string) => {
     setAnalyzingId(documentId);
 
     try {
+      const doc = documents.find((d) => d.id === documentId);
+
+      // If document has raw_text (questionnaires, previously extracted), use text-only analysis
+      if (doc?.raw_text && doc.raw_text.length > 100) {
+        const { data, error } = await supabase.functions.invoke("analyze-medical-document", {
+          body: {
+            manualText: doc.raw_text,
+            documentId,
+            userId: user.id,
+            isHandwritten: true,
+          },
+        });
+
+        if (error) throw error;
+
+        if (data.error) {
+          handleAnalysisError(data);
+        } else {
+          toast({
+            title: "Анализ завершён",
+            description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+          });
+        }
+
+        loadDocuments();
+        return;
+      }
+
       let base64 = imageBase64;
 
       // Если base64 не передан, загружаем из URL
       if (!base64) {
-        const doc = documents.find((d) => d.id === documentId);
         if (!doc) throw new Error("Документ не найден");
 
         const signedUrl = await getSignedDocumentUrl(doc.file_url);
@@ -858,31 +905,7 @@ export default function MedicalDocumentsPage() {
       if (error) throw error;
 
       if (data.error) {
-        // Handle specific error types with appropriate messages
-        let toastTitle = "Ошибка анализа";
-        let toastDescription = data.message || "Попробуйте позже";
-
-        switch (data.error) {
-          case "image_processing_error":
-            toastTitle = "Не удалось распознать изображение";
-            toastDescription =
-              "Попробуйте загрузить документ в другом формате (JPG, PNG) или используйте режим «Рукописный документ» для ручного ввода текста.";
-            break;
-          case "rate_limit":
-            toastTitle = "Превышен лимит запросов";
-            toastDescription = "Подождите несколько минут и попробуйте снова.";
-            break;
-          case "payment_required":
-            toastTitle = "Ошибка сервиса AI";
-            toastDescription = "Временные проблемы с сервисом. Попробуйте позже.";
-            break;
-        }
-
-        toast({
-          title: toastTitle,
-          description: toastDescription,
-          variant: "destructive",
-        });
+        handleAnalysisError(data);
       } else {
         toast({
           title: "Анализ завершён",

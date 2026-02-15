@@ -34,8 +34,9 @@ export default function PdfViewer({ url, className = "" }: PdfViewerProps) {
       setError(null);
       
       try {
-        // Check if URL is a PDF or image
-        const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('application/pdf');
+        // Check if URL is a PDF or image - strip query params before checking extension
+        const urlWithoutParams = url.split('?')[0];
+        const isPdf = urlWithoutParams.toLowerCase().endsWith('.pdf') || url.includes('application/pdf');
         
         if (!isPdf) {
           // For images, we'll display them directly
@@ -129,7 +130,8 @@ export default function PdfViewer({ url, className = "" }: PdfViewerProps) {
   };
 
   // Check if it's an image (not PDF)
-  const isImage = !url.toLowerCase().endsWith('.pdf') && !loading && !pdf;
+  const urlWithoutParams = url.split('?')[0];
+  const isImage = !urlWithoutParams.toLowerCase().endsWith('.pdf') && !loading && !pdf;
 
   if (loading) {
     return (
