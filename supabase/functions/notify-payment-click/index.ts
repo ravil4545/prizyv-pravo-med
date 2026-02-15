@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { Resend } from "npm:resend@4.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,37 +73,30 @@ serve(async (req) => {
       console.error('Error saving to DB:', dbError);
     }
 
-    // Send email via Resend
+    // Send email via Resend SDK
     if (resendApiKey) {
       try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'НеПризыв <onboarding@resend.dev>',
-            to: ['ravil4545@gmail.com'],
-            subject: `💳 Переход к оплате: ${fullName || userEmail}`,
-            html: `
-              <h2>Пользователь перешёл на страницу оплаты</h2>
-              <table style="border-collapse:collapse;">
-                <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${userEmail}</td></tr>
-                <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${fullName || 'не указано'}</td></tr>
-                <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${phone || 'не указан'}</td></tr>
-                <tr><td style="padding:4px 12px;font-weight:bold;">ID:</td><td style="padding:4px 12px;">${userId}</td></tr>
-                <tr><td style="padding:4px 12px;font-weight:bold;">Дата:</td><td style="padding:4px 12px;">${now}</td></tr>
-              </table>
-            `,
-          }),
+        const resend = new Resend(resendApiKey);
+        const { data: emailData, error: emailError } = await resend.emails.send({
+          from: 'НеПризыв <onboarding@resend.dev>',
+          to: ['ravil4545@gmail.com'],
+          subject: `💳 Переход к оплате: ${fullName || userEmail}`,
+          html: `
+            <h2>Пользователь перешёл на страницу оплаты</h2>
+            <table style="border-collapse:collapse;">
+              <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${userEmail}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${fullName || 'не указано'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${phone || 'не указан'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">ID:</td><td style="padding:4px 12px;">${userId}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Дата:</td><td style="padding:4px 12px;">${now}</td></tr>
+            </table>
+          `,
         });
-        
-        if (!emailRes.ok) {
-          const errBody = await emailRes.text();
-          console.error('Resend error:', emailRes.status, errBody);
+
+        if (emailError) {
+          console.error('Resend email error:', JSON.stringify(emailError));
         } else {
-          console.log('Email sent successfully');
+          console.log('Email sent successfully, id:', emailData?.id);
         }
       } catch (emailErr) {
         console.error('Email send error:', emailErr);
