@@ -139,23 +139,23 @@ const DashboardPage = () => {
               </CardContent>
             </Card>
 
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/forum")}>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/medical-questionnaire")}>
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-lg">
-                    <MessageSquare className="h-6 w-6 text-primary" />
+                    <FileText className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle>Форум</CardTitle>
+                    <CardTitle>Опросник</CardTitle>
                     <CardDescription>
-                      Обсуждения и вопросы призывников
+                      Медицинский опросник для анализа
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  Задайте вопросы и поделитесь опытом с другими
+                  Заполните опросник для AI-анализа вашей медицинской истории
                 </p>
               </CardContent>
             </Card>
