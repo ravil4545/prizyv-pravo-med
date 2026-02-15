@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.analyze-medical-document]
 verify_jwt = false
+
+[functions.generate-document]
+verify_jwt = false
+
+[functions.enhance-document]
+verify_jwt = false

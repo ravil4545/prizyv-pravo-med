@@ -101,7 +101,8 @@ type SortDirection = "asc" | "desc";
 
 function SignedDocumentViewer({ fileUrl }: { fileUrl: string }) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
-  const isDocx = fileUrl.toLowerCase().endsWith('.docx');
+  // Check original file path for extension (signed URLs have query params)
+  const isDocx = extractFilePath(fileUrl).toLowerCase().endsWith('.docx');
   useEffect(() => {
     getSignedDocumentUrl(fileUrl).then(setSignedUrl);
   }, [fileUrl]);
