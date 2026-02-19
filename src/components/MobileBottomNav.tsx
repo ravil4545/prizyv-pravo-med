@@ -39,19 +39,19 @@ const MobileBottomNav = () => {
       requiresAuth: false,
     },
     {
-      label: "Документы",
+      label: "ИИ документы",
       icon: FileHeart,
       path: "/dashboard/medical-documents",
       requiresAuth: true,
     },
     {
-      label: "История",
+      label: "ИИ история",
       icon: BookOpen,
       path: "/medical-history",
       requiresAuth: true,
     },
     {
-      label: "AI Чат",
+      label: "ИИ помощник",
       icon: MessageSquare,
       path: "/dashboard/ai-chat",
       requiresAuth: true,
