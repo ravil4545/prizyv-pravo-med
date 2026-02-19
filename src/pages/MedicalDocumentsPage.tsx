@@ -181,7 +181,8 @@ export default function MedicalDocumentsPage() {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) {
-        navigate("/auth");
+        // Allow demo access — don't redirect
+        setLoading(false);
         return;
       }
       setUser(session.user);
