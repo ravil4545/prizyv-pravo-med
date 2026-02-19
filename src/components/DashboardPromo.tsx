@@ -23,11 +23,7 @@ const DashboardPromo = () => {
   }, []);
 
   const handleClick = () => {
-    if (isAuthenticated) {
-      navigate("/dashboard");
-    } else {
-      navigate("/auth");
-    }
+    navigate("/dashboard");
   };
 
   return (

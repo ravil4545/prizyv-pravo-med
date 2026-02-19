@@ -9,7 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Users, Search, ArrowLeft } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Users, Search, ArrowLeft, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserRow {
@@ -27,10 +28,29 @@ interface UserRow {
   payment_link_clicked_at: string | null;
 }
 
+interface DemoVisitorRow {
+  id: string;
+  anonymous_user_id: string;
+  user_agent: string | null;
+  browser: string | null;
+  os: string | null;
+  device_type: string | null;
+  city: string | null;
+  country: string | null;
+  document_uploads_used: number;
+  ai_questions_used: number;
+  first_visit_at: string;
+  last_visit_at: string;
+  converted_to_user: boolean;
+}
+
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [demoVisitors, setDemoVisitors] = useState<DemoVisitorRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [demoLoading, setDemoLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [demoSearch, setDemoSearch] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
@@ -56,13 +76,12 @@ const AdminUsersPage = () => {
       return;
     }
     setIsAdmin(true);
-    await loadUsers();
+    await Promise.all([loadUsers(), loadDemoVisitors()]);
   };
 
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // 1. Fetch ALL registered users from auth via edge function (primary source)
       const { data: edgeData, error: edgeError } = await supabase.functions.invoke("admin-users", {
         body: { action: "list" },
       });
@@ -70,7 +89,6 @@ const AdminUsersPage = () => {
       if (edgeError) throw new Error(edgeError.message || "Ошибка загрузки пользователей");
       const authUsers = edgeData?.users || [];
 
-      // 2. Fetch profiles and subscriptions in parallel
       const [profilesRes, subsRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, phone"),
         supabase.from("user_subscriptions").select("*"),
@@ -82,7 +100,6 @@ const AdminUsersPage = () => {
       const subsMap = new Map<string, any>();
       subsRes.data?.forEach(s => subsMap.set(s.user_id, s));
 
-      // 3. Build rows from auth users (all registered), enriching with profile/subscription
       const userRows: UserRow[] = (authUsers || []).map((au: any) => {
         const profile = profilesMap.get(au.id);
         const sub = subsMap.get(au.id);
@@ -111,13 +128,29 @@ const AdminUsersPage = () => {
     }
   };
 
+  const loadDemoVisitors = async () => {
+    setDemoLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("demo_visitors")
+        .select("*")
+        .order("last_visit_at", { ascending: false });
+
+      if (error) throw error;
+      setDemoVisitors((data || []) as unknown as DemoVisitorRow[]);
+    } catch (error) {
+      console.error("Error loading demo visitors:", error);
+      toast.error("Ошибка загрузки демо-посетителей");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
   const togglePaidMode = async (userId: string, currentOverride: boolean) => {
     try {
-      // Check if subscription exists
       const user = users.find(u => u.id === userId);
 
       if (!user?.subscription_id) {
-        // Create subscription first
         const { error: insertError } = await supabase
           .from("user_subscriptions")
           .insert({
@@ -166,6 +199,17 @@ const AdminUsersPage = () => {
     );
   });
 
+  const filteredDemoVisitors = demoVisitors.filter(v => {
+    const q = demoSearch.toLowerCase();
+    return (
+      (v.browser || "").toLowerCase().includes(q) ||
+      (v.os || "").toLowerCase().includes(q) ||
+      (v.city || "").toLowerCase().includes(q) ||
+      (v.country || "").toLowerCase().includes(q) ||
+      (v.device_type || "").toLowerCase().includes(q)
+    );
+  });
+
   if (!isAdmin) return null;
 
   return (
@@ -178,101 +222,191 @@ const AdminUsersPage = () => {
           </Button>
           <Users className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">Управление пользователями</h1>
-          <Badge variant="secondary">{users.length} чел.</Badge>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-3">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Поиск по ФИО, email, телефону..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="max-w-md"
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Дата регистрации</TableHead>
-                      <TableHead>ФИО</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Телефон</TableHead>
-                      <TableHead>Загрузок</TableHead>
-                      <TableHead>Вопросов AI</TableHead>
-                      <TableHead>Переход к оплате</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead>Оплачено до</TableHead>
-                      <TableHead>Режим</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                          Пользователи не найдены
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredUsers.map(user => (
-                        <TableRow key={user.id}>
-                          <TableCell className="whitespace-nowrap text-sm">
-                            {user.created_at
-                              ? new Date(user.created_at).toLocaleDateString("ru-RU")
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
-                          <TableCell className="text-sm">{user.email}</TableCell>
-                          <TableCell className="text-sm">{user.phone || "—"}</TableCell>
-                          <TableCell className="text-center">{user.document_uploads_used}</TableCell>
-                          <TableCell className="text-center">{user.ai_questions_used}</TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">
-                            {user.payment_link_clicked_at
-                              ? new Date(user.payment_link_clicked_at).toLocaleString("ru-RU")
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            {user.admin_override || user.is_paid ? (
-                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                Оплачено
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">Бесплатно</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">
-                            {user.paid_until
-                              ? new Date(user.paid_until).toLocaleDateString("ru-RU")
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">Бесп.</span>
-                              <Switch
-                                checked={user.admin_override}
-                                onCheckedChange={() => togglePaidMode(user.id, user.admin_override)}
-                              />
-                              <span className="text-xs text-muted-foreground">Платн.</span>
-                            </div>
-                          </TableCell>
+        <Tabs defaultValue="registered" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="registered">
+              Зарегистрированные <Badge variant="secondary" className="ml-2">{users.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="demo">
+              Демо-посетители <Badge variant="secondary" className="ml-2">{demoVisitors.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="registered">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Поиск по ФИО, email, телефону..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Дата регистрации</TableHead>
+                          <TableHead>ФИО</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Телефон</TableHead>
+                          <TableHead>Загрузок</TableHead>
+                          <TableHead>Вопросов AI</TableHead>
+                          <TableHead>Переход к оплате</TableHead>
+                          <TableHead>Статус</TableHead>
+                          <TableHead>Оплачено до</TableHead>
+                          <TableHead>Режим</TableHead>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredUsers.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                              Пользователи не найдены
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredUsers.map(user => (
+                            <TableRow key={user.id}>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {user.created_at ? new Date(user.created_at).toLocaleDateString("ru-RU") : "—"}
+                              </TableCell>
+                              <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
+                              <TableCell className="text-sm">{user.email}</TableCell>
+                              <TableCell className="text-sm">{user.phone || "—"}</TableCell>
+                              <TableCell className="text-center">{user.document_uploads_used}</TableCell>
+                              <TableCell className="text-center">{user.ai_questions_used}</TableCell>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {user.payment_link_clicked_at
+                                  ? new Date(user.payment_link_clicked_at).toLocaleString("ru-RU")
+                                  : "—"}
+                              </TableCell>
+                              <TableCell>
+                                {user.admin_override || user.is_paid ? (
+                                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                    Оплачено
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">Бесплатно</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {user.paid_until ? new Date(user.paid_until).toLocaleDateString("ru-RU") : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Бесп.</span>
+                                  <Switch
+                                    checked={user.admin_override}
+                                    onCheckedChange={() => togglePaidMode(user.id, user.admin_override)}
+                                  />
+                                  <span className="text-xs text-muted-foreground">Платн.</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="demo">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Eye className="h-5 w-5 text-muted-foreground" />
+                  Посетители в демо-режиме (без регистрации)
+                </CardTitle>
+                <div className="flex items-center gap-3 mt-2">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Поиск по браузеру, ОС, городу..."
+                    value={demoSearch}
+                    onChange={e => setDemoSearch(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {demoLoading ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Первый визит</TableHead>
+                          <TableHead>Последний визит</TableHead>
+                          <TableHead>Браузер</TableHead>
+                          <TableHead>ОС</TableHead>
+                          <TableHead>Устройство</TableHead>
+                          <TableHead>Город</TableHead>
+                          <TableHead>Страна</TableHead>
+                          <TableHead>Загрузок</TableHead>
+                          <TableHead>Вопросов AI</TableHead>
+                          <TableHead>Конверсия</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredDemoVisitors.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                              Демо-посетители не найдены
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredDemoVisitors.map(visitor => (
+                            <TableRow key={visitor.id}>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {new Date(visitor.first_visit_at).toLocaleString("ru-RU")}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {new Date(visitor.last_visit_at).toLocaleString("ru-RU")}
+                              </TableCell>
+                              <TableCell className="text-sm">{visitor.browser || "—"}</TableCell>
+                              <TableCell className="text-sm">{visitor.os || "—"}</TableCell>
+                              <TableCell className="text-sm">{visitor.device_type || "—"}</TableCell>
+                              <TableCell className="text-sm">{visitor.city || "—"}</TableCell>
+                              <TableCell className="text-sm">{visitor.country || "—"}</TableCell>
+                              <TableCell className="text-center">{visitor.document_uploads_used}</TableCell>
+                              <TableCell className="text-center">{visitor.ai_questions_used}</TableCell>
+                              <TableCell>
+                                {visitor.converted_to_user ? (
+                                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                    Да
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">Нет</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
       <Footer />
     </div>

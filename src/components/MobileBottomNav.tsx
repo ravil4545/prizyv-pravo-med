@@ -58,12 +58,9 @@ const MobileBottomNav = () => {
     },
   ];
 
-  const handleNavigate = (path: string, requiresAuth: boolean) => {
-    if (requiresAuth && !isAuthenticated) {
-      navigate("/auth");
-    } else {
-      navigate(path);
-    }
+  const handleNavigate = (path: string, _requiresAuth: boolean) => {
+    // Allow navigation to all pages, including for demo users
+    navigate(path);
   };
 
   const isActive = (path: string) => location.pathname === path;

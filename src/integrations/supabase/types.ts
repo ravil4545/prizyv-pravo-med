@@ -366,6 +366,72 @@ export type Database = {
         }
         Relationships: []
       }
+      demo_visitors: {
+        Row: {
+          ai_questions_used: number
+          anonymous_user_id: string
+          browser: string | null
+          city: string | null
+          converted_to_user: boolean
+          converted_user_id: string | null
+          country: string | null
+          created_at: string
+          device_type: string | null
+          document_uploads_used: number
+          first_visit_at: string
+          id: string
+          ip_address: unknown
+          last_visit_at: string
+          os: string | null
+          pages_visited: string[] | null
+          session_id: string | null
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          ai_questions_used?: number
+          anonymous_user_id: string
+          browser?: string | null
+          city?: string | null
+          converted_to_user?: boolean
+          converted_user_id?: string | null
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          document_uploads_used?: number
+          first_visit_at?: string
+          id?: string
+          ip_address?: unknown
+          last_visit_at?: string
+          os?: string | null
+          pages_visited?: string[] | null
+          session_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          ai_questions_used?: number
+          anonymous_user_id?: string
+          browser?: string | null
+          city?: string | null
+          converted_to_user?: boolean
+          converted_user_id?: string | null
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          document_uploads_used?: number
+          first_visit_at?: string
+          id?: string
+          ip_address?: unknown
+          last_visit_at?: string
+          os?: string | null
+          pages_visited?: string[] | null
+          session_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       diagnoses: {
         Row: {
           article_number: string
