@@ -1,8 +1,13 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, CheckCircle } from "lucide-react";
+import { Phone, MessageCircle, CheckCircle, Bot, ChevronDown, FileSearch, Brain, MessageSquarePlus } from "lucide-react";
 import heroImage from "@/assets/hero-legal-clean.jpg";
 
 const Hero = () => {
+  const [aiOpen, setAiOpen] = useState(false);
+  const navigate = useNavigate();
+
   const handlePhoneCall = () => {
     window.location.href = "tel:+79253500533";
   };
@@ -34,7 +39,7 @@ const Hero = () => {
             правовое сопровождение и консультации по законному получению военного билета.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12" role="group" aria-label="Кнопки связи с нами">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-4" role="group" aria-label="Кнопки связи с нами">
             <Button 
               variant="hero" 
               size="lg"
@@ -55,6 +60,53 @@ const Hero = () => {
               <MessageCircle className="h-5 w-5" aria-hidden="true" />
               Написать в WhatsApp
             </Button>
+          </div>
+
+          {/* AI Help Button with expandable panel */}
+          <div className="flex flex-col items-center mb-12">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setAiOpen(!aiOpen)}
+              className="w-full sm:w-auto text-lg px-8 py-4 bg-accent/20 border-accent-light/50 text-white hover:bg-accent/30 transition-all"
+              aria-expanded={aiOpen}
+            >
+              <Bot className="h-5 w-5" aria-hidden="true" />
+              ИИ помощь бесплатно
+              <ChevronDown className={`h-4 w-4 ml-1 transition-transform duration-300 ${aiOpen ? "rotate-180" : ""}`} />
+            </Button>
+
+            {aiOpen && (
+              <div className="mt-4 max-w-3xl w-full bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6 text-left animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <Brain className="h-5 w-5 text-accent-light flex-shrink-0 mt-0.5" />
+                    <p className="text-sm md:text-base text-primary-foreground/90">
+                      <strong className="text-white">Анализ 88 статей Расписания болезней</strong> (Постановление №565). ИИ оценивает вероятность получения категории «В» на основе загруженных медицинских документов, выстраивает рекомендации и помогает выявить недостающие обследования.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <FileSearch className="h-5 w-5 text-accent-light flex-shrink-0 mt-0.5" />
+                    <p className="text-sm md:text-base text-primary-foreground/90">
+                      <strong className="text-white">Загрузите медицинские документы</strong> (PDF, фото, DOCX) — ИИ извлечёт текст, определит тип документа, привяжет к соответствующим статьям Расписания болезней и даст рекомендации по дальнейшим действиям.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <MessageSquarePlus className="h-5 w-5 text-accent-light flex-shrink-0 mt-0.5" />
+                    <p className="text-sm md:text-base text-primary-foreground/90">
+                      <strong className="text-white">Интеллектуальный чат-бот</strong>, который учитывает ваши медицинские документы и диагнозы. Задавайте вопросы о правах призывника, процедуре обжалования, необходимых обследованиях — получайте персонализированные ответы.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => navigate("/dashboard")}
+                  className="mt-5 w-full sm:w-auto bg-accent hover:bg-accent/90 text-white"
+                >
+                  <Bot className="h-4 w-4 mr-2" />
+                  Попробовать бесплатно
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
