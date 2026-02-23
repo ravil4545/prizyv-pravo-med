@@ -10,7 +10,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu } from "lucide-react";
+import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { enhanceTypography } from "@/lib/typography";
+import { useDemoMode } from "@/hooks/useDemoMode";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,7 +33,8 @@ interface Conversation {
 }
 
 const AIChatDashboardPage = () => {
-  const { canAskAI, incrementAIQuestions, isActive, remainingAIQuestions } = useSubscription();
+  const { canAskAI: canAskAISub, incrementAIQuestions: incrementAISub, isActive, remainingAIQuestions } = useSubscription();
+  const { isDemoMode, canAskAI: canAskAIDemo, incrementDemoAIQuestions, remainingDemoAI, demoAiLimit } = useDemoMode();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -312,23 +314,27 @@ const AIChatDashboardPage = () => {
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    if (!canAskAI()) {
+    // Check limits based on mode
+    const canAsk = isDemoMode ? canAskAIDemo() : canAskAISub();
+    if (!canAsk) {
       toast({
         title: "Лимит исчерпан",
-        description: "Вы использовали все бесплатные вопросы AI. Оформите подписку для продолжения.",
+        description: isDemoMode 
+          ? "Зарегистрируйтесь для получения дополнительных вопросов ИИ."
+          : "Вы использовали все бесплатные вопросы AI. Оформите подписку для продолжения.",
         variant: "destructive",
       });
       return;
     }
 
 
-    if (!currentConversationId) {
+    if (!isDemoMode && !currentConversationId) {
       await createNewConversation();
     }
 
     const userMessage: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
-    await saveMessage(userMessage);
+    if (!isDemoMode) await saveMessage(userMessage);
     setInput("");
     setSending(true);
 
@@ -363,7 +369,7 @@ const AIChatDashboardPage = () => {
         }
         const assistantMessage: Message = { role: "assistant", content: assistantContent };
         setMessages((prev) => [...prev, assistantMessage]);
-        await saveMessage(assistantMessage);
+        if (!isDemoMode) await saveMessage(assistantMessage);
         return;
       }
 
@@ -400,8 +406,12 @@ const AIChatDashboardPage = () => {
       }
 
       const assistantMessage: Message = { role: "assistant", content: assistantContent };
-      await saveMessage(assistantMessage);
-      await incrementAIQuestions();
+      if (!isDemoMode) await saveMessage(assistantMessage);
+      if (isDemoMode) {
+        incrementDemoAIQuestions();
+      } else {
+        await incrementAISub();
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       toast({
@@ -486,11 +496,27 @@ const AIChatDashboardPage = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 pb-24 md:pb-8 gap-4 overflow-hidden">
-        <div className="md:hidden mb-2">
-          <SubscriptionBanner compact />
-        </div>
+        {/* Demo banner */}
+        {isDemoMode && (
+          <div className="md:hidden mb-2">
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Демо: {remainingDemoAI} из {demoAiLimit} вопросов</span>
+                </div>
+                <Button size="sm" onClick={() => navigate("/auth")}>Регистрация</Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        {!isDemoMode && (
+          <div className="md:hidden mb-2">
+            <SubscriptionBanner compact />
+          </div>
+        )}
         {/* Desktop Sidebar */}
-        {!isMobile && (
+        {!isMobile && !isDemoMode && (
           <div className="hidden md:block w-64 flex-shrink-0 space-y-4">
             <SubscriptionBanner compact />
             <Card className="h-full">
@@ -500,11 +526,34 @@ const AIChatDashboardPage = () => {
             </Card>
           </div>
         )}
+        {/* Desktop demo banner */}
+        {!isMobile && isDemoMode && (
+          <div className="hidden md:block w-64 flex-shrink-0">
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-primary" />
+                  <span className="font-semibold text-sm">Демо-режим</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Осталось вопросов: {remainingDemoAI} из {demoAiLimit}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Зарегистрируйтесь для получения 3 бесплатных вопросов и сохранения истории
+                </p>
+                <Button size="sm" className="w-full" onClick={() => navigate("/auth")}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Зарегистрироваться
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Main Chat */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center justify-between mb-4 gap-2">
-            {isMobile && (
+            {isMobile && !isDemoMode && (
               <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="icon">
