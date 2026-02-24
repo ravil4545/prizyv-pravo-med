@@ -279,7 +279,17 @@ export default function MedicalDocumentsPage() {
 
   // Upload handwritten document with manual text input
   const uploadHandwrittenDocument = async () => {
-    if (!user || handwrittenFiles.length === 0) return;
+    if (!user) {
+      toast({
+        title: "Требуется регистрация",
+        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    if (handwrittenFiles.length === 0) return;
 
     const { documentType, examination, conclusion, diagnosis } = handwrittenForm;
     if (!documentType && !examination && !conclusion && !diagnosis) {
@@ -621,7 +631,15 @@ export default function MedicalDocumentsPage() {
   };
 
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
-    if (!user) return;
+    if (!user) {
+      toast({
+        title: "Требуется регистрация",
+        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
 
     if (!canUploadDocument()) {
       toast({
@@ -631,8 +649,7 @@ export default function MedicalDocumentsPage() {
       });
       return;
     }
-
-
+    if (handwrittenFiles.length === 0) return;
     const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     const validFiles = files.filter((f) => validTypes.includes(f.type) || f.name.toLowerCase().endsWith('.docx'));
 
