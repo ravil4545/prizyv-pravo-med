@@ -845,7 +845,7 @@ export default function MedicalDocumentsPage() {
             const dimensions = await getImageDimensions(compressedBase64);
             const pdfBlob = await createPdfFromImages([{ base64: compressedBase64, ...dimensions }]);
 
-            const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+            const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
             // Загружаем PDF
             const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, pdfBlob, {
