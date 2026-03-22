@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,6 +125,7 @@ export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canUploadDocument, incrementDocumentUploads, isActive, remainingDocUploads } = useSubscription();
+  const demo = useDemoMode();
   const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
@@ -277,17 +279,40 @@ export default function MedicalDocumentsPage() {
     setHandwrittenFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Upload handwritten document with manual text input
-  const uploadHandwrittenDocument = async () => {
-    if (!user) {
+  // Ensure user is authenticated (use anonymous sign-in for demo)
+  const ensureAuthForUpload = async (): Promise<any> => {
+    if (user) return user;
+
+    // Check demo limit before signing in
+    if (!demo.canUploadDocument()) {
       toast({
-        title: "Требуется регистрация",
-        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
+        title: "Лимит демо-режима исчерпан",
+        description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
         variant: "destructive",
       });
       navigate("/auth");
-      return;
+      return null;
     }
+
+    // Anonymous sign-in
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error || !data.user) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось создать временную сессию. Попробуйте зарегистрироваться.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return null;
+    }
+    setUser(data.user);
+    return data.user;
+  };
+
+  // Upload handwritten document with manual text input
+  const uploadHandwrittenDocument = async () => {
+    const currentUser = await ensureAuthForUpload();
+    if (!currentUser) return;
 
     if (handwrittenFiles.length === 0) return;
 
@@ -321,7 +346,7 @@ export default function MedicalDocumentsPage() {
       // Создаём PDF из всех страниц
       const pdfBlob = await createPdfFromImages(processedImages);
 
-      const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+      const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
       // Загружаем PDF
       const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, pdfBlob, {
@@ -347,7 +372,7 @@ export default function MedicalDocumentsPage() {
       const { data: insertedDoc, error: insertError } = await supabase
         .from("medical_documents_v2")
         .insert({
-          user_id: user.id,
+          user_id: currentUser.id,
           title: `Рукописный${pagesText}_${format(new Date(), "dd.MM.yyyy_HH-mm")}`,
           file_url: storedPath,
           is_classified: false,
@@ -362,7 +387,11 @@ export default function MedicalDocumentsPage() {
         title: "Документ загружен",
         description: `${handwrittenFiles.length} стр. Запускаем AI-анализ введённого текста...`,
       });
-      await incrementDocumentUploads();
+      if (currentUser.is_anonymous) {
+        demo.incrementDemoDocUploads();
+      } else {
+        await incrementDocumentUploads();
+      }
 
       // Запускаем AI анализ на введённом тексте
       if (insertedDoc) {
@@ -631,17 +660,22 @@ export default function MedicalDocumentsPage() {
   };
 
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
-    if (!user) {
-      toast({
-        title: "Требуется регистрация",
-        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
-        variant: "destructive",
-      });
-      navigate("/auth");
-      return;
-    }
+    const currentUser = await ensureAuthForUpload();
+    if (!currentUser) return;
 
-    if (!canUploadDocument()) {
+    // Check limits: demo users use demo limits, registered use subscription limits
+    const isDemoUser = currentUser.is_anonymous === true;
+    if (isDemoUser) {
+      if (!demo.canUploadDocument()) {
+        toast({
+          title: "Лимит демо-режима исчерпан",
+          description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
+          variant: "destructive",
+        });
+        navigate("/auth");
+        return;
+      }
+    } else if (!canUploadDocument()) {
       toast({
         title: "Лимит исчерпан",
         description: "Вы использовали все бесплатные загрузки. Оформите подписку для продолжения.",
@@ -673,7 +707,7 @@ export default function MedicalDocumentsPage() {
       try {
         for (const file of docxFiles) {
           setUploadProgress(`Загрузка ${file.name}...`);
-          const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.docx`;
+          const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.docx`;
           const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, file, {
             contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           });
@@ -693,7 +727,7 @@ export default function MedicalDocumentsPage() {
           const { data: insertedDoc, error: insertError } = await supabase
             .from("medical_documents_v2")
             .insert({
-              user_id: user.id,
+              user_id: currentUser.id,
               title: file.name.replace(/\.docx$/i, ""),
               file_url: fileName,
               is_classified: false,
@@ -704,7 +738,11 @@ export default function MedicalDocumentsPage() {
           if (insertError) throw insertError;
 
           toast({ title: "Документ загружен", description: `${file.name}. Запускаем AI-анализ...` });
-          await incrementDocumentUploads();
+          if (currentUser.is_anonymous) {
+            demo.incrementDemoDocUploads();
+          } else {
+            await incrementDocumentUploads();
+          }
 
           // Analyze using extracted text (handwritten mode)
           if (insertedDoc && extractedText) {
@@ -749,7 +787,7 @@ export default function MedicalDocumentsPage() {
         // Создаём PDF
         const pdfBlob = await createPdfFromImages(enhancedImages);
 
-        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+        const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
         // Загружаем PDF
         const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, pdfBlob, {
@@ -764,7 +802,7 @@ export default function MedicalDocumentsPage() {
         const { data: insertedDoc, error: insertError } = await supabase
           .from("medical_documents_v2")
           .insert({
-            user_id: user.id,
+            user_id: currentUser.id,
             title: `Документ_${otherFiles.length}_стр_${format(new Date(), "dd.MM.yyyy")}`,
             file_url: storedPath,
             is_classified: false,
@@ -778,7 +816,11 @@ export default function MedicalDocumentsPage() {
           title: "Документ загружен",
           description: `${otherFiles.length} страниц объединено в PDF. Запускаем AI-анализ...`,
         });
-        await incrementDocumentUploads();
+        if (currentUser.is_anonymous) {
+          demo.incrementDemoDocUploads();
+        } else {
+          await incrementDocumentUploads();
+        }
 
         // Запускаем AI анализ на первой странице
         if (insertedDoc && enhancedImages.length > 0) {
@@ -803,7 +845,7 @@ export default function MedicalDocumentsPage() {
             const dimensions = await getImageDimensions(compressedBase64);
             const pdfBlob = await createPdfFromImages([{ base64: compressedBase64, ...dimensions }]);
 
-            const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+            const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
             // Загружаем PDF
             const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, pdfBlob, {
@@ -818,7 +860,7 @@ export default function MedicalDocumentsPage() {
             const { data: insertedDoc, error: insertError } = await supabase
               .from("medical_documents_v2")
               .insert({
-                user_id: user.id,
+                user_id: currentUser.id,
                 title: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
                 file_url: storedPath,
                 is_classified: false,
@@ -832,7 +874,11 @@ export default function MedicalDocumentsPage() {
               title: "Документ загружен",
               description: "Запускаем AI-анализ...",
             });
-            await incrementDocumentUploads();
+            if (currentUser.is_anonymous) {
+              demo.incrementDemoDocUploads();
+            } else {
+              await incrementDocumentUploads();
+            }
 
             // Запускаем AI анализ
             if (insertedDoc) {
