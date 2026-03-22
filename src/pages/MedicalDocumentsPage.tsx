@@ -860,7 +860,7 @@ export default function MedicalDocumentsPage() {
             const { data: insertedDoc, error: insertError } = await supabase
               .from("medical_documents_v2")
               .insert({
-                user_id: user.id,
+                user_id: currentUser.id,
                 title: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
                 file_url: storedPath,
                 is_classified: false,
@@ -874,7 +874,11 @@ export default function MedicalDocumentsPage() {
               title: "Документ загружен",
               description: "Запускаем AI-анализ...",
             });
-            await incrementDocumentUploads();
+            if (currentUser.is_anonymous) {
+              demo.incrementDemoDocUploads();
+            } else {
+              await incrementDocumentUploads();
+            }
 
             // Запускаем AI анализ
             if (insertedDoc) {
