@@ -387,7 +387,11 @@ export default function MedicalDocumentsPage() {
         title: "Документ загружен",
         description: `${handwrittenFiles.length} стр. Запускаем AI-анализ введённого текста...`,
       });
-      await incrementDocumentUploads();
+      if (currentUser.is_anonymous) {
+        demo.incrementDemoDocUploads();
+      } else {
+        await incrementDocumentUploads();
+      }
 
       // Запускаем AI анализ на введённом тексте
       if (insertedDoc) {
