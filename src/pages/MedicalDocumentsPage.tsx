@@ -656,17 +656,22 @@ export default function MedicalDocumentsPage() {
   };
 
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
-    if (!user) {
-      toast({
-        title: "Требуется регистрация",
-        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
-        variant: "destructive",
-      });
-      navigate("/auth");
-      return;
-    }
+    const currentUser = await ensureAuthForUpload();
+    if (!currentUser) return;
 
-    if (!canUploadDocument()) {
+    // Check limits: demo users use demo limits, registered use subscription limits
+    const isDemoUser = currentUser.is_anonymous === true;
+    if (isDemoUser) {
+      if (!demo.canUploadDocument()) {
+        toast({
+          title: "Лимит демо-режима исчерпан",
+          description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
+          variant: "destructive",
+        });
+        navigate("/auth");
+        return;
+      }
+    } else if (!canUploadDocument()) {
       toast({
         title: "Лимит исчерпан",
         description: "Вы использовали все бесплатные загрузки. Оформите подписку для продолжения.",
