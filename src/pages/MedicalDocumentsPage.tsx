@@ -787,7 +787,7 @@ export default function MedicalDocumentsPage() {
         // Создаём PDF
         const pdfBlob = await createPdfFromImages(enhancedImages);
 
-        const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+        const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
 
         // Загружаем PDF
         const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, pdfBlob, {
