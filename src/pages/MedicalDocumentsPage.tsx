@@ -707,7 +707,7 @@ export default function MedicalDocumentsPage() {
       try {
         for (const file of docxFiles) {
           setUploadProgress(`Загрузка ${file.name}...`);
-          const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.docx`;
+          const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.docx`;
           const { error: uploadError } = await supabase.storage.from("medical-documents").upload(fileName, file, {
             contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           });
