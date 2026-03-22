@@ -727,7 +727,7 @@ export default function MedicalDocumentsPage() {
           const { data: insertedDoc, error: insertError } = await supabase
             .from("medical_documents_v2")
             .insert({
-              user_id: user.id,
+              user_id: currentUser.id,
               title: file.name.replace(/\.docx$/i, ""),
               file_url: fileName,
               is_classified: false,
@@ -738,7 +738,11 @@ export default function MedicalDocumentsPage() {
           if (insertError) throw insertError;
 
           toast({ title: "Документ загружен", description: `${file.name}. Запускаем AI-анализ...` });
-          await incrementDocumentUploads();
+          if (currentUser.is_anonymous) {
+            demo.incrementDemoDocUploads();
+          } else {
+            await incrementDocumentUploads();
+          }
 
           // Analyze using extracted text (handwritten mode)
           if (insertedDoc && extractedText) {
