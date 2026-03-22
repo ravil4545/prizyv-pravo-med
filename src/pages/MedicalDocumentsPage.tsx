@@ -279,17 +279,40 @@ export default function MedicalDocumentsPage() {
     setHandwrittenFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Upload handwritten document with manual text input
-  const uploadHandwrittenDocument = async () => {
-    if (!user) {
+  // Ensure user is authenticated (use anonymous sign-in for demo)
+  const ensureAuthForUpload = async (): Promise<any> => {
+    if (user) return user;
+
+    // Check demo limit before signing in
+    if (!demo.canUploadDocument()) {
       toast({
-        title: "Требуется регистрация",
-        description: "Для загрузки документов необходимо войти или зарегистрироваться.",
+        title: "Лимит демо-режима исчерпан",
+        description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
         variant: "destructive",
       });
       navigate("/auth");
-      return;
+      return null;
     }
+
+    // Anonymous sign-in
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error || !data.user) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось создать временную сессию. Попробуйте зарегистрироваться.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return null;
+    }
+    setUser(data.user);
+    return data.user;
+  };
+
+  // Upload handwritten document with manual text input
+  const uploadHandwrittenDocument = async () => {
+    const currentUser = await ensureAuthForUpload();
+    if (!currentUser) return;
 
     if (handwrittenFiles.length === 0) return;
 
