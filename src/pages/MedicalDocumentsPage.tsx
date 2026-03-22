@@ -125,6 +125,7 @@ export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canUploadDocument, incrementDocumentUploads, isActive, remainingDocUploads } = useSubscription();
+  const demo = useDemoMode();
   const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
