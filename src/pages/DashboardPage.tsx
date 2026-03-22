@@ -5,10 +5,20 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SubscriptionBanner from "@/components/SubscriptionBanner";
+import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import { useDemoMode } from "@/hooks/useDemoMode";
+
+interface DashboardCard {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  path: string;
+  gradient?: string;
+  featured?: boolean;
+  tag?: string;
+}
 
 const DashboardPage = () => {
   const [user, setUser] = useState<any>(null);
@@ -17,7 +27,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isDemoMode, isAuthenticated } = useDemoMode();
+  const { isDemoMode } = useDemoMode();
 
   useEffect(() => {
     checkUser();
@@ -26,32 +36,22 @@ const DashboardPage = () => {
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
-        // Allow demo access — don't redirect
         setLoading(false);
         return;
       }
-
       setUser(session.user);
-
-      // Load profile
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", session.user.id)
         .single();
-
       setProfile(profileData);
-
-      // Check if user is admin
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", session.user.id);
-
-      const hasAdminRole = roles?.some(r => r.role === "admin");
-      setIsAdmin(hasAdminRole || false);
+      setIsAdmin(roles?.some(r => r.role === "admin") || false);
     } catch (error) {
       console.error("Error checking user:", error);
     } finally {
@@ -61,10 +61,7 @@ const DashboardPage = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    toast({
-      title: "Выход выполнен",
-      description: "Вы успешно вышли из системы",
-    });
+    toast({ title: "Выход выполнен", description: "Вы успешно вышли из системы" });
     navigate("/");
   };
 
@@ -73,297 +70,174 @@ const DashboardPage = () => {
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 py-12">
-          <div className="text-center">Загрузка...</div>
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-pulse flex flex-col items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-primary/20 animate-spin border-2 border-primary border-t-transparent" />
+              <span className="text-muted-foreground text-sm">Загрузка...</span>
+            </div>
+          </div>
         </main>
       </div>
     );
   }
 
+  const mainCards: DashboardCard[] = [
+    {
+      title: "ИИ помощник",
+      description: "Персональный юридический и медицинский консультант по вопросам призыва",
+      icon: MessageSquare,
+      path: "/dashboard/ai-chat",
+      featured: true,
+      tag: "Популярное",
+      gradient: "from-primary to-accent",
+    },
+    {
+      title: "ИИ анализ документов",
+      description: "Загрузите медицинские документы для автоматического AI-анализа",
+      icon: FileHeart,
+      path: "/dashboard/medical-documents",
+      tag: "AI",
+      gradient: "from-accent to-primary",
+    },
+    {
+      title: "ИИ история болезни",
+      description: "88 статей Расписания болезней с AI-оценкой категории годности",
+      icon: BookOpen,
+      path: "/medical-history",
+      tag: "Новое",
+      gradient: "from-primary to-primary-dark",
+    },
+    {
+      title: "Шаблоны заявлений",
+      description: "Готовые документы: постановка на учёт, отсрочки и другое",
+      icon: FileText,
+      path: "/dashboard/templates",
+    },
+    {
+      title: "Медицинский опросник",
+      description: "Заполните опросник для AI-анализа вашей ситуации",
+      icon: ClipboardList,
+      path: "/medical-questionnaire",
+    },
+  ];
+
+  if (!isDemoMode) {
+    mainCards.push({
+      title: "Профиль",
+      description: "Управление личными данными и настройками аккаунта",
+      icon: User,
+      path: "/profile",
+    });
+  }
+
+  const adminCards: DashboardCard[] = [
+    { title: "Аналитика сайта", description: "Статистика посещений", icon: BarChart3, path: "/admin/analytics" },
+    { title: "Управление форумом", description: "Модерация тем", icon: Settings, path: "/admin/forum" },
+    { title: "Управление блогом", description: "Статьи блога", icon: BookOpen, path: "/admin/blog" },
+    { title: "Управление отзывами", description: "Модерация отзывов", icon: Star, path: "/admin/testimonials" },
+    { title: "Пользователи", description: "Управление доступом", icon: User, path: "/admin/users" },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-12 pb-24 md:pb-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+      <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
+        <div className="max-w-5xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold mb-2">Личный кабинет</h1>
-              <p className="text-muted-foreground">
-                {isDemoMode ? "Демо-режим" : (profile?.full_name || user?.email)}
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                Личный кабинет
+              </h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                {isDemoMode ? "Демо-режим — ограниченный доступ" : (profile?.full_name || user?.email)}
               </p>
             </div>
             {!isDemoMode && (
-              <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Выйти
+              <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Выйти</span>
               </Button>
             )}
           </div>
 
-          {/* Demo mode registration banner */}
-          {isDemoMode && (
-            <Card className="border-primary/40 bg-primary/5 mb-6">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <UserPlus className="h-5 w-5 text-primary shrink-0" />
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        Демо-режим: 1 загрузка документа и 1 вопрос ИИ
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Регистрация в личном кабинете даёт ещё 3 загрузки и 3 вопроса
-                      </p>
-                    </div>
-                  </div>
-                  <Button onClick={() => navigate("/auth")} className="shrink-0">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Зарегистрироваться
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Subscription banner only for registered users */}
-          {!isDemoMode && <SubscriptionBanner />}
-
-          <div className="grid md:grid-cols-2 gap-6 mt-6">
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/dashboard/templates")}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <FileText className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>Шаблоны заявлений</CardTitle>
-                    <CardDescription>
-                      Готовые шаблоны документов для призывников
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Постановка на учёт, снятие с учёта, отсрочки и другие документы
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/dashboard/ai-chat")}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <MessageSquare className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>ИИ помощник призывника</CardTitle>
-                    <CardDescription>
-                      Персональный юридический помощник
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Получите детальные консультации по вашей ситуации
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/medical-questionnaire")}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <FileText className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>Опросник</CardTitle>
-                    <CardDescription>
-                      Медицинский опросник для анализа
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Заполните опросник для AI-анализа вашей медицинской истории
-                </p>
-              </CardContent>
-            </Card>
-
-            {!isDemoMode && (
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/profile")}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <User className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle>Профиль</CardTitle>
-                      <CardDescription>
-                        Настройки вашего аккаунта
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Управление личными данными и настройками
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/dashboard/medical-documents")}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <FileHeart className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>ИИ анализ документов</CardTitle>
-                    <CardDescription>
-                      Загрузка и анализ медицинских документов
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  AI анализ медицинских документов и рекомендации
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl group overflow-hidden"
-              onClick={() => navigate("/medical-history")}
-              style={{
-                background: "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1))",
-              }}
-            >
-              <div 
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                style={{
-                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(236, 72, 153, 0.15))",
-                }}
-              />
-              <CardHeader className="relative">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="p-3 rounded-lg shadow-lg"
-                    style={{
-                      background: "linear-gradient(135deg, #6366f1, #ec4899)",
-                    }}
-                  >
-                    <BookOpen className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle className="bg-gradient-to-r from-indigo-500 to-pink-500 bg-clip-text text-transparent">
-                      ИИ история болезни
-                    </CardTitle>
-                    <CardDescription>
-                      Постановление №565 с AI анализом
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="relative">
-                <p className="text-sm text-muted-foreground">
-                  Расписание болезней, шансы на категорию В и персональные рекомендации
-                </p>
-              </CardContent>
-            </Card>
+          {/* Subscription Status */}
+          <div className="mb-6">
+            <SubscriptionStatusCard />
           </div>
 
+          {/* Main Feature Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {mainCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <Card
+                  key={card.path}
+                  className={`group cursor-pointer transition-all duration-300 hover:shadow-medium hover:-translate-y-0.5 overflow-hidden relative ${
+                    card.featured ? "sm:col-span-2 lg:col-span-1 border-primary/20" : "border-border/50"
+                  }`}
+                  onClick={() => navigate(card.path)}
+                >
+                  {/* Gradient accent bar */}
+                  {card.gradient && (
+                    <div className={`h-1 w-full bg-gradient-to-r ${card.gradient}`} />
+                  )}
+                  
+                  <CardContent className="p-4 md:p-5">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${
+                        card.gradient 
+                          ? `bg-gradient-to-br ${card.gradient} shadow-sm` 
+                          : "bg-primary/8 group-hover:bg-primary/12"
+                      }`}>
+                        <Icon className={`h-5 w-5 ${card.gradient ? "text-white" : "text-primary"}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-foreground text-sm md:text-base truncate">
+                            {card.title}
+                          </h3>
+                          {card.tag && (
+                            <Badge tag={card.tag} />
+                          )}
+                        </div>
+                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
+                          {card.description}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Admin Section */}
           {isAdmin && (
             <div className="mt-8">
-              <h2 className="text-2xl font-bold mb-4">Администрирование</h2>
-              <div className="grid md:grid-cols-2 gap-6">
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/analytics")}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-destructive/10 rounded-lg">
-                        <BarChart3 className="h-6 w-6 text-destructive" />
-                      </div>
-                      <div>
-                        <CardTitle>Аналитика сайта</CardTitle>
-                        <CardDescription>Статистика посещений и активности</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Полная аналитика посетителей, страниц и поведения пользователей</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/forum")}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-destructive/10 rounded-lg">
-                        <Settings className="h-6 w-6 text-destructive" />
-                      </div>
-                      <div>
-                        <CardTitle>Управление форумом</CardTitle>
-                        <CardDescription>Модерация тем и сообщений</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Одобрение, отклонение и управление постами на форуме</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/blog")}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-destructive/10 rounded-lg">
-                        <BookOpen className="h-6 w-6 text-destructive" />
-                      </div>
-                      <div>
-                        <CardTitle>Управление блогом</CardTitle>
-                        <CardDescription>Создание и редактирование статей</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Публикация и редактирование статей блога</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/testimonials")}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-destructive/10 rounded-lg">
-                        <Star className="h-6 w-6 text-destructive" />
-                      </div>
-                      <div>
-                        <CardTitle>Управление отзывами</CardTitle>
-                        <CardDescription>Модерация отзывов клиентов</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Одобрение и удаление отзывов</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/admin/users")}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-destructive/10 rounded-lg">
-                        <User className="h-6 w-6 text-destructive" />
-                      </div>
-                      <div>
-                        <CardTitle>Пользователи и подписки</CardTitle>
-                        <CardDescription>Управление доступом пользователей</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Список пользователей, статус оплаты, переключение режимов</p>
-                  </CardContent>
-                </Card>
+              <h2 className="text-lg font-bold mb-3 text-foreground flex items-center gap-2">
+                <Settings className="h-5 w-5 text-destructive" />
+                Администрирование
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {adminCards.map((card) => {
+                  const Icon = card.icon;
+                  return (
+                    <Card
+                      key={card.path}
+                      className="cursor-pointer hover:shadow-soft transition-all hover:-translate-y-0.5 border-destructive/10"
+                      onClick={() => navigate(card.path)}
+                    >
+                      <CardContent className="p-3 text-center">
+                        <div className="p-2 bg-destructive/8 rounded-lg w-fit mx-auto mb-2">
+                          <Icon className="h-4 w-4 text-destructive" />
+                        </div>
+                        <p className="text-xs font-medium text-foreground truncate">{card.title}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -373,5 +247,18 @@ const DashboardPage = () => {
     </div>
   );
 };
+
+function Badge({ tag }: { tag: string }) {
+  const colors: Record<string, string> = {
+    "Популярное": "bg-accent/10 text-accent",
+    "AI": "bg-primary/10 text-primary",
+    "Новое": "bg-emerald-500/10 text-emerald-600",
+  };
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${colors[tag] || "bg-muted text-muted-foreground"}`}>
+      {tag}
+    </span>
+  );
+}
 
 export default DashboardPage;
