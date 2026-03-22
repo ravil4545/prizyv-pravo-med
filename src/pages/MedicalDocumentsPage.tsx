@@ -372,7 +372,7 @@ export default function MedicalDocumentsPage() {
       const { data: insertedDoc, error: insertError } = await supabase
         .from("medical_documents_v2")
         .insert({
-          user_id: user.id,
+          user_id: currentUser.id,
           title: `Рукописный${pagesText}_${format(new Date(), "dd.MM.yyyy_HH-mm")}`,
           file_url: storedPath,
           is_classified: false,
