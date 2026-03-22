@@ -649,7 +649,8 @@ export default function MedicalDocumentsPage() {
       });
       return;
     }
-    if (handwrittenFiles.length === 0) return;
+
+
     const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     const validFiles = files.filter((f) => validTypes.includes(f.type) || f.name.toLowerCase().endsWith('.docx'));
 
