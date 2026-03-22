@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
