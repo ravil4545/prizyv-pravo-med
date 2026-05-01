@@ -12,6 +12,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
 import { GridSkeleton } from "@/components/LoadingSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import ShareWithLawyer from "@/components/ShareWithLawyer";
 
 interface DashboardCard {
   title: string;
@@ -309,6 +310,9 @@ const DashboardPage = () => {
           )}
         </div>
       </main>
+      <div className="container mx-auto px-4 pb-8 max-w-5xl">
+        <ShareWithLawyer />
+      </div>
       <Footer />
       {user && (
         <OnboardingWizard

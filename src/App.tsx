@@ -39,6 +39,11 @@ const CaseTrackingPage = lazy(() => import("./pages/CaseTrackingPage"));
 const SuccessCasesPage = lazy(() => import("./pages/SuccessCasesPage"));
 const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirectoryPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
+const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
+const LawyerClientDetail = lazy(() => import("./pages/LawyerClientDetail"));
+const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
+const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -91,6 +96,11 @@ const App = () => (
               <Route path="/admin/articles" element={<AdminArticlesPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/lawyer" element={<LawyerDashboard />} />
+              <Route path="/lawyer/clients" element={<LawyerClientsPage />} />
+              <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
+              <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
+              <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
