@@ -905,6 +905,72 @@ export type Database = {
         }
         Relationships: []
       }
+      rag_chunks: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string | null
+          embedding: string | null
+          id: string
+          is_foundational: boolean | null
+          last_refined: string | null
+          priority: string | null
+          schedule_articles: string[] | null
+          section_title: string | null
+          tags: string[] | null
+          target_category: string | null
+          type: string | null
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string | null
+          embedding?: string | null
+          id: string
+          is_foundational?: boolean | null
+          last_refined?: string | null
+          priority?: string | null
+          schedule_articles?: string[] | null
+          section_title?: string | null
+          tags?: string[] | null
+          target_category?: string | null
+          type?: string | null
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          is_foundational?: boolean | null
+          last_refined?: string | null
+          priority?: string | null
+          schedule_articles?: string[] | null
+          section_title?: string | null
+          tags?: string[] | null
+          target_category?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      rag_system_context: {
+        Row: {
+          content: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          content: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       "ravil4545@gmail.com": {
         Row: {
           created_at: string
@@ -1152,6 +1218,21 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_rag_chunks: {
+        Args: {
+          match_count?: number
+          min_similarity?: number
+          query_embedding: string
+        }
+        Returns: {
+          category: string
+          content: string
+          id: string
+          schedule_articles: string[]
+          similarity: number
+          target_category: string
+        }[]
       }
     }
     Enums: {
