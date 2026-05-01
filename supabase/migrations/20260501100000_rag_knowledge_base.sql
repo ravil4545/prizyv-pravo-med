@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS rag_chunks (
     id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(1024),
     category TEXT,
     tags TEXT[],
     schedule_articles TEXT[],
@@ -45,7 +45,7 @@ CREATE POLICY "Public read rag_system_context" ON rag_system_context
 
 -- 6. Semantic search function (excludes foundational files from retrieval — they're in system prompt)
 CREATE OR REPLACE FUNCTION match_rag_chunks(
-    query_embedding vector(1536),
+    query_embedding vector(1024),
     match_count INT DEFAULT 5,
     min_similarity FLOAT DEFAULT 0.3
 )

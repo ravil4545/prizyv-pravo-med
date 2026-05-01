@@ -21,8 +21,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const OPENAI_KEY     = Deno.env.get("OPENAI_API_KEY");
-const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
+const JINA_KEY    = Deno.env.get("JINA_API_KEY");
+const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 const messageSchema = z.object({
@@ -70,25 +70,27 @@ async function getSystemContext(): Promise<string> {
   return cachedSystemContext;
 }
 
-// ─── OpenAI embeddings ────────────────────────────────────────────────────────
-async function embed(text: string): Promise<number[]> {
-  if (!OPENAI_KEY) throw new Error("OPENAI_API_KEY не настроен");
+// ─── Jina AI embeddings (jina-embeddings-v3, 1024 dims, strong Russian support) ─
+async function embed(text: string, task: "retrieval.query" | "retrieval.passage" = "retrieval.query"): Promise<number[]> {
+  if (!JINA_KEY) throw new Error("JINA_API_KEY не настроен");
 
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
+  const res = await fetch("https://api.jina.ai/v1/embeddings", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
+      Authorization: `Bearer ${JINA_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text.slice(0, 8000),
+      model: "jina-embeddings-v3",
+      task,
+      dimensions: 1024,
+      input: [text.slice(0, 8000)],
     }),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`OpenAI embeddings error ${res.status}: ${err}`);
+    throw new Error(`Jina embeddings error ${res.status}: ${err}`);
   }
 
   const json = await res.json();
@@ -104,9 +106,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!OPENROUTER_KEY) {
+    if (!JINA_KEY || !LOVABLE_KEY) {
       return Response.json(
-        { error: "OPENROUTER_API_KEY не настроен" },
+        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "LOVABLE_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -185,36 +187,21 @@ ${sysCtx}`;
       ? `Найденные материалы по теме:\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
       : `Вопрос: ${message}`;
 
-    // 4. Call Claude Haiku via OpenRouter with prompt caching on system context
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // 4. Call Gemini Flash via Lovable AI gateway (same as other functions in this project)
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
+        Authorization: `Bearer ${LOVABLE_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Knowledge Base Chat",
       },
       body: JSON.stringify({
-        model: "anthropic/claude-haiku-4-5",
+        model: "google/gemini-2.5-flash",
         stream: true,
         messages: [
-          {
-            role: "system",
-            // Cache the large system context (foundational files ~16k tokens)
-            content: [
-              {
-                type: "text",
-                text: systemText,
-                cache_control: { type: "ephemeral" },
-              },
-            ],
-          },
+          { role: "system", content: systemText },
           // Conversation history (last 6 turns to keep context manageable)
           ...history.slice(-6),
-          {
-            role: "user",
-            content: userContent,
-          },
+          { role: "user", content: userContent },
         ],
       }),
     });
