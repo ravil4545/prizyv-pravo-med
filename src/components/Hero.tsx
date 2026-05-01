@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, CheckCircle2, Bot, ChevronDown, FileSearch, Brain, MessageSquarePlus, Sparkles, Shield } from "lucide-react";
+import { Phone, MessageCircle, Send, CheckCircle2, Bot, ChevronDown, FileSearch, Brain, MessageSquarePlus, Sparkles, Shield } from "lucide-react";
 import heroImage from "@/assets/hero-legal-clean.jpg";
 
 const Hero = () => {
@@ -15,6 +15,10 @@ const Hero = () => {
   const handleWhatsApp = () => {
     const message = encodeURIComponent("Добрый день! Мне необходима консультация по поводу призыва на срочную службу...");
     window.open(`https://wa.me/79253500533?text=${message}`, "_blank");
+  };
+
+  const handleTelegram = () => {
+    window.open("https://t.me/nepriziv2", "_blank");
   };
 
   return (
@@ -47,24 +51,34 @@ const Hero = () => {
           </p>
 
           {/* Primary CTAs */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center mb-3 max-w-lg mx-auto" role="group">
+          <div className="flex flex-col gap-3 justify-center items-stretch mb-3 max-w-lg mx-auto" role="group">
             <Button
               variant="hero"
               size="lg"
               onClick={handlePhoneCall}
-              className="w-full sm:w-auto text-base px-6 py-6 sm:py-4 sm:text-lg font-semibold gap-2 shadow-lg"
+              className="w-full text-base px-6 py-6 sm:py-4 sm:text-lg font-semibold gap-2 shadow-lg"
             >
               <Phone className="h-5 w-5" />
               Бесплатная консультация
             </Button>
-            <Button
-              size="lg"
-              onClick={handleWhatsApp}
-              className="w-full sm:w-auto text-base px-6 py-6 sm:py-4 sm:text-lg font-semibold bg-emerald-500 hover:bg-emerald-600 text-white gap-2 shadow-lg"
-            >
-              <MessageCircle className="h-5 w-5" />
-              WhatsApp
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                size="lg"
+                onClick={handleTelegram}
+                className="w-full text-base px-4 py-5 sm:py-4 sm:text-lg font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-2 shadow-lg"
+              >
+                <Send className="h-5 w-5" />
+                Telegram
+              </Button>
+              <Button
+                size="lg"
+                onClick={handleWhatsApp}
+                className="w-full text-base px-4 py-5 sm:py-4 sm:text-lg font-semibold bg-emerald-500 hover:bg-emerald-600 text-white gap-2 shadow-lg"
+              >
+                <MessageCircle className="h-5 w-5" />
+                WhatsApp
+              </Button>
+            </div>
           </div>
 
           {/* AI button */}
