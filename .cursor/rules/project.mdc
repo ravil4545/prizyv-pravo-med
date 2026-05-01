@@ -1,0 +1,71 @@
+---
+description: nepriziv.ru project rules for Cursor AI
+globs: ["**/*.ts", "**/*.tsx", "**/*.sql", "supabase/**/*"]
+alwaysApply: true
+---
+
+# nepriziv.ru — Project Rules
+
+## Stack
+- React 18 + TypeScript + Vite (port 8080)
+- shadcn/ui (Radix UI) + Tailwind CSS — design tokens in `src/index.css`
+- React Router v6, React Query v5, React Hook Form + Zod
+- Supabase: PostgreSQL + Auth + Storage + Edge Functions (Deno)
+- Package manager: Bun (preferred) or npm
+
+## Critical conventions
+
+### Auto-generated — do NOT edit manually
+- `src/components/ui/` — shadcn/ui components
+- `src/integrations/supabase/` — Supabase client and TypeScript types
+
+### Path alias
+`@/*` → `src/*`
+
+### AI calls
+All AI calls go through Supabase Edge Functions using `LOVABLE_API_KEY`.
+Never call AI APIs directly from the frontend.
+
+### Auth & data
+- Supabase Auth (email/password + anonymous sessions)
+- `user_roles` table — admin access
+- `user_subscriptions` table — paid quotas
+- Free demo: 3 AI questions + 3 document uploads via `useDemoMode()` + localStorage
+- RLS policies enforce auth server-side — no need for client-side guards
+
+### Edge functions
+Located in `supabase/functions/`. Deploy with:
+```bash
+supabase functions deploy <function-name>
+```
+Main functions: `chat`, `analyze-medical-document`, `analyze-diagnosis`,
+`generate-document`, `enhance-document`, `find-government-structures`
+
+### Styling
+- Use HSL CSS variables from `src/index.css`, not hardcoded colors
+- Dark mode via `.dark` class (next-themes)
+- Border radius: `0.75rem`
+- Tailwind only — no inline styles
+
+### Security
+- User content must go through `src/lib/sanitize.ts` (DOMPurify) before rendering
+- Validate all forms with Zod schemas from `src/lib/validations.ts`
+- `.env` has public Supabase keys (safe to commit)
+- Backend secrets live only in Supabase Dashboard
+
+## Key tables
+`profiles`, `user_subscriptions`, `user_roles`, `medical_documents_v2`,
+`document_article_links`, `disease_articles_565`, `forum_posts`,
+`forum_comments`, `blog_posts`, `testimonials`, `analytics_events`
+
+## Commands
+```bash
+bun run dev      # dev server on port 8080
+bun run build    # production build
+npm run lint     # ESLint
+```
+
+## Deployment
+- Frontend: Lovable UI (manual "Update" click required)
+- Edge functions + migrations: auto-deploy on GitHub push
+- Live site: https://nepriziv.ru

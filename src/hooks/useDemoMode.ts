@@ -65,8 +65,8 @@ export function useDemoMode() {
 
   const isDemoMode = isAuthenticated === false || isAnonymous;
 
-  const demoDocLimit = 1;
-  const demoAiLimit = 1;
+  const demoDocLimit = 3;
+  const demoAiLimit = 3;
 
   const canUploadDocument = useCallback((): boolean => {
     if (!isDemoMode) return true; // registered users use useSubscription

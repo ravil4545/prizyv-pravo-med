@@ -5,10 +5,11 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import { useDemoMode } from "@/hooks/useDemoMode";
+import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
 
 interface DashboardCard {
   title: string;
@@ -25,6 +26,7 @@ const DashboardPage = () => {
   const [profile, setProfile] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
@@ -52,6 +54,11 @@ const DashboardPage = () => {
         .select("role")
         .eq("user_id", session.user.id);
       setIsAdmin(roles?.some(r => r.role === "admin") || false);
+
+      // Show onboarding for new users who haven't completed it
+      if (!isOnboardingDone() && !profileData?.full_name) {
+        setShowOnboarding(true);
+      }
     } catch (error) {
       console.error("Error checking user:", error);
     } finally {
@@ -119,6 +126,13 @@ const DashboardPage = () => {
       icon: ClipboardList,
       path: "/medical-questionnaire",
     },
+    {
+      title: "Трекинг дела",
+      description: "Фиксируйте этапы призывного дела: комиссии, обжалования, суды",
+      icon: Calendar,
+      path: "/dashboard/case-tracking",
+      tag: "Новое",
+    },
   ];
 
   if (!isDemoMode) {
@@ -129,6 +143,21 @@ const DashboardPage = () => {
       path: "/profile",
     });
   }
+
+  const communityCards: DashboardCard[] = [
+    {
+      title: "База успешных кейсов",
+      description: "Реальные истории призывников с непризывными категориями",
+      icon: Trophy,
+      path: "/success-cases",
+    },
+    {
+      title: "Справочник военкоматов",
+      description: "Рейтинги и отзывы о военкоматах от призывников",
+      icon: Building2,
+      path: "/commissariats",
+    },
+  ];
 
   const adminCards: DashboardCard[] = [
     { title: "Аналитика сайта", description: "Статистика посещений", icon: BarChart3, path: "/admin/analytics" },
@@ -213,6 +242,39 @@ const DashboardPage = () => {
             })}
           </div>
 
+          {/* Community Section */}
+          <div className="mt-8">
+            <h2 className="text-lg font-bold mb-3 text-foreground flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              Сообщество
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {communityCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <Card
+                    key={card.path}
+                    className="group cursor-pointer transition-all duration-300 hover:shadow-medium hover:-translate-y-0.5 border-border/50"
+                    onClick={() => navigate(card.path)}
+                  >
+                    <CardContent className="p-4 md:p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-xl shrink-0 bg-primary/8 group-hover:bg-primary/12 transition-colors">
+                          <Icon className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-foreground text-sm md:text-base">{card.title}</h3>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-0.5 line-clamp-2">{card.description}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Admin Section */}
           {isAdmin && (
             <div className="mt-8">
@@ -244,6 +306,13 @@ const DashboardPage = () => {
         </div>
       </main>
       <Footer />
+      {user && (
+        <OnboardingWizard
+          open={showOnboarding}
+          onClose={() => setShowOnboarding(false)}
+          userId={user.id}
+        />
+      )}
     </div>
   );
 };

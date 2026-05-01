@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, AlertCircle, FileText, Award } from "lucide-react";
+import { MessageCircle, AlertCircle, FileText, Award, Heart, Search } from "lucide-react";
 import { forumPostSchema } from "@/lib/validations";
 import ForumComments from "@/components/ForumComments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,11 +36,59 @@ const ForumPage = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [likes, setLikes] = useState<Record<string, number>>({});
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     checkUser();
     loadPosts();
   }, []);
+
+  useEffect(() => {
+    if (posts.length > 0) loadLikes();
+  }, [posts, user]);
+
+  const loadLikes = async () => {
+    const postIds = posts.map(p => p.id);
+    const { data: likeCounts } = await supabase
+      .from("forum_post_likes")
+      .select("post_id")
+      .in("post_id", postIds);
+
+    const counts: Record<string, number> = {};
+    for (const row of likeCounts || []) {
+      counts[row.post_id] = (counts[row.post_id] || 0) + 1;
+    }
+    setLikes(counts);
+
+    if (user) {
+      const { data: myLikes } = await supabase
+        .from("forum_post_likes")
+        .select("post_id")
+        .in("post_id", postIds)
+        .eq("user_id", user.id);
+      setLikedPosts(new Set((myLikes || []).map(r => r.post_id)));
+    }
+  };
+
+  const toggleLike = async (e: React.MouseEvent, postId: string) => {
+    e.stopPropagation();
+    if (!user) {
+      toast({ title: "Требуется авторизация", description: "Войдите, чтобы ставить лайки", variant: "destructive" });
+      return;
+    }
+    const isLiked = likedPosts.has(postId);
+    if (isLiked) {
+      await supabase.from("forum_post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+      setLikedPosts(prev => { const s = new Set(prev); s.delete(postId); return s; });
+      setLikes(prev => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 1) - 1) }));
+    } else {
+      await supabase.from("forum_post_likes").insert({ post_id: postId, user_id: user.id });
+      setLikedPosts(prev => new Set([...prev, postId]));
+      setLikes(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
+    }
+  };
 
   const checkUser = async () => {
     const {
@@ -159,7 +207,12 @@ const ForumPage = () => {
     }
   };
 
-  const filteredPosts = posts.filter((post) => post.topic_type === activeTopic);
+  const filteredPosts = posts.filter((post) => {
+    if (post.topic_type !== activeTopic) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return post.title.toLowerCase().includes(q) || post.content.toLowerCase().includes(q);
+  });
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -167,7 +220,18 @@ const ForumPage = () => {
 
       <main className="flex-1 py-20 px-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-12 gradient-text">Форум</h1>
+          <h1 className="text-4xl font-bold text-center mb-8 gradient-text">Форум</h1>
+
+          {/* Search */}
+          <div className="relative mb-6">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск по темам форума..."
+              className="pl-9"
+            />
+          </div>
 
           <Tabs value={activeTopic} onValueChange={(v: any) => setActiveTopic(v)} className="mb-8">
             <TabsList className="grid w-full grid-cols-3">
@@ -249,6 +313,17 @@ const ForumPage = () => {
                       <p className="whitespace-pre-wrap">{enhanceTypography(post.content)}</p>
                     )}
                   </div>
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/40">
+                    <button
+                      onClick={(e) => toggleLike(e, post.id)}
+                      className={`flex items-center gap-1.5 text-sm transition-colors ${
+                        likedPosts.has(post.id) ? "text-red-500" : "text-muted-foreground hover:text-red-400"
+                      }`}
+                    >
+                      <Heart className={`h-4 w-4 ${likedPosts.has(post.id) ? "fill-current" : ""}`} />
+                      <span>{likes[post.id] || 0}</span>
+                    </button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -257,7 +332,7 @@ const ForumPage = () => {
           {filteredPosts.length === 0 && (
             <div className="text-center py-12">
               <p className="text-muted-foreground">
-                {user ? "Будьте первым, кто создаст пост в этом разделе" : "Войдите, чтобы создать пост"}
+                {searchQuery ? "По вашему запросу ничего не найдено" : user ? "Будьте первым, кто создаст пост в этом разделе" : "Войдите, чтобы создать пост"}
               </p>
             </div>
           )}

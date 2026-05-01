@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import ServicesPage from "./pages/ServicesPage";
 import TemplatesPage from "./pages/TemplatesPage";
@@ -28,6 +28,9 @@ import ProfilePage from "./pages/ProfilePage";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage";
 import MedicalHistoryPage from "./pages/MedicalHistoryPage";
 import MedicalQuestionnairePage from "./pages/MedicalQuestionnairePage";
+import CaseTrackingPage from "./pages/CaseTrackingPage";
+import SuccessCasesPage from "./pages/SuccessCasesPage";
+import CommissariatDirectoryPage from "./pages/CommissariatDirectoryPage";
 import NotFound from "./pages/NotFound";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
@@ -61,9 +64,12 @@ const App = () => (
           <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
           <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
           <Route path="/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
-          <Route path="/medical-documents" element={<MedicalDocumentsPage />} />
+          <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
           <Route path="/medical-history" element={<MedicalHistoryPage />} />
           <Route path="/medical-questionnaire" element={<MedicalQuestionnairePage />} />
+          <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
+          <Route path="/success-cases" element={<SuccessCasesPage />} />
+          <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
           <Route path="/admin/forum" element={<AdminForumPage />} />
           <Route path="/admin/blog" element={<AdminBlogPage />} />
           <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />

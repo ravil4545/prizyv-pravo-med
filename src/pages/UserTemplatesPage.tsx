@@ -5,8 +5,9 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, FileText, ArrowLeft } from "lucide-react";
+import { Download, FileText, ArrowLeft, UserCheck, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface Template {
   id: string;
@@ -18,6 +19,7 @@ interface Template {
 
 const UserTemplatesPage = () => {
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -177,6 +179,12 @@ const UserTemplatesPage = () => {
       }
 
       setUser(session.user);
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name, address, city, region, phone, birth_date, military_commissariat")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      setProfile(profileData);
     } catch (error) {
       console.error("Error checking user:", error);
     } finally {
@@ -184,20 +192,37 @@ const UserTemplatesPage = () => {
     }
   };
 
-  const handleDownload = (template: Template) => {
-    const blob = new Blob([template.content], { type: "text/plain;charset=utf-8" });
+  const fillTemplate = (content: string): string => {
+    if (!profile) return content;
+    const today = new Date().toLocaleDateString("ru-RU");
+    const address = [profile.city, profile.address].filter(Boolean).join(", ") || "[полный адрес]";
+    const commissariat = profile.military_commissariat || "[название района/города]";
+    return content
+      .replace(/\[Фамилия Имя Отчество\]/g, profile.full_name || "[Фамилия Имя Отчество]")
+      .replace(/\[полный адрес\]/g, address)
+      .replace(/\[номер телефона\]/g, profile.phone || "[номер телефона]")
+      .replace(/\[название района\/города\]/g, commissariat)
+      .replace(/\[__________\]/g, today)
+      .replace(/\[дата рождения\]/g, profile.birth_date
+        ? new Date(profile.birth_date).toLocaleDateString("ru-RU")
+        : "[дата рождения]");
+  };
+
+  const handleDownload = (template: Template, prefilled = false) => {
+    const content = prefilled ? fillTemplate(template.content) : template.content;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${template.title}.txt`;
+    link.download = `${template.title}${prefilled ? " (заполненный)" : ""}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
 
     toast({
-      title: "Шаблон скачан",
-      description: "Файл сохранён на вашем устройстве",
+      title: prefilled ? "Заполненный шаблон скачан" : "Шаблон скачан",
+      description: prefilled ? "Документ заполнен данными из вашего профиля" : "Файл сохранён на вашем устройстве",
     });
   };
 
@@ -228,12 +253,26 @@ const UserTemplatesPage = () => {
             Назад в личный кабинет
           </Button>
 
-          <div className="mb-12 text-center">
+          <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold mb-4">Шаблоны заявлений</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Готовые шаблоны документов для призывников. Скачайте и заполните необходимые поля.
             </p>
           </div>
+
+          {profile?.full_name && (
+            <div className="mb-8 flex items-center gap-3 p-4 bg-primary/5 border border-primary/20 rounded-xl">
+              <UserCheck className="h-5 w-5 text-primary flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-foreground">Профиль заполнен — доступно предзаполнение</p>
+                <p className="text-xs text-muted-foreground">Нажмите "Скачать заполненный" чтобы получить документ с вашими данными</p>
+              </div>
+              <Badge className="ml-auto bg-primary/10 text-primary border-0">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Авто
+              </Badge>
+            </div>
+          )}
 
           {categories.map((category) => (
             <div key={category} className="mb-12">
@@ -254,10 +293,21 @@ const UserTemplatesPage = () => {
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="space-y-2">
+                        {profile?.full_name && (
+                          <Button
+                            onClick={() => handleDownload(template, true)}
+                            className="w-full"
+                            variant="default"
+                          >
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            Скачать заполненный
+                          </Button>
+                        )}
                         <Button
-                          onClick={() => handleDownload(template)}
+                          onClick={() => handleDownload(template, false)}
                           className="w-full"
+                          variant={profile?.full_name ? "outline" : "default"}
                         >
                           <Download className="mr-2 h-4 w-4" />
                           Скачать шаблон

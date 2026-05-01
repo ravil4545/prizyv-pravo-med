@@ -19,6 +19,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { enhanceTypography } from "@/lib/typography";
 import { useDemoMode } from "@/hooks/useDemoMode";
+import LimitReachedDialog from "@/components/LimitReachedDialog";
 
 interface Message {
   role: "user" | "assistant";
@@ -43,6 +44,7 @@ const AIChatDashboardPage = () => {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false);
   const [medicalContext, setMedicalContext] = useState<string>("");
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
@@ -317,13 +319,7 @@ const AIChatDashboardPage = () => {
     // Check limits based on mode
     const canAsk = isDemoMode ? canAskAIDemo() : canAskAISub();
     if (!canAsk) {
-      toast({
-        title: "Лимит исчерпан",
-        description: isDemoMode 
-          ? "Зарегистрируйтесь для получения дополнительных вопросов ИИ."
-          : "Вы использовали все бесплатные вопросы AI. Оформите подписку для продолжения.",
-        variant: "destructive",
-      });
+      setLimitDialogOpen(true);
       return;
     }
 
@@ -682,6 +678,12 @@ const AIChatDashboardPage = () => {
         </div>
       </main>
       <Footer />
+      <LimitReachedDialog
+        open={limitDialogOpen}
+        onClose={() => setLimitDialogOpen(false)}
+        type="ai"
+        isDemoMode={isDemoMode}
+      />
     </div>
   );
 };

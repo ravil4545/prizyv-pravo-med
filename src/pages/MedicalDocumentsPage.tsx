@@ -45,6 +45,8 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
+import DossierExportButton from "@/components/DossierExportButton";
+import LimitReachedDialog from "@/components/LimitReachedDialog";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -160,6 +162,7 @@ export default function MedicalDocumentsPage() {
   // Multi-select for deletion
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
   const [showMultiDeleteConfirm, setShowMultiDeleteConfirm] = useState(false);
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false);
 
   // Add pages to existing document
   const [documentToAddPages, setDocumentToAddPages] = useState<MedicalDocument | null>(null);
@@ -285,6 +288,7 @@ export default function MedicalDocumentsPage() {
 
     // Check demo limit before signing in
     if (!demo.canUploadDocument()) {
+      setLimitDialogOpen(true);
       toast({
         title: "Лимит демо-режима исчерпан",
         description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
@@ -1482,14 +1486,18 @@ export default function MedicalDocumentsPage() {
                 ИИ автоматически извлечёт текст и оценит категорию годности
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="self-start sm:self-auto flex-shrink-0"
-              onClick={() => navigate("/dashboard")}
-            >
-              Назад
-            </Button>
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-shrink-0">
+              {user && documents.length > 0 && (
+                <DossierExportButton userId={user.id} />
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/dashboard")}
+              >
+                Назад
+              </Button>
+            </div>
           </div>
 
           {/* Drag & Drop Zone */}
@@ -2336,6 +2344,12 @@ export default function MedicalDocumentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <LimitReachedDialog
+        open={limitDialogOpen}
+        onClose={() => setLimitDialogOpen(false)}
+        type="document"
+        isDemoMode={demo.isDemoMode}
+      />
     </div>
   );
 }

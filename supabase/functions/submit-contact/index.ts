@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { Resend } from "npm:resend@4.0.0";
 
 // CORS configuration - restrict to production domain in production
 const getAllowedOrigin = () => {
@@ -151,6 +152,64 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
+    }
+
+    // Send confirmation email to user if email provided
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    if (resendApiKey && validation.data.email) {
+      try {
+        const resend = new Resend(resendApiKey);
+        await resend.emails.send({
+          from: 'НеПризыв <onboarding@resend.dev>',
+          to: [validation.data.email],
+          subject: 'Ваша заявка принята — nepriziv.ru',
+          html: `
+            <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+              <h2 style="color:#1a1a2e;">Заявка принята!</h2>
+              <p>Здравствуйте, ${validation.data.name}!</p>
+              <p>Мы получили вашу заявку и свяжемся с вами в ближайшее время по телефону <strong>${validation.data.phone}</strong>.</p>
+              <div style="background:#f8f9fa;border-left:4px solid #6366f1;padding:16px;border-radius:4px;margin:16px 0;">
+                <p style="margin:0;font-weight:bold;">Ваше сообщение:</p>
+                <p style="margin:8px 0 0;color:#374151;">${validation.data.message}</p>
+              </div>
+              <p>Обычно мы отвечаем в течение 1–2 рабочих часов.</p>
+              <a href="https://nepriziv.ru/dashboard/ai-chat"
+                 style="display:inline-block;background:#6366f1;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:8px;font-weight:600;">
+                Попробовать ИИ-консультант
+              </a>
+              <p style="margin-top:24px;color:#6b7280;font-size:12px;">nepriziv.ru — правовая защита призывников</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.error('Confirmation email error:', emailErr);
+      }
+    }
+
+    // Notify admin
+    if (resendApiKey) {
+      try {
+        const resend = new Resend(resendApiKey);
+        const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+        await resend.emails.send({
+          from: 'НеПризыв <onboarding@resend.dev>',
+          to: ['ravil4545@gmail.com'],
+          subject: `📩 Новая заявка: ${validation.data.name}`,
+          html: `
+            <h2>Новая заявка с сайта</h2>
+            <table style="border-collapse:collapse;">
+              <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${validation.data.name}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${validation.data.phone}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${validation.data.email || '—'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Сообщение:</td><td style="padding:4px 12px;">${validation.data.message}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Дата:</td><td style="padding:4px 12px;">${now}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">IP:</td><td style="padding:4px 12px;">${clientIp}</td></tr>
+            </table>
+          `,
+        });
+      } catch (emailErr) {
+        console.error('Admin email error:', emailErr);
+      }
     }
 
     return new Response(
