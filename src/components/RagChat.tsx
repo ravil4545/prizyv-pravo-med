@@ -39,10 +39,8 @@ export function RagChat() {
 
   // Hide on certain routes
   const hidden = HIDDEN_ROUTES.some((r) => location.pathname.startsWith(r));
-  if (hidden) return null;
 
   // Scroll to bottom on new messages
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (open) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -50,14 +48,12 @@ export function RagChat() {
   }, [messages, open]);
 
   // Auto-focus input when panel opens
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open]);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -134,6 +130,8 @@ export function RagChat() {
       handleSend();
     }
   };
+
+  if (hidden) return null;
 
   return (
     <>
