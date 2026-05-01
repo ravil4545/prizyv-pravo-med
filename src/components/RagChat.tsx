@@ -131,6 +131,8 @@ export function RagChat() {
     }
   };
 
+  if (hidden) return null;
+
   return (
     <>
       {/* ── Floating toggle button ─────────────────────────────────────────── */}
