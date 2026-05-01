@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.notify-payment-click]
 verify_jwt = false
+
+[functions.chat-rag]
+verify_jwt = false

@@ -34,6 +34,7 @@ import SuccessCasesPage from "./pages/SuccessCasesPage";
 import CommissariatDirectoryPage from "./pages/CommissariatDirectoryPage";
 import NotFound from "./pages/NotFound";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
+import RagChat from "./components/RagChat";
 
 const AnalyticsTracker = () => {
   useAnalyticsTracking();
@@ -82,6 +83,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
         <QuickActionFAB />
+        <RagChat />
         <MobileBottomNav />
       </BrowserRouter>
     </TooltipProvider>
