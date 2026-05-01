@@ -10,7 +10,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus } from "lucide-react";
+import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -593,8 +593,30 @@ const AIChatDashboardPage = () => {
               <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
                 <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
                   {messages.length === 0 && (
-                    <div className="text-center text-muted-foreground py-8 sm:py-12 px-4">
-                      <p className="text-[13px] sm:text-base leading-relaxed">Задайте вопрос юридическому AI консультанту</p>
+                    <div className="flex flex-col items-center text-center py-6 sm:py-10 px-3 sm:px-4">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 shadow-md">
+                        <MessageSquare className="h-7 w-7 text-white" />
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">Спросите ИИ помощника</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mb-6">
+                        Юридическая и медицинская консультация по призыву. ИИ учитывает ваши документы.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
+                        {[
+                          "Какие диагнозы дают категорию В?",
+                          "Как обжаловать решение призывной комиссии?",
+                          "Какие документы нужны для отсрочки по здоровью?",
+                          "Сроки рассмотрения жалобы в военкомате?",
+                        ].map((q) => (
+                          <button
+                            key={q}
+                            onClick={() => setInput(q)}
+                            className="text-left p-3 rounded-xl border border-border/60 hover:border-primary/40 hover:bg-primary/3 transition-all text-sm text-foreground/80 hover:text-foreground"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {messages.map((message, index) => {
@@ -649,18 +671,18 @@ const AIChatDashboardPage = () => {
                 </div>
               </ScrollArea>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-end">
                 <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter" && !e.shiftKey && !isMobile) {
                       e.preventDefault();
                       sendMessage();
                     }
                   }}
                   placeholder="Введите ваш вопрос..."
-                  className="resize-none text-sm sm:text-base"
+                  className="resize-none text-[15px] sm:text-base rounded-xl flex-1"
                   rows={isMobile ? 2 : 3}
                   disabled={sending}
                 />
@@ -668,9 +690,10 @@ const AIChatDashboardPage = () => {
                   onClick={sendMessage}
                   disabled={sending || !input.trim()}
                   size="icon"
-                  className="self-end h-9 w-9 sm:h-10 sm:w-10"
+                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md hover:shadow-lg transition-shadow"
+                  aria-label="Отправить"
                 >
-                  <Send className="h-3 w-3 sm:h-4 sm:w-4" />
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </CardContent>

@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Search, Star, Plus, MapPin } from "lucide-react";
+import EmptyState from "@/components/EmptyState";
+import { PageLoader } from "@/components/LoadingSkeleton";
 
 interface Rating {
   id: string;
@@ -159,13 +161,14 @@ export default function CommissariatDirectoryPage() {
           </div>
 
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">Загрузка...</div>
+            <PageLoader message="Загружаем рейтинги..." />
           ) : filteredGroups.length === 0 ? (
-            <div className="text-center py-16">
-              <Building2 className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground">{search ? "По запросу ничего не найдено" : "Отзывов пока нет"}</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">Будьте первым, кто поделится опытом</p>
-            </div>
+            <EmptyState
+              icon={search ? Search : Building2}
+              title={search ? "Ничего не найдено" : "Отзывов пока нет"}
+              description={search ? "Попробуйте другой запрос" : "Будьте первым, кто поделится опытом"}
+              action={user && !search ? { label: "Добавить отзыв", onClick: () => setDialogOpen(true), icon: Plus } : undefined}
+            />
           ) : (
             <div className="space-y-4">
               {filteredGroups.map((g) => (

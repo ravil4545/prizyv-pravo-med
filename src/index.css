@@ -6,6 +6,25 @@
   .text-indent-4 {
     text-indent: 1rem;
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .min-h-touch {
+    min-height: 44px;
+  }
+  .min-w-touch {
+    min-width: 44px;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 /* Modern Two-Tone Design System with Soft Blending */

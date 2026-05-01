@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Plus, Search, CheckCircle2, Calendar } from "lucide-react";
+import EmptyState from "@/components/EmptyState";
+import { PageLoader } from "@/components/LoadingSkeleton";
 
 interface SuccessCase {
   id: string;
@@ -123,17 +125,14 @@ export default function SuccessCasesPage() {
           </div>
 
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">Загрузка...</div>
+            <PageLoader message="Загружаем кейсы..." />
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <Trophy className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground">{search ? "По запросу ничего не найдено" : "База кейсов пока пустая"}</p>
-              {user && !search && (
-                <Button variant="outline" onClick={() => setDialogOpen(true)} className="mt-4 gap-2">
-                  <Plus className="h-4 w-4" /> Добавить первый кейс
-                </Button>
-              )}
-            </div>
+            <EmptyState
+              icon={search ? Search : Trophy}
+              title={search ? "Ничего не найдено" : "База кейсов пока пустая"}
+              description={search ? "Попробуйте другой запрос" : "Будьте первым, кто поделится опытом"}
+              action={user && !search ? { label: "Добавить кейс", onClick: () => setDialogOpen(true), icon: Plus } : undefined}
+            />
           ) : (
             <div className="space-y-4">
               {filtered.map((c) => (

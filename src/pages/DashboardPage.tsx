@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
+import { GridSkeleton } from "@/components/LoadingSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface DashboardCard {
   title: string;
@@ -76,12 +78,14 @@ const DashboardPage = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="container mx-auto px-4 py-12">
-          <div className="flex items-center justify-center h-40">
-            <div className="animate-pulse flex flex-col items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-primary/20 animate-spin border-2 border-primary border-t-transparent" />
-              <span className="text-muted-foreground text-sm">Загрузка...</span>
+        <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
+          <div className="max-w-5xl mx-auto space-y-6">
+            <div>
+              <Skeleton className="h-8 w-48 mb-2" />
+              <Skeleton className="h-4 w-32" />
             </div>
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <GridSkeleton cols={3} rows={2} />
           </div>
         </main>
       </div>

@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { sanitizeHtml } from "@/lib/sanitize";
 import { enhanceTypography } from "@/lib/typography";
 import RichTextEditor from "@/components/RichTextEditor";
+import EmptyState from "@/components/EmptyState";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 interface ForumPost {
   id: string;
@@ -215,12 +217,20 @@ const ForumPage = () => {
   });
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
-      <main className="flex-1 py-20 px-4">
+      <main className="flex-1 py-8 sm:py-12 md:py-20 px-3 sm:px-4 pb-24 md:pb-12">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-8 gradient-text">Форум</h1>
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 mb-3">
+              <MessageCircle className="h-6 w-6 text-primary" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold mb-2">Форум призывников</h1>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-md mx-auto">
+              Делитесь опытом, получайте ответы от сообщества
+            </p>
+          </div>
 
           {/* Search */}
           <div className="relative mb-6">
@@ -233,19 +243,19 @@ const ForumPage = () => {
             />
           </div>
 
-          <Tabs value={activeTopic} onValueChange={(v: any) => setActiveTopic(v)} className="mb-8">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="urgent">
-                <AlertCircle className="w-4 h-4 mr-2" />
-                Срочные вопросы
+          <Tabs value={activeTopic} onValueChange={(v: any) => setActiveTopic(v)} className="mb-6">
+            <TabsList className="grid w-full grid-cols-3 h-auto p-1 gap-1">
+              <TabsTrigger value="urgent" className="flex-col sm:flex-row gap-1 sm:gap-2 py-2.5 sm:py-2 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4" />
+                <span>Срочные</span>
               </TabsTrigger>
-              <TabsTrigger value="diagnoses">
-                <FileText className="w-4 h-4 mr-2" />
-                Диагнозы
+              <TabsTrigger value="diagnoses" className="flex-col sm:flex-row gap-1 sm:gap-2 py-2.5 sm:py-2 text-xs sm:text-sm">
+                <FileText className="w-4 h-4" />
+                <span>Диагнозы</span>
               </TabsTrigger>
-              <TabsTrigger value="success_stories">
-                <Award className="w-4 h-4 mr-2" />
-                Истории успеха
+              <TabsTrigger value="success_stories" className="flex-col sm:flex-row gap-1 sm:gap-2 py-2.5 sm:py-2 text-xs sm:text-sm">
+                <Award className="w-4 h-4" />
+                <span>Успехи</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -330,11 +340,22 @@ const ForumPage = () => {
           </div>
 
           {filteredPosts.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                {searchQuery ? "По вашему запросу ничего не найдено" : user ? "Будьте первым, кто создаст пост в этом разделе" : "Войдите, чтобы создать пост"}
-              </p>
-            </div>
+            <EmptyState
+              icon={searchQuery ? Search : MessageCircle}
+              title={searchQuery ? "Ничего не найдено" : "Постов пока нет"}
+              description={
+                searchQuery
+                  ? "Попробуйте другой поисковый запрос"
+                  : user
+                    ? "Будьте первым, кто создаст пост в этом разделе"
+                    : "Войдите, чтобы создать пост"
+              }
+              action={
+                !user && !searchQuery
+                  ? { label: "Войти", onClick: () => { window.location.href = "/auth"; } }
+                  : undefined
+              }
+            />
           )}
         </div>
       </main>

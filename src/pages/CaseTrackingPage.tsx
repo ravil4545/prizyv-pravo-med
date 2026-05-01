@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Trash2, Calendar, CheckCircle2, XCircle, Clock, Edit2 } from "lucide-react";
+import { PageLoader } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -142,7 +143,9 @@ export default function CaseTrackingPage() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="container mx-auto px-4 py-12 text-center">Загрузка...</main>
+        <main className="container mx-auto px-4 py-8">
+          <PageLoader message="Загружаем события..." />
+        </main>
       </div>
     );
   }

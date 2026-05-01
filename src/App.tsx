@@ -9,6 +9,7 @@ import TemplatesPage from "./pages/TemplatesPage";
 import AuthPage from "./pages/AuthPage";
 import RegisterPage from "./pages/RegisterPage";
 import MobileBottomNav from "./components/MobileBottomNav";
+import QuickActionFAB from "./components/QuickActionFAB";
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
@@ -80,6 +81,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <QuickActionFAB />
         <MobileBottomNav />
       </BrowserRouter>
     </TooltipProvider>

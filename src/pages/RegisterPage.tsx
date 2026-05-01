@@ -215,13 +215,16 @@ const RegisterPage = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      
-      <main className="flex-1 flex items-center justify-center py-20 px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Регистрация</CardTitle>
-            <CardDescription>
-              Создайте аккаунт одним из способов
+
+      <main className="flex-1 flex items-center justify-center py-8 sm:py-12 md:py-20 px-4">
+        <Card className="w-full max-w-md shadow-medium border-border/50">
+          <CardHeader className="text-center pb-4">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+              <span className="text-xl font-bold text-white">ЮП</span>
+            </div>
+            <CardTitle className="text-xl sm:text-2xl">Создайте аккаунт</CardTitle>
+            <CardDescription className="text-sm">
+              Бесплатно: 3 анализа документов и 3 вопроса ИИ
             </CardDescription>
           </CardHeader>
           <CardContent>

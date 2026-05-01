@@ -1,8 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { FileHeart, BookOpen, MessageSquare, Home } from "lucide-react";
+import { FileHeart, BookOpen, MessageSquare, Home, User } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 const MobileBottomNav = () => {
   const isMobile = useIsMobile();
@@ -24,78 +25,87 @@ const MobileBottomNav = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Don't show on desktop
   if (!isMobile) return null;
 
-  // Don't show on auth pages
   const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
   const navItems = [
-    {
-      label: "Главная",
-      icon: Home,
-      path: "/",
-      requiresAuth: false,
-    },
-    {
-      label: "ИИ документы",
-      icon: FileHeart,
-      path: "/dashboard/medical-documents",
-      requiresAuth: true,
-    },
-    {
-      label: "ИИ история",
-      icon: BookOpen,
-      path: "/medical-history",
-      requiresAuth: true,
-    },
-    {
-      label: "ИИ помощник",
-      icon: MessageSquare,
-      path: "/dashboard/ai-chat",
-      requiresAuth: true,
-    },
+    { label: "Главная", icon: Home, path: "/" },
+    { label: "Документы", icon: FileHeart, path: "/dashboard/medical-documents" },
+    { label: "ИИ чат", icon: MessageSquare, path: "/dashboard/ai-chat", featured: true },
+    { label: "Диагнозы", icon: BookOpen, path: "/medical-history" },
+    { label: isAuthenticated ? "Кабинет" : "Войти", icon: User, path: isAuthenticated ? "/dashboard" : "/auth" },
   ];
 
-  const handleNavigate = (path: string, _requiresAuth: boolean) => {
-    // Allow navigation to all pages, including for demo users
-    navigate(path);
+  const isActive = (path: string) => {
+    if (path === "/") return location.pathname === "/";
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
-  const isActive = (path: string) => location.pathname === path;
-
   return (
-    <nav className="fixed bottom-0 left-0 w-full max-w-[100vw] z-50 bg-background/95 backdrop-blur-lg border-t border-border shadow-lg md:hidden">
-      <div className="flex items-center justify-around h-12 px-2 w-full">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.path);
-          
-          return (
-            <button
-              key={item.path}
-              onClick={() => handleNavigate(item.path, item.requiresAuth)}
-              className={`
-                flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-w-0
-                transition-all duration-200 active:scale-95
-                ${active 
-                  ? "text-primary" 
-                  : "text-muted-foreground"
-                }
-              `}
-            >
-              <Icon className={`h-5 w-5 shrink-0 ${active ? "text-primary" : ""}`} />
-              <span className={`text-[10px] font-medium truncate ${active ? "text-primary" : ""}`}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {/* Safe area for iOS */}
-      <div className="h-[env(safe-area-inset-bottom)]" />
-    </nav>
+    <>
+      {/* Spacer to prevent content overlap */}
+      <div className="h-[68px] md:hidden" aria-hidden />
+
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.04)]"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex items-stretch justify-around h-[60px] px-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={cn(
+                  "flex flex-col items-center justify-center flex-1 gap-0.5 min-w-0 relative",
+                  "transition-all duration-150 active:scale-90 touch-manipulation",
+                  "min-h-[44px]"
+                )}
+                aria-label={item.label}
+              >
+                {/* Active indicator pill */}
+                {active && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-primary" />
+                )}
+
+                {item.featured ? (
+                  <div className={cn(
+                    "flex items-center justify-center h-9 w-9 rounded-xl transition-all",
+                    active
+                      ? "bg-gradient-to-br from-primary to-accent shadow-md scale-110"
+                      : "bg-gradient-to-br from-primary/90 to-accent/90"
+                  )}>
+                    <Icon className="h-4 w-4 text-white" />
+                  </div>
+                ) : (
+                  <Icon
+                    className={cn(
+                      "h-[22px] w-[22px] shrink-0 transition-colors",
+                      active ? "text-primary" : "text-muted-foreground"
+                    )}
+                    strokeWidth={active ? 2.4 : 2}
+                  />
+                )}
+
+                <span
+                  className={cn(
+                    "text-[10.5px] font-medium truncate leading-tight transition-colors",
+                    active ? "text-primary font-semibold" : "text-muted-foreground"
+                  )}
+                >
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 };
 

@@ -119,18 +119,18 @@ const ContactForm = () => {
   };
 
   return (
-    <section className="py-20 bg-muted/30" aria-labelledby="contact-heading">
+    <section className="py-12 sm:py-16 md:py-20 bg-muted/30" aria-labelledby="contact-heading">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="text-center mb-16">
-          <h2 id="contact-heading" className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <header className="text-center mb-10 sm:mb-12 md:mb-16">
+          <h2 id="contact-heading" className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
             Свяжитесь с нами
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Получите бесплатную консультацию по вашему вопросу
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-2">
+            Бесплатная консультация — мы свяжемся в течение 1 часа
           </p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 max-w-6xl mx-auto">
           {/* Contact Form */}
           <Card className="shadow-medium border-0 bg-background">
             <CardHeader>
@@ -210,12 +210,12 @@ const ContactForm = () => {
                   {errors.message && <p id="message-error" className="text-sm text-destructive" role="alert">{errors.message}</p>}
                 </div>
 
-                <Button 
-                  type="submit" 
-                  variant="cta" 
-                  size="lg" 
+                <Button
+                  type="submit"
+                  variant="cta"
+                  size="lg"
                   disabled={isSubmitting}
-                  className="w-full"
+                  className="w-full h-12 text-base font-semibold gap-2"
                   aria-label={isSubmitting ? "Отправка формы" : "Отправить заявку"}
                 >
                   <Mail className="h-5 w-5" aria-hidden="true" />
@@ -226,51 +226,49 @@ const ContactForm = () => {
           </Card>
 
           {/* Contact Methods */}
-          <aside className="space-y-8" aria-label="Способы связи">
+          <aside className="space-y-4 sm:space-y-6" aria-label="Способы связи">
             <Card className="shadow-soft border-0 bg-gradient-primary text-primary-foreground">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-semibold mb-6">Свяжитесь с нами напрямую</h3>
-                
-                <nav className="space-y-6" aria-label="Контактные способы связи">
-                  <Button 
+              <CardContent className="p-5 sm:p-8">
+                <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-6">Свяжитесь напрямую</h3>
+
+                <nav className="space-y-3 sm:space-y-4" aria-label="Контактные способы связи">
+                  <Button
                     variant="contact"
                     size="lg"
                     onClick={handlePhoneCall}
-                    className="w-full justify-start text-left"
-                    aria-label="Позвонить по телефону +7 925 350-05-33"
+                    className="w-full justify-start text-left h-auto py-3 gap-3"
+                    aria-label="Позвонить"
                   >
-                    <Phone className="h-5 w-5" aria-hidden="true" />
-                    <div>
-                      <div className="font-semibold">Позвонить сейчас</div>
-                      <div className="text-sm opacity-90">+7 (925) 350-05-33</div>
+                    <Phone className="h-5 w-5 flex-shrink-0" />
+                    <div className="text-left">
+                      <div className="font-semibold text-sm sm:text-base">Позвонить</div>
+                      <div className="text-xs sm:text-sm opacity-90">+7 (925) 350-05-33</div>
                     </div>
                   </Button>
 
-                  <Button 
+                  <Button
                     variant="contact"
                     size="lg"
                     onClick={handleWhatsApp}
-                    className="w-full justify-start text-left"
-                    aria-label="Написать в WhatsApp"
+                    className="w-full justify-start text-left h-auto py-3 gap-3"
                   >
-                    <MessageCircle className="h-5 w-5" aria-hidden="true" />
-                    <div>
-                      <div className="font-semibold">WhatsApp</div>
-                      <div className="text-sm opacity-90">Быстрые ответы в чате</div>
+                    <MessageCircle className="h-5 w-5 flex-shrink-0" />
+                    <div className="text-left">
+                      <div className="font-semibold text-sm sm:text-base">WhatsApp</div>
+                      <div className="text-xs sm:text-sm opacity-90">Быстрые ответы</div>
                     </div>
                   </Button>
 
-                  <Button 
+                  <Button
                     variant="contact"
                     size="lg"
                     onClick={handleTelegram}
-                    className="w-full justify-start text-left"
-                    aria-label="Перейти в Telegram канал"
+                    className="w-full justify-start text-left h-auto py-3 gap-3"
                   >
-                    <Send className="h-5 w-5" aria-hidden="true" />
-                    <div>
-                      <div className="font-semibold">Telegram канал</div>
-                      <div className="text-sm opacity-90">Полезная информация</div>
+                    <Send className="h-5 w-5 flex-shrink-0" />
+                    <div className="text-left">
+                      <div className="font-semibold text-sm sm:text-base">Telegram канал</div>
+                      <div className="text-xs sm:text-sm opacity-90">Полезная информация</div>
                     </div>
                   </Button>
                 </nav>
@@ -278,8 +276,8 @@ const ContactForm = () => {
             </Card>
 
             <Card className="shadow-soft border-0 bg-background">
-              <CardContent className="p-8">
-                <h3 className="text-xl font-semibold text-foreground mb-4">
+              <CardContent className="p-5 sm:p-8">
+                <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-3 sm:mb-4">
                   Время работы
                 </h3>
                 <dl className="space-y-2 text-muted-foreground">
