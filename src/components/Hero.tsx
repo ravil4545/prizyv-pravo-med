@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Phone, MessageCircle, Send, CheckCircle2, Bot, ChevronDown, FileSearch, Brain, MessageSquarePlus, Sparkles, Shield } from "lucide-react";
-import heroImage from "@/assets/hero-legal-clean.jpg";
 
 const Hero = () => {
   const [aiOpen, setAiOpen] = useState(false);
@@ -26,7 +25,7 @@ const Hero = () => {
       <div className="absolute inset-0 bg-black/30" aria-hidden />
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25"
-        style={{ backgroundImage: `url(${heroImage})` }}
+        style={{ backgroundImage: "url(/hero.jpg)" }}
         aria-hidden
       />
       {/* Decorative gradients */}

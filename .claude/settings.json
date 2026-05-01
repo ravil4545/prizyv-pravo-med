@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-ScheduledTask *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Start-Sleep *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Get-Service *)"
+    ]
+  }
+}

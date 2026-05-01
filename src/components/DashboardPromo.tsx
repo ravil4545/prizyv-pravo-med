@@ -1,30 +1,11 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Bot, FileText, Clock, Sparkles } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DashboardPromo = () => {
   const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    // Check if user is logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsAuthenticated(!!session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleClick = () => {
-    navigate("/dashboard");
-  };
+  const { user } = useAuth();
 
   return (
     <section className="py-12 px-4 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
@@ -64,12 +45,12 @@ const DashboardPromo = () => {
 
             {/* Button */}
             <div className="flex-shrink-0">
-              <Button 
-                onClick={handleClick}
+              <Button
+                onClick={() => navigate("/dashboard")}
                 size="lg"
                 className="min-w-[200px] shadow-lg hover:shadow-xl transition-all"
               >
-                {isAuthenticated ? "Перейти в кабинет" : "Зарегистрироваться"}
+                {user ? "Перейти в кабинет" : "Зарегистрироваться"}
               </Button>
             </div>
           </div>

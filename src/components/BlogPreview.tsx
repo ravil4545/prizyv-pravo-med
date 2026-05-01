@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -18,6 +19,21 @@ interface BlogPost {
   published_at: string | null;
   image_url: string | null;
 }
+
+const BlogPostSkeleton = () => (
+  <div className="flex flex-col space-y-3">
+    <Skeleton className="h-48 w-full rounded-lg" />
+    <div className="p-4 space-y-2">
+      <div className="flex justify-between">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-24" />
+      </div>
+      <Skeleton className="h-6 w-full" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+    </div>
+  </div>
+);
 
 const BlogPreview = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -45,7 +61,7 @@ const BlogPreview = () => {
     }
   };
 
-  if (loading || posts.length === 0) return null;
+  if (!loading && posts.length === 0) return null;
 
   return (
     <section className="py-20 bg-muted/30" aria-labelledby="blog-heading">
@@ -58,58 +74,66 @@ const BlogPreview = () => {
         </header>
 
         <div className="grid md:grid-cols-3 gap-6 mb-8" role="list" aria-label="Список последних статей блога">
-          {posts.map((post) => (
-            <article key={post.id} role="listitem">
-              <Link to="/blog">
-                <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
-                  {post.image_url && (
-                    <div className="w-full h-48 overflow-hidden">
-                      <img 
-                        src={post.image_url} 
-                        alt={`Изображение к статье: ${post.title}`}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        loading="lazy"
-                      />
-                    </div>
-                  )}
-                  <CardHeader>
-                    <div className="flex items-center justify-between mb-2">
-                      {post.category && (
-                        <Badge variant="secondary">{post.category}</Badge>
+          {loading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} role="listitem">
+                  <Card className="h-full overflow-hidden">
+                    <BlogPostSkeleton />
+                  </Card>
+                </div>
+              ))
+            : posts.map((post) => (
+                <article key={post.id} role="listitem">
+                  <Link to="/blog">
+                    <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
+                      {post.image_url && (
+                        <div className="w-full h-48 overflow-hidden">
+                          <img
+                            src={post.image_url}
+                            alt={`Изображение к статье: ${post.title}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            loading="lazy"
+                          />
+                        </div>
                       )}
-                      {post.published_at && (
-                        <time 
-                          className="flex items-center gap-1 text-sm text-muted-foreground"
-                          dateTime={post.published_at}
-                        >
-                          <Calendar className="h-3 w-3" aria-hidden="true" />
-                          <span>
-                            {format(new Date(post.published_at), "dd.MM.yyyy")}
-                          </span>
-                        </time>
-                      )}
-                    </div>
-                    <CardTitle className="text-xl line-clamp-2">{post.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground line-clamp-3">
-                      {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </article>
-          ))}
+                      <CardHeader>
+                        <div className="flex items-center justify-between mb-2">
+                          {post.category && (
+                            <Badge variant="secondary">{post.category}</Badge>
+                          )}
+                          {post.published_at && (
+                            <time
+                              className="flex items-center gap-1 text-sm text-muted-foreground"
+                              dateTime={post.published_at}
+                            >
+                              <Calendar className="h-3 w-3" aria-hidden="true" />
+                              <span>{format(new Date(post.published_at), "dd.MM.yyyy")}</span>
+                            </time>
+                          )}
+                        </div>
+                        <CardTitle className="text-xl line-clamp-2">{post.title}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-muted-foreground line-clamp-3">
+                          {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </article>
+              ))}
         </div>
 
-        <nav className="text-center" aria-label="Переход к странице блога">
-          <Link to="/blog">
-            <Button size="lg" className="group" aria-label="Перейти ко всем статьям блога">
-              Все статьи
-              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-            </Button>
-          </Link>
-        </nav>
+        {!loading && (
+          <nav className="text-center" aria-label="Переход к странице блога">
+            <Link to="/blog">
+              <Button size="lg" className="group" aria-label="Перейти ко всем статьям блога">
+                Все статьи
+                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+              </Button>
+            </Link>
+          </nav>
+        )}
       </div>
     </section>
   );
