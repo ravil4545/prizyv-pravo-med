@@ -199,18 +199,18 @@ serve(async (req) => {
 ${medicalContext}`;
     }
 
-    console.log("[Chat] Calling OpenRouter with model x-ai/grok-4, messages:", messages.length);
+    console.log("[Chat] Calling OpenRouter with model nvidia/nemotron-3-super-120b-a12b:free, messages:", messages.length);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://kqbetheonxiclwgyatnm.supabase.co",
-        "X-Title": "Legal Consultation Chat",
+        "HTTP-Referer": "https://nepriziv.ru",
+        "X-Title": "nepriziv.ru Legal Chat",
       },
       body: JSON.stringify({
-        model: "x-ai/grok-4",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
       }),

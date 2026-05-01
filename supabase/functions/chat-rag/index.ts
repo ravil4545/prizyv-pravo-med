@@ -21,8 +21,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const JINA_KEY    = Deno.env.get("JINA_API_KEY");
-const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+const JINA_KEY        = Deno.env.get("JINA_API_KEY");
+const OPENROUTER_KEY  = Deno.env.get("OPENROUTER_API_KEY");
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 const messageSchema = z.object({
@@ -106,9 +106,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!JINA_KEY || !LOVABLE_KEY) {
+    if (!JINA_KEY || !OPENROUTER_KEY) {
       return Response.json(
-        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "LOVABLE_API_KEY не настроен" },
+        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "OPENROUTER_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -187,15 +187,17 @@ ${sysCtx}`;
       ? `Найденные материалы по теме:\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
       : `Вопрос: ${message}`;
 
-    // 4. Call Gemini Flash via Lovable AI gateway (same as other functions in this project)
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // 4. Call nemotron via OpenRouter
+    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://nepriziv.ru",
+        "X-Title": "nepriziv.ru Knowledge Base Chat",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         stream: true,
         messages: [
           { role: "system", content: systemText },

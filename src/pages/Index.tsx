@@ -7,7 +7,6 @@ import BlogPreview from "@/components/BlogPreview";
 import Testimonials from "@/components/Testimonials";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
-import ChatWidget from "@/components/ChatWidget";
 import SEOHead from "@/components/SEOHead";
 
 const Index = () => {
@@ -26,7 +25,6 @@ const Index = () => {
           <ContactForm />
         </main>
         <Footer />
-        <ChatWidget />
       </div>
     </>
   );
