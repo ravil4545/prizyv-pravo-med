@@ -35,7 +35,9 @@ export default defineConfig(({ mode }) => ({
             id.includes("hast") || id.includes("vfile")
           )
             return "vendor-markdown";
-          // Everything else (React, router, Supabase, Radix, etc.) — one stable vendor chunk
+          // Supabase — no React deps, safe to load in parallel with React bundle
+          if (id.includes("@supabase/")) return "vendor-supabase";
+          // Everything else (React, router, Radix, react-query, lucide, etc.)
           return "vendor";
         },
       },
