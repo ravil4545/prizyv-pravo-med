@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User } from "lucide-react";
+import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 const NAV_ITEMS = [
   { to: "/", label: "Главная" },
@@ -27,6 +28,7 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { unreadCount } = useUnreadMessages();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handlePhoneCall = () => {
@@ -133,6 +135,24 @@ const Header = () => {
               <Send className="h-4 w-4" />
             </Button>
 
+            {/* Messages notification badge */}
+            {user && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/client/messages")}
+                className="h-10 w-10 relative"
+                aria-label={unreadCount > 0 ? `Сообщения (${unreadCount})` : "Сообщения"}
+              >
+                <MessageSquare className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+            )}
+
             {/* Auth */}
             {user ? (
               <Button
@@ -188,6 +208,28 @@ const Header = () => {
                     >
                       <User className="h-5 w-5" />
                       Личный кабинет
+                    </Link>
+                  )}
+                  {user && (
+                    <Link
+                      to="/client/messages"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium transition-colors mb-1",
+                        isActive("/client/messages") || isActive("/client/chat")
+                          ? "bg-primary/10 text-primary font-semibold"
+                          : "text-foreground/80 hover:bg-muted"
+                      )}
+                    >
+                      <span className="relative">
+                        <MessageSquare className="h-5 w-5" />
+                        {unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </span>
+                        )}
+                      </span>
+                      Сообщения{unreadCount > 0 && ` (${unreadCount})`}
                     </Link>
                   )}
                   {NAV_ITEMS.map((item) => (

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { supabase } from "@/integrations/supabase/client";
-import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Send, Paperclip, Loader2, Download, Users,
-  Search, User, FileText, CheckCheck, Check,
+  ArrowLeft, Send, Paperclip, Loader2, Download,
+  Briefcase, Check, CheckCheck, MessageSquare, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,112 +20,136 @@ interface Message {
   file_size: number | null; is_read: boolean; created_at: string;
 }
 
-interface SidebarClient {
-  id: string; client_name: string; crm_stage: string;
-  client_phone: string | null; updated_at: string;
+interface ConvEntry {
+  id: string; crm_stage: string; lawyer_id: string; updated_at: string;
+  lawyerName: string | null; lawyerSpec: string | null; unread: number;
 }
 
-const CRM_STAGES: Record<string, string> = {
-  initial_contact: "Первичный контакт",
-  no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз",
-  examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз получен",
-  waiting_documents: "Ожидание документов",
-  documents_received: "Документы получены",
-  military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта",
-  courts: "Суды",
+const CRM_STAGE_LABELS: Record<string, string> = {
+  initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
+  has_diagnosis: "Есть диагноз", examinations: "Обследования",
+  diagnosis_confirmed: "Диагноз получен", waiting_documents: "Ожидание документов",
+  documents_received: "Документы получены", military_office: "Военкомат",
+  regional_commission: "Комиссия субъекта", courts: "Суды",
   military_ticket: "Получение ВБ ✓",
 };
 
-const LawyerChatPage = () => {
-  const { clientId } = useParams<{ clientId: string }>();
+const ClientChatPage = () => {
+  const { lawyerClientId } = useParams<{ lawyerClientId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isLawyer, loading: profileLoading } = useLawyerProfile();
   const { toast } = useToast();
 
-  // ── Current chat ───────────────────────────────────────────────────────────
-  const [client, setClient] = useState<Record<string, any> | null>(null);
+  // ── Current conversation ───────────────────────────────────────────────────
+  const [conv, setConv] = useState<Record<string, any> | null>(null);
+  const [lawyerProfile, setLawyerProfile] = useState<{ full_name: string | null; specialization: string | null } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // ── Sidebar ────────────────────────────────────────────────────────────────
-  const [allClients, setAllClients] = useState<SidebarClient[]>([]);
+  // ── Sidebar (desktop) ─────────────────────────────────────────────────────
+  const [allConvs, setAllConvs] = useState<ConvEntry[]>([]);
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
-  const [sidebarSearch, setSidebarSearch] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!user || profileLoading) return;
-    if (!isLawyer) { navigate("/dashboard"); return; }
+    if (!user) return;
     loadSidebar();
     initChat();
-  }, [user, profileLoading, isLawyer, clientId]);
+  }, [user?.id, lawyerClientId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── Sidebar data ───────────────────────────────────────────────────────────
   const loadSidebar = async () => {
-    const { data: clients } = await supabase
+    const { data: links } = await supabase
       .from("lawyer_clients")
-      .select("id, client_name, crm_stage, client_phone, updated_at")
-      .eq("lawyer_id", user!.id)
+      .select("id, crm_stage, lawyer_id, updated_at")
+      .eq("client_user_id", user!.id)
       .order("updated_at", { ascending: false });
 
-    if (!clients?.length) return;
-    setAllClients(clients as SidebarClient[]);
+    if (!links?.length) return;
 
-    const ids = clients.map((c) => c.id);
+    const lawyerIds = [...new Set(links.map((l) => l.lawyer_id))];
+    const { data: profiles } = await supabase
+      .from("lawyer_profiles")
+      .select("user_id, full_name, specialization")
+      .in("user_id", lawyerIds);
+    const profileMap: Record<string, { full_name: string | null; specialization: string | null }> = {};
+    (profiles || []).forEach((p) => { profileMap[p.user_id] = p; });
+
+    const linkIds = links.map((l) => l.id);
     const { data: unread } = await supabase
       .from("lawyer_chat_messages")
       .select("lawyer_client_id")
-      .in("lawyer_client_id", ids)
+      .in("lawyer_client_id", linkIds)
       .neq("sender_id", user!.id)
       .eq("is_read", false);
 
     const map: Record<string, number> = {};
-    (unread || []).forEach((r) => {
-      map[r.lawyer_client_id] = (map[r.lawyer_client_id] || 0) + 1;
-    });
+    (unread || []).forEach((r) => { map[r.lawyer_client_id] = (map[r.lawyer_client_id] || 0) + 1; });
     setUnreadMap(map);
+
+    setAllConvs(links.map((l) => ({
+      id: l.id,
+      crm_stage: l.crm_stage,
+      lawyer_id: l.lawyer_id,
+      updated_at: l.updated_at,
+      lawyerName: profileMap[l.lawyer_id]?.full_name || null,
+      lawyerSpec: profileMap[l.lawyer_id]?.specialization || null,
+      unread: map[l.id] || 0,
+    })));
   };
 
-  // ── Chat init ──────────────────────────────────────────────────────────────
   const initChat = async () => {
     setLoading(true);
     const { data: c } = await supabase
-      .from("lawyer_clients").select("*").eq("id", clientId).eq("lawyer_id", user!.id).single();
-    if (!c) { navigate("/lawyer/clients"); return; }
-    setClient(c);
+      .from("lawyer_clients")
+      .select("*")
+      .eq("id", lawyerClientId)
+      .eq("client_user_id", user!.id)
+      .single();
+
+    if (!c) { navigate("/client/messages"); return; }
+    setConv(c);
+
+    const { data: profile } = await supabase
+      .from("lawyer_profiles")
+      .select("full_name, specialization")
+      .eq("user_id", c.lawyer_id)
+      .maybeSingle();
+    setLawyerProfile(profile);
+
     await loadMessages();
     setLoading(false);
     subscribeRealtime();
+
     await supabase.from("lawyer_chat_messages")
-      .update({ is_read: true }).eq("lawyer_client_id", clientId).neq("sender_id", user!.id);
-    setUnreadMap((prev) => ({ ...prev, [clientId!]: 0 }));
+      .update({ is_read: true })
+      .eq("lawyer_client_id", lawyerClientId)
+      .neq("sender_id", user!.id);
+    setUnreadMap((prev) => ({ ...prev, [lawyerClientId!]: 0 }));
   };
 
   const loadMessages = async () => {
     const { data } = await supabase
       .from("lawyer_chat_messages")
-      .select("*").eq("lawyer_client_id", clientId).order("created_at", { ascending: true });
+      .select("*")
+      .eq("lawyer_client_id", lawyerClientId)
+      .order("created_at", { ascending: true });
     setMessages((data as Message[]) || []);
   };
 
   const subscribeRealtime = () => {
-    const channel = supabase.channel(`chat:${clientId}`)
+    const channel = supabase.channel(`client-chat:${lawyerClientId}`)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "lawyer_chat_messages",
-        filter: `lawyer_client_id=eq.${clientId}`,
+        filter: `lawyer_client_id=eq.${lawyerClientId}`,
       }, (payload) => {
         setMessages((prev) => {
           if (prev.find((m) => m.id === (payload.new as Message).id)) return prev;
@@ -134,8 +157,6 @@ const LawyerChatPage = () => {
         });
         if ((payload.new as Message).sender_id !== user!.id) {
           supabase.from("lawyer_chat_messages").update({ is_read: true }).eq("id", (payload.new as Message).id);
-        } else {
-          setUnreadMap((prev) => ({ ...prev, [clientId!]: Math.max(0, (prev[clientId!] || 0) - 1) }));
         }
       })
       .subscribe();
@@ -145,11 +166,11 @@ const LawyerChatPage = () => {
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
     const { error } = await supabase.from("lawyer_chat_messages").insert({
-      lawyer_client_id: clientId, sender_id: user!.id,
+      lawyer_client_id: lawyerClientId, sender_id: user!.id,
       content: content || null, message_type: type,
       file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
     });
-    if (error) toast({ title: "Ошибка отправки", variant: "destructive" });
+    if (error) toast({ title: "Ошибка отправки", description: error.message, variant: "destructive" });
     setSending(false);
   };
 
@@ -165,15 +186,14 @@ const LawyerChatPage = () => {
     if (file.size > 10 * 1024 * 1024) { toast({ title: "Файл больше 10 МБ", variant: "destructive" }); return; }
     setUploading(true);
     const ext = file.name.split(".").pop();
-    const path = `chat/${clientId}/${Date.now()}.${ext}`;
+    const path = `chat/${lawyerClientId}/${Date.now()}.${ext}`;
     const { data, error } = await supabase.storage.from("chat-attachments").upload(path, file, { upsert: false });
     if (error) {
-      toast({ title: "Ошибка загрузки файла", description: error.message, variant: "destructive" });
+      toast({ title: "Ошибка загрузки", description: error.message, variant: "destructive" });
       setUploading(false); return;
     }
     const { data: { publicUrl } } = supabase.storage.from("chat-attachments").getPublicUrl(data.path);
-    const type = file.type.startsWith("image/") ? "image" : "file";
-    await sendMessage(file.name, type, publicUrl, file.name, file.size);
+    await sendMessage(file.name, file.type.startsWith("image/") ? "image" : "file", publicUrl, file.name, file.size);
     setUploading(false);
     e.target.value = "";
   };
@@ -191,13 +211,7 @@ const LawyerChatPage = () => {
     else last.msgs.push(m);
   });
 
-  const filteredClients = allClients.filter((c) =>
-    c.client_name.toLowerCase().includes(sidebarSearch.toLowerCase())
-  );
-
-  const totalSidebarUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
-
-  if (loading || profileLoading) return (
+  if (loading) return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <Header />
       <div className="flex-1 container mx-auto px-4 py-6 space-y-3">
@@ -208,78 +222,65 @@ const LawyerChatPage = () => {
     </div>
   );
 
+  const lawyerName = lawyerProfile?.full_name || "Ваш юрист";
+  const stageLabel = CRM_STAGE_LABELS[conv?.crm_stage] || "";
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <Header />
 
       <div className="flex-1 min-h-0 flex">
-        {/* ── Sidebar (desktop only) ──────────────────────────────────────── */}
+        {/* ── Sidebar (desktop) ──────────────────────────────────────────── */}
         <aside className="hidden lg:flex flex-col w-72 xl:w-80 border-r bg-card/30 flex-shrink-0">
-          {/* Sidebar header */}
           <div className="px-3 py-3 border-b flex items-center gap-2">
             <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
-              onClick={() => navigate("/lawyer/clients")}>
+              onClick={() => navigate("/client/messages")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="font-semibold text-sm truncate">Клиенты</span>
-              {totalSidebarUnread > 0 && (
-                <Badge className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-red-500 text-white">
-                  {totalSidebarUnread}
-                </Badge>
-              )}
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs flex-shrink-0" asChild>
-              <Link to="/lawyer/clients">Все</Link>
-            </Button>
-          </div>
-
-          {/* Search */}
-          <div className="px-3 py-2 border-b">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Поиск..."
-                value={sidebarSearch}
-                onChange={(e) => setSidebarSearch(e.target.value)}
-                className="h-8 text-sm pl-8"
-              />
+              <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="font-semibold text-sm truncate">Сообщения</span>
             </div>
           </div>
-
-          {/* Client list */}
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {filteredClients.map((c) => (
+            {allConvs.map((c) => (
               <button
                 key={c.id}
-                onClick={() => navigate(`/lawyer/chat/${c.id}`)}
+                onClick={() => navigate(`/client/chat/${c.id}`)}
                 className={cn(
                   "w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted group",
-                  clientId === c.id ? "bg-primary/10 border border-primary/20" : ""
+                  lawyerClientId === c.id ? "bg-primary/10 border border-primary/20" : ""
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className={cn(
-                    "font-medium text-sm truncate",
-                    clientId === c.id ? "text-primary" : "group-hover:text-foreground"
+                <div className="flex items-center gap-2.5">
+                  <div className={cn(
+                    "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center",
+                    lawyerClientId === c.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                   )}>
-                    {c.client_name}
-                  </p>
-                  {(unreadMap[c.id] || 0) > 0 && (
-                    <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                      {unreadMap[c.id]}
-                    </span>
-                  )}
+                    <Briefcase className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className={cn(
+                        "font-medium text-sm truncate",
+                        lawyerClientId === c.id ? "text-primary" : ""
+                      )}>
+                        {c.lawyerName || "Юрист"}
+                      </p>
+                      {(unreadMap[c.id] || 0) > 0 && (
+                        <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                          {unreadMap[c.id]}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {CRM_STAGE_LABELS[c.crm_stage] || c.crm_stage}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {CRM_STAGES[c.crm_stage] || c.crm_stage}
-                </p>
               </button>
             ))}
-            {filteredClients.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">Клиентов нет</p>
-            )}
           </div>
         </aside>
 
@@ -287,49 +288,36 @@ const LawyerChatPage = () => {
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Chat top bar */}
           <div className="border-b bg-card px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            {/* Back on mobile */}
             <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
-              onClick={() => navigate("/lawyer/clients")}>
+              onClick={() => navigate("/client/messages")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold truncate">{client?.client_name}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {CRM_STAGES[client?.crm_stage] || ""}
-                {client?.client_phone ? ` · ${client.client_phone}` : ""}
-              </p>
+            <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+              <Briefcase className="h-4 w-4 text-primary" />
             </div>
-
-            {/* Quick nav */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex" asChild>
-                <Link to={`/lawyer/clients/${clientId}`}>
-                  <User className="h-3.5 w-3.5" />
-                  Дело
-                </Link>
-              </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex" asChild>
-                <Link to={`/lawyer/clients/${clientId}`} state={{ tab: "documents" }}>
-                  <FileText className="h-3.5 w-3.5" />
-                  Документы
-                </Link>
-              </Button>
-              {/* Mobile shortcut to client detail */}
-              <Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" asChild>
-                <Link to={`/lawyer/clients/${clientId}`}>
-                  <User className="h-4 w-4" />
-                </Link>
-              </Button>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold truncate">{lawyerName}</p>
+              <div className="flex items-center gap-2">
+                {stageLabel && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                    {stageLabel}
+                  </Badge>
+                )}
+                {lawyerProfile?.specialization && (
+                  <span className="text-xs text-muted-foreground truncate hidden sm:block">
+                    {lawyerProfile.specialization}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             <div className="px-3 sm:px-4 py-4 max-w-3xl mx-auto space-y-1">
-              {messages.length === 0 && !loading && (
+              {messages.length === 0 && (
                 <div className="text-center py-16 text-muted-foreground text-sm">
-                  Нет сообщений. Начните переписку.
+                  Нет сообщений. Юрист напишет вам здесь.
                 </div>
               )}
               {grouped.map(({ date, msgs }) => (
@@ -372,14 +360,12 @@ const LawyerChatPage = () => {
                           {m.message_type !== "text" && m.content && m.content !== m.file_name && (
                             <p className="text-sm mt-1">{m.content}</p>
                           )}
-                          <div className={cn("flex items-center justify-end gap-1 mt-1",
-                            isOwn ? "text-primary-foreground/60" : "text-muted-foreground")}>
+                          <div className={cn(
+                            "flex items-center justify-end gap-1 mt-1",
+                            isOwn ? "text-primary-foreground/60" : "text-muted-foreground"
+                          )}>
                             <span className="text-[11px]">{formatTime(m.created_at)}</span>
-                            {isOwn && (
-                              m.is_read
-                                ? <CheckCheck className="h-3 w-3" />
-                                : <Check className="h-3 w-3" />
-                            )}
+                            {isOwn && (m.is_read ? <CheckCheck className="h-3 w-3" /> : <Check className="h-3 w-3" />)}
                           </div>
                         </div>
                       </div>
@@ -394,10 +380,8 @@ const LawyerChatPage = () => {
           {/* Input bar */}
           <div className="border-t bg-background px-3 sm:px-4 py-3 flex-shrink-0">
             <div className="max-w-3xl mx-auto flex items-end gap-2">
-              <input
-                type="file" ref={fileRef} onChange={handleFile} className="hidden"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-              />
+              <input type="file" ref={fileRef} onChange={handleFile} className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
               <Button variant="ghost" size="icon" className="flex-shrink-0 h-10 w-10"
                 onClick={() => fileRef.current?.click()} disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
@@ -422,4 +406,4 @@ const LawyerChatPage = () => {
   );
 };
 
-export default LawyerChatPage;
+export default ClientChatPage;

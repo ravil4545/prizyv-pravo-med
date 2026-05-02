@@ -82,6 +82,8 @@ const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
 const LawyerClientDetail = lazy(() => import("./pages/LawyerClientDetail"));
 const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
 const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
+const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
+const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -140,6 +142,8 @@ const App = () => (
               <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
               <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
               <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
+              <Route path="/client/messages" element={<ClientMessagesPage />} />
+              <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
