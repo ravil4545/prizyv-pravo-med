@@ -9,7 +9,22 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger(),
+    // Cloudflare (Lovable CDN) doesn't send CORS headers for same-origin assets,
+    // but Vite adds crossorigin to the stylesheet link which can confuse some mobile
+    // browsers. Strip it since SRI (integrity) isn't used here.
+    {
+      name: "remove-stylesheet-crossorigin",
+      transformIndexHtml(html: string) {
+        return html.replace(
+          /(<link rel="stylesheet")[^>]* crossorigin([^>]*>)/g,
+          "$1$2"
+        );
+      },
+    },
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
