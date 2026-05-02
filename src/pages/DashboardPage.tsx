@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase, Users, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import { useDemoMode } from "@/hooks/useDemoMode";
@@ -14,6 +14,7 @@ import { GridSkeleton } from "@/components/LoadingSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
 
 interface DashboardCard {
@@ -36,6 +37,7 @@ const DashboardPage = () => {
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useUnreadMessages();
+  const { isLawyer, profile: lawyerProfile } = useLawyerProfile();
 
   useEffect(() => {
     checkUser();
@@ -203,8 +205,54 @@ const DashboardPage = () => {
             <SubscriptionStatusCard />
           </div>
 
-          {/* Lawyer Chat Banner */}
-          {!isDemoMode && (
+          {/* Chat Banner — lawyer version */}
+          {!isDemoMode && isLawyer && (
+            <div
+              onClick={() => navigate("/lawyer/clients")}
+              className={cn(
+                "mb-6 cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
+                "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
+                unreadCount > 0
+                  ? "border-primary/40 bg-primary/5"
+                  : "border-border/60 bg-muted/20 hover:bg-muted/40"
+              )}
+            >
+              <div className={cn(
+                "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
+                unreadCount > 0
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
+              )}>
+                <Users className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
+                    Чат с клиентами
+                  </p>
+                  {unreadCount > 0 && (
+                    <span className="inline-flex items-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0 h-4">
+                      {unreadCount} новых
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {unreadCount > 0
+                    ? "Клиент написал вам — нажмите, чтобы ответить"
+                    : "Переписка с вашими клиентами"}
+                </p>
+              </div>
+              <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
+            </div>
+          )}
+
+          {/* Chat Banner — client version */}
+          {!isDemoMode && !isLawyer && (
             <div
               onClick={() => navigate("/client/messages")}
               className={cn(
@@ -215,7 +263,6 @@ const DashboardPage = () => {
                   : "border-border/60 bg-muted/20 hover:bg-muted/40"
               )}
             >
-              {/* Icon with unread badge */}
               <div className={cn(
                 "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
                 unreadCount > 0
@@ -229,14 +276,9 @@ const DashboardPage = () => {
                   </span>
                 )}
               </div>
-
-              {/* Text */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className={cn(
-                    "font-semibold text-sm",
-                    unreadCount > 0 ? "text-primary" : "text-foreground"
-                  )}>
+                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
                     Чат с юристом
                   </p>
                   {unreadCount > 0 && (
@@ -251,11 +293,7 @@ const DashboardPage = () => {
                     : "Переписка с вашим юристом"}
                 </p>
               </div>
-
-              <ChevronRight className={cn(
-                "h-4 w-4 flex-shrink-0 transition-colors",
-                unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary"
-              )} />
+              <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
             </div>
           )}
 
@@ -369,8 +407,48 @@ const DashboardPage = () => {
           )}
         </div>
       </main>
+
+      {/* ── Lawyer Cabinet Footer Button ─────────────────────────────────── */}
+      {!isDemoMode && user && (
+        <div className="container mx-auto px-4 pb-4 max-w-5xl">
+          <div
+            onClick={() => navigate(isLawyer ? "/lawyer/clients" : "/lawyer")}
+            className={cn(
+              "cursor-pointer rounded-xl border px-5 py-4 flex items-center gap-4",
+              "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
+              isLawyer
+                ? "border-primary/30 bg-gradient-to-r from-primary/5 to-accent/5 hover:from-primary/10 hover:to-accent/10"
+                : "border-border/50 bg-muted/20 hover:bg-muted/40"
+            )}
+          >
+            <div className={cn(
+              "h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors",
+              isLawyer
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+            )}>
+              <Scale className="h-6 w-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={cn("font-semibold text-sm md:text-base", isLawyer ? "text-primary" : "text-foreground")}>
+                Кабинет юриста
+              </p>
+              <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+                {isLawyer
+                  ? `Тариф ${lawyerProfile?.subscription_tier === "pro" ? "Pro" : "Basic"} · перейти в кабинет`
+                  : "Зарегистрироваться как юрист-партнёр nepriziv.ru"}
+              </p>
+            </div>
+            <ChevronRight className={cn(
+              "h-5 w-5 flex-shrink-0 transition-colors",
+              isLawyer ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary"
+            )} />
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 pb-8 max-w-5xl">
-        <ShareWithLawyer />
+        {!isLawyer && <ShareWithLawyer />}
       </div>
       <Footer />
       {user && (
