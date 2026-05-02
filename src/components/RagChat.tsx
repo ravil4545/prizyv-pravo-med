@@ -42,17 +42,17 @@ export function RagChat() {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    if (open) {
+    if (!hidden && open) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, open]);
+  }, [messages, open, hidden]);
 
   // Auto-focus input when panel opens
   useEffect(() => {
-    if (open) {
+    if (!hidden && open) {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
-  }, [open]);
+  }, [open, hidden]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
