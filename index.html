@@ -77,19 +77,19 @@
       _showAppError((err && err.message) || msg || 'Неизвестная ошибка');
       return false;
     };
-    // If React hasn't mounted after 20s → show timeout message with contact options
+    // If React hasn't mounted after 10s → show timeout with VPN hint (Russian ISPs throttle JS)
     setTimeout(function() {
       if (!document.getElementById('app-loader')) return; // React already mounted
       var el = document.getElementById('app-loader');
       if (!el) return;
       el.innerHTML = '<div style="text-align:center;padding:1.5rem 1rem;font-family:system-ui;max-width:340px">'
-        + '<p style="font-size:1rem;font-weight:600;color:#111827;margin:0 0 .25rem">Загрузка занимает время</p>'
-        + '<p style="font-size:.8rem;color:#6b7280;margin:0 0 1rem">Проверьте интернет-соединение и нажмите «Обновить»</p>'
+        + '<p style="font-size:1rem;font-weight:600;color:#111827;margin:0 0 .25rem">Сайт не загружается?</p>'
+        + '<p style="font-size:.8rem;color:#6b7280;margin:0 0 .75rem">Некоторые операторы блокируют наш сайт. Включите VPN или попробуйте обновить страницу.</p>'
         + '<div style="display:flex;flex-direction:column;gap:.5rem;align-items:center">'
         + '<button onclick="sessionStorage.clear();location.reload()" style="width:200px;padding:.5rem 0;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:.875rem;cursor:pointer;font-weight:500">Обновить страницу</button>'
-        + '<a href="https://t.me/nepriziv2" style="width:200px;display:block;padding:.5rem 0;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;font-size:.875rem;font-weight:500;box-sizing:border-box">Написать в Telegram</a>'
+        + '<a href="https://t.me/nepriziv2" style="width:200px;display:block;padding:.5rem 0;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;font-size:.875rem;font-weight:500;box-sizing:border-box;text-align:center">Написать в Telegram</a>'
         + '</div></div>';
-    }, 20000);
+    }, 10000);
     </script>
   </head>
 
