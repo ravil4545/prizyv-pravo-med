@@ -567,7 +567,7 @@ const LawyerChatPage = () => {
                   title="ИИ-рекомендации"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {suggestions.length > 0 && (
+                  {suggestionHistory.length > 0 && (
                     <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
                   )}
                 </Button>
