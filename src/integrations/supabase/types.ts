@@ -238,6 +238,41 @@ export type Database = {
         }
         Relationships: []
       }
+      case_notes: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          id: string
+          lawyer_client_id: string
+          note_type: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          id?: string
+          lawyer_client_id: string
+          note_type?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          lawyer_client_id?: string
+          note_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_notes_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string | null
@@ -293,6 +328,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_document_access: {
+        Row: {
+          client_user_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          lawyer_id: string
+        }
+        Insert: {
+          client_user_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lawyer_id: string
+        }
+        Update: {
+          client_user_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lawyer_id?: string
+        }
+        Relationships: []
       }
       consultations: {
         Row: {
@@ -675,6 +734,175 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      lawyer_chat_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          edited_at: string | null
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          id: string
+          is_read: boolean
+          lawyer_client_id: string
+          message_type: string
+          sender_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          edited_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_read?: boolean
+          lawyer_client_id: string
+          message_type?: string
+          sender_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          edited_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_read?: boolean
+          lawyer_client_id?: string
+          message_type?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_chat_messages_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lawyer_clients: {
+        Row: {
+          case_won: boolean | null
+          client_birth_year: number | null
+          client_email: string | null
+          client_name: string
+          client_phone: string | null
+          client_user_id: string | null
+          conscription_date: string | null
+          created_at: string
+          crm_stage: string
+          diagnosis: string | null
+          expected_category: string | null
+          id: string
+          lawyer_id: string
+          notes: string | null
+          priority: string
+          updated_at: string
+        }
+        Insert: {
+          case_won?: boolean | null
+          client_birth_year?: number | null
+          client_email?: string | null
+          client_name: string
+          client_phone?: string | null
+          client_user_id?: string | null
+          conscription_date?: string | null
+          created_at?: string
+          crm_stage?: string
+          diagnosis?: string | null
+          expected_category?: string | null
+          id?: string
+          lawyer_id: string
+          notes?: string | null
+          priority?: string
+          updated_at?: string
+        }
+        Update: {
+          case_won?: boolean | null
+          client_birth_year?: number | null
+          client_email?: string | null
+          client_name?: string
+          client_phone?: string | null
+          client_user_id?: string | null
+          conscription_date?: string | null
+          created_at?: string
+          crm_stage?: string
+          diagnosis?: string | null
+          expected_category?: string | null
+          id?: string
+          lawyer_id?: string
+          notes?: string | null
+          priority?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lawyer_profiles: {
+        Row: {
+          clients_limit: number | null
+          created_at: string | null
+          full_name: string
+          is_active: boolean | null
+          subscription_tier: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          clients_limit?: number | null
+          created_at?: string | null
+          full_name: string
+          is_active?: boolean | null
+          subscription_tier?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          clients_limit?: number | null
+          created_at?: string | null
+          full_name?: string
+          is_active?: boolean | null
+          subscription_tier?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lawyer_template_uses: {
+        Row: {
+          created_at: string
+          id: string
+          lawyer_client_id: string | null
+          lawyer_id: string
+          template_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lawyer_client_id?: string | null
+          lawyer_id: string
+          template_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lawyer_client_id?: string | null
+          lawyer_id?: string
+          template_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_template_uses_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       medical_documents: {
         Row: {
