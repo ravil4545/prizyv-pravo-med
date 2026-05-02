@@ -1,0 +1,7 @@
+# Static assets — content-hashed, cache 1 year immutably
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML — never cache (must always load latest app version)
+/
+  Cache-Control: no-cache, no-store, must-revalidate
