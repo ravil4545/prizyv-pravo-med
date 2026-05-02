@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
 import PdfViewer from "@/components/PdfViewer";
@@ -22,8 +23,12 @@ import DocxViewer from "@/components/DocxViewer";
 import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
-  ClipboardList, Plus, Loader2, Eye, Download, Trophy,
+  ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
 } from "lucide-react";
+
+const stripMarkdown = (s: string) =>
+  s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
+   .replace(/#+\s*/g, "").replace(/_{1,2}(.+?)_{1,2}/g, "$1").trim();
 
 const CRM_STAGES = [
   { value: "initial_contact",    label: "Первичный контакт" },
@@ -185,7 +190,17 @@ const LawyerClientDetail = () => {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
       if (res.error) throw new Error(res.error.message);
-      setAiAnalysis(res.data.analysis);
+      const analysis: AIAnalysis = res.data.analysis;
+      setAiAnalysis(analysis);
+      // Auto-save to case_notes so it persists across tab switches
+      await supabase.from("case_notes").insert({
+        lawyer_client_id: clientId,
+        author_id: user!.id,
+        content: JSON.stringify(analysis),
+        note_type: "ai_analysis",
+      });
+      loadNotes();
+      toast({ title: "ИИ-анализ сохранён в заметках" });
     } catch (e) { setAiError(e instanceof Error ? e.message : "Ошибка анализа"); }
     setAiLoading(false);
   };
@@ -448,19 +463,102 @@ const LawyerClientDetail = () => {
               </CardContent>
             </Card>
             <div className="space-y-2">
-              {notes.map((note) => (
-                <div key={note.id} className="flex gap-3 p-3 rounded-lg border bg-card">
-                  <div className="flex-shrink-0 mt-0.5">
-                    {note.note_type === "stage_change" ? <AlertCircle className="h-4 w-4 text-blue-500" />
-                      : note.note_type === "reminder" ? <Clock className="h-4 w-4 text-amber-500" />
-                      : <ClipboardList className="h-4 w-4 text-muted-foreground" />}
+              {notes.map((note) => {
+                if (note.note_type === "ai_analysis") {
+                  let analysis: AIAnalysis = {};
+                  try { analysis = JSON.parse(note.content); } catch { analysis = { raw: note.content }; }
+                  return (
+                    <Collapsible key={note.id}>
+                      <div className="rounded-xl border-2 border-primary/20 bg-primary/5 overflow-hidden">
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between px-4 py-3 hover:bg-primary/10 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Brain className="h-4 w-4 text-primary flex-shrink-0" />
+                              <span className="font-semibold text-sm text-primary">ИИ-анализ</span>
+                              {analysis.overall_category && (
+                                <Badge className="text-xs bg-primary text-white">{analysis.overall_category}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{new Date(note.created_at).toLocaleString("ru-RU")}</span>
+                              <ChevronDown className="h-4 w-4 text-primary transition-transform [[data-state=open]_&]:rotate-180" />
+                            </div>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="px-4 pb-4 space-y-3 border-t border-primary/10">
+                            {analysis.category_basis && (
+                              <p className="text-sm text-muted-foreground pt-3">{stripMarkdown(analysis.category_basis)}</p>
+                            )}
+                            {analysis.strong_points?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold text-green-600 mb-1">Сильные стороны</p>
+                                <ul className="text-sm space-y-0.5 list-disc list-inside">
+                                  {analysis.strong_points.map((p, i) => <li key={i}>{stripMarkdown(p)}</li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {analysis.weak_points?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold text-red-600 mb-1">Слабые стороны</p>
+                                <ul className="text-sm space-y-0.5 list-disc list-inside">
+                                  {analysis.weak_points.map((p, i) => <li key={i}>{stripMarkdown(p)}</li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {analysis.examination_plan?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold mb-1">План дообследования</p>
+                                <ul className="text-sm space-y-0.5 list-disc list-inside">
+                                  {analysis.examination_plan.map((item, i) => <li key={i}>{stripMarkdown(item.name)} — {stripMarkdown(item.reason)}</li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {analysis.missing_documents?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold text-amber-600 mb-1">Отсутствующие документы</p>
+                                <ul className="text-sm space-y-0.5 list-disc list-inside">
+                                  {analysis.missing_documents.map((d, i) => <li key={i}>{stripMarkdown(d)}</li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {analysis.lawyer_recommendations?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold mb-1">Рекомендации для юриста</p>
+                                <ol className="text-sm space-y-0.5 list-decimal list-inside">
+                                  {analysis.lawyer_recommendations.map((r, i) => <li key={i}>{stripMarkdown(r)}</li>)}
+                                </ol>
+                              </div>
+                            ) : null}
+                            {analysis.risks?.length ? (
+                              <div>
+                                <p className="text-xs font-semibold text-red-600 mb-1">Риски</p>
+                                <ul className="text-sm space-y-0.5 list-disc list-inside">
+                                  {analysis.risks.map((r, i) => <li key={i}>{stripMarkdown(r)}</li>)}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {analysis.raw && <p className="text-sm text-muted-foreground">{stripMarkdown(analysis.raw)}</p>}
+                          </div>
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
+                  );
+                }
+                return (
+                  <div key={note.id} className="flex gap-3 p-3 rounded-lg border bg-card">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {note.note_type === "stage_change" ? <AlertCircle className="h-4 w-4 text-blue-500" />
+                        : note.note_type === "reminder" ? <Clock className="h-4 w-4 text-amber-500" />
+                        : <ClipboardList className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{new Date(note.created_at).toLocaleString("ru-RU")}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">{note.content}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{new Date(note.created_at).toLocaleString("ru-RU")}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {notes.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Заметок пока нет</p>}
             </div>
           </TabsContent>
