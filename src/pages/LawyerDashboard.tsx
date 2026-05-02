@@ -223,10 +223,10 @@ const LawyerDashboard = () => {
         {/* Quick nav */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
           {[
-            { to: "/lawyer/clients", icon: Users, label: "CRM — Клиенты", desc: "Ведение дел" },
-            { to: "/lawyer/templates", icon: FileText, label: "Шаблоны", desc: "Документы" },
-            { to: "/lawyer/clients", icon: MessageSquare, label: "Чаты", desc: "Переписка" },
-            { to: "/lawyer/clients", icon: TrendingUp, label: "Аналитика", desc: "Статистика дел" },
+            { to: "/lawyer/clients",   icon: Users,          label: "CRM — Клиенты", desc: "Ведение дел" },
+            { to: "/lawyer/templates", icon: FileText,        label: "Шаблоны",       desc: "Документы" },
+            { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами" },
+            { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел" },
           ].map(({ to, icon: Icon, label, desc }) => (
             <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(to)}>
               <CardContent className="p-4 text-center">

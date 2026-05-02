@@ -82,6 +82,8 @@ const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
 const LawyerClientDetail = lazy(() => import("./pages/LawyerClientDetail"));
 const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
 const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
+const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
+const LawyerAnalyticsPage = lazy(() => import("./pages/LawyerAnalyticsPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 
@@ -142,6 +144,8 @@ const App = () => (
               <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
               <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
               <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
+              <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
+              <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
               <Route path="/client/messages" element={<ClientMessagesPage />} />
               <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

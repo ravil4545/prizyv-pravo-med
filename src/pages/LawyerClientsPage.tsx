@@ -66,6 +66,7 @@ const LawyerClientsPage = () => {
   const [clients, setClients] = useState<LawyerClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [stageFilter, setStageFilter] = useState(searchParams.get("stage") || "all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -84,14 +85,40 @@ const LawyerClientsPage = () => {
     loadClients();
   }, [user, profileLoading, isLawyer]);
 
+  // Live unread count updates
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel(`clients-unread-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_chat_messages" }, () => {
+        if (clients.length) loadUnreadCounts(clients.map((c) => c.id));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, clients.length]);
+
   const loadClients = async () => {
     const { data } = await supabase
       .from("lawyer_clients")
       .select("*")
       .eq("lawyer_id", user!.id)
       .order("updated_at", { ascending: false });
-    setClients((data as LawyerClient[]) || []);
+    const rows = (data as LawyerClient[]) || [];
+    setClients(rows);
     setLoading(false);
+    if (rows.length) loadUnreadCounts(rows.map((c) => c.id));
+  };
+
+  const loadUnreadCounts = async (ids: string[]) => {
+    const { data } = await supabase
+      .from("lawyer_chat_messages")
+      .select("lawyer_client_id")
+      .in("lawyer_client_id", ids)
+      .neq("sender_id", user!.id)
+      .eq("is_read", false);
+    const map: Record<string, number> = {};
+    data?.forEach((r) => { map[r.lawyer_client_id] = (map[r.lawyer_client_id] || 0) + 1; });
+    setUnreadMap(map);
   };
 
   const handleAdd = async () => {
@@ -145,13 +172,21 @@ const LawyerClientsPage = () => {
     toast({ title: "Клиент добавлен" });
   };
 
-  const filtered = clients.filter((c) => {
-    const q = search.toLowerCase();
-    if (search && !c.client_name.toLowerCase().includes(q) && !(c.client_phone || "").includes(q)) return false;
-    if (stageFilter !== "all" && c.crm_stage !== stageFilter) return false;
-    if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
-    return true;
-  });
+  const filtered = clients
+    .filter((c) => {
+      const q = search.toLowerCase();
+      if (search && !c.client_name.toLowerCase().includes(q) && !(c.client_phone || "").includes(q)) return false;
+      if (stageFilter !== "all" && c.crm_stage !== stageFilter) return false;
+      if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const ua = unreadMap[a.id] || 0;
+      const ub = unreadMap[b.id] || 0;
+      if (ua > 0 && ub === 0) return -1;
+      if (ua === 0 && ub > 0) return 1;
+      return 0;
+    });
 
   if (profileLoading) return (
     <div className="min-h-screen bg-background"><Header />
@@ -303,10 +338,17 @@ const LawyerClientsPage = () => {
                             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STAGE_COLORS[c.crm_stage] || "bg-gray-100 text-gray-700"}`}>
                               {CRM_STAGES.find((s) => s.value === c.crm_stage)?.label || c.crm_stage}
                             </span>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"
-                              onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/chat/${c.id}`); }}>
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
+                            <div className="relative">
+                              <Button variant="ghost" size="icon" className="h-8 w-8"
+                                onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/chat/${c.id}`); }}>
+                                <MessageSquare className={unreadMap[c.id] ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+                              </Button>
+                              {unreadMap[c.id] > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 pointer-events-none">
+                                  {unreadMap[c.id] > 9 ? "9+" : unreadMap[c.id]}
+                                </span>
+                              )}
+                            </div>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>

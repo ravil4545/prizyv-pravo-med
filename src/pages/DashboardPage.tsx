@@ -37,7 +37,12 @@ const DashboardPage = () => {
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useUnreadMessages();
-  const { isLawyer, profile: lawyerProfile } = useLawyerProfile();
+  const { isLawyer, profile: lawyerProfile, loading: lawyerLoading } = useLawyerProfile();
+
+  // Lawyers have their own cabinet — redirect immediately
+  useEffect(() => {
+    if (!lawyerLoading && isLawyer) navigate("/lawyer", { replace: true });
+  }, [isLawyer, lawyerLoading]);
 
   useEffect(() => {
     checkUser();
