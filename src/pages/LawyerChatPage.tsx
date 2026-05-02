@@ -13,7 +13,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download, Users,
   Search, User, FileText, CheckCheck, Check, Pencil,
-  Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft,
+  Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,14 @@ interface SidebarClient {
 interface AISuggestion {
   label: string;
   text: string;
+}
+
+interface SuggestionSet {
+  id: string;          // client message id that triggered this
+  clientMessage: string; // preview of client's question
+  summary: string;
+  suggestions: AISuggestion[];
+  collapsed: boolean;
 }
 
 const CRM_STAGES: Record<string, string> = {
@@ -69,8 +77,7 @@ const LawyerChatPage = () => {
 
   // AI suggestions
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
-  const [suggestionsSummary, setSuggestionsSummary] = useState("");
+  const [suggestionHistory, setSuggestionHistory] = useState<SuggestionSet[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const autoSuggestRef = useRef<string | null>(null);
@@ -124,6 +131,13 @@ const LawyerChatPage = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, clientId, isLawyer]);
 
+  // Reset suggestion history when switching clients
+  useEffect(() => {
+    setSuggestionHistory([]);
+    setSuggestionsError(null);
+    autoSuggestRef.current = null;
+  }, [clientId]);
+
   // Auto-trigger AI suggestions when last text message is from client
   useEffect(() => {
     if (!messages.length || !user || !clientId) return;
@@ -171,6 +185,13 @@ const LawyerChatPage = () => {
 
   const loadSuggestionsFor = async (currentMessages: Message[]) => {
     if (!clientId || !user || currentMessages.length === 0) return;
+
+    // Find last client text message — this is what we'll answer
+    const lastClientMsg = [...currentMessages].reverse().find(
+      m => m.message_type === "text" && m.sender_id !== user.id && m.content?.trim()
+    );
+    if (!lastClientMsg?.content) return;
+
     setSuggestionsLoading(true);
     setSuggestionsError(null);
     try {
@@ -196,13 +217,30 @@ const LawyerChatPage = () => {
         throw new Error(data.error || `Ошибка ${res.status}`);
       }
       const data = await res.json();
-      setSuggestions(data.suggestions || []);
-      setSuggestionsSummary(data.summary || "");
+
+      const newSet: SuggestionSet = {
+        id: lastClientMsg.id,
+        clientMessage: lastClientMsg.content!,
+        summary: data.summary || "",
+        suggestions: data.suggestions || [],
+        collapsed: false,
+      };
+      // Collapse all previous, append new one
+      setSuggestionHistory(prev => [
+        ...prev.map(s => ({ ...s, collapsed: true })),
+        newSet,
+      ]);
     } catch (err) {
       setSuggestionsError(err instanceof Error ? err.message : "Ошибка ИИ");
     } finally {
       setSuggestionsLoading(false);
     }
+  };
+
+  const toggleCollapsed = (id: string) => {
+    setSuggestionHistory(prev =>
+      prev.map(s => s.id === id ? { ...s, collapsed: !s.collapsed } : s)
+    );
   };
 
   const insertSuggestion = (suggText: string) => {
@@ -285,9 +323,15 @@ const LawyerChatPage = () => {
   );
   const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
 
+  const historyItems = suggestionHistory.slice(0, -1);
+  const currentItem = suggestionHistory.length > 0
+    ? suggestionHistory[suggestionHistory.length - 1]
+    : null;
+
   // AI panel content as JSX variable (avoids component-inside-render issues)
   const aiPanelContent = (
     <div className="flex flex-col h-full">
+      {/* Header */}
       <div className="px-3 py-3 border-b flex items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
@@ -305,59 +349,112 @@ const LawyerChatPage = () => {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {/* Conversation summary */}
-        {suggestionsSummary && (
-          <p className="text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 leading-relaxed">
-            {suggestionsSummary}
-          </p>
-        )}
-
-        {/* Error */}
-        {suggestionsError && (
-          <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
-            {suggestionsError}
-          </p>
-        )}
-
-        {/* Loading skeleton */}
-        {suggestionsLoading && suggestions.length === 0 && (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="border rounded-xl p-3 space-y-2">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-4/5" />
+      <div className="flex-1 overflow-y-auto">
+        {/* ── History strips — collapse/expand previous questions ── */}
+        {historyItems.map((set) => (
+          <div key={set.id} className="border-b">
+            {/* Collapsed strip — always visible */}
+            <button
+              onClick={() => toggleCollapsed(set.id)}
+              className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/40 transition-colors text-left"
+            >
+              <Sparkles className="h-3 w-3 text-primary/40 flex-shrink-0" />
+              <span className="text-[11px] text-muted-foreground truncate flex-1 leading-snug">
+                {set.clientMessage.length > 58
+                  ? set.clientMessage.slice(0, 58) + "…"
+                  : set.clientMessage}
+              </span>
+              <ChevronDown className={cn(
+                "h-3 w-3 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200",
+                !set.collapsed && "rotate-180"
+              )} />
+            </button>
+            {/* Expanded content — slides down */}
+            {!set.collapsed && (
+              <div className="border-t bg-muted/10 px-3 pb-3 pt-2 space-y-2 animate-in slide-in-from-top-1 duration-150">
+                {set.summary && (
+                  <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
+                    {set.summary}
+                  </p>
+                )}
+                {set.suggestions.map((s, i) => (
+                  <div key={i} className="border rounded-xl p-2.5 space-y-1.5 bg-card">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-semibold text-primary">{s.label}</span>
+                      <Button
+                        variant="outline" size="sm"
+                        className="h-5 text-[9px] px-1.5 gap-0.5 flex-shrink-0"
+                        onClick={() => insertSuggestion(s.text)}
+                      >
+                        <CornerDownLeft className="h-2.5 w-2.5" />
+                        Вставить
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-foreground/80 leading-relaxed">{s.text}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!suggestionsLoading && suggestions.length === 0 && !suggestionsError && (
-          <div className="text-center py-10 space-y-3 text-muted-foreground">
-            <Sparkles className="h-9 w-9 mx-auto opacity-20" />
-            <p className="text-xs">ИИ сформирует рекомендации автоматически, когда клиент напишет сообщение, или нажмите кнопку обновления</p>
-          </div>
-        )}
-
-        {/* Suggestions */}
-        {suggestions.map((s, i) => (
-          <div key={i} className="border rounded-xl p-3 space-y-2 bg-card hover:border-primary/30 transition-colors">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[11px] font-semibold text-primary">{s.label}</span>
-              <Button
-                variant="outline" size="sm"
-                className="h-6 text-[10px] px-2 gap-1 flex-shrink-0"
-                onClick={() => insertSuggestion(s.text)}
-              >
-                <CornerDownLeft className="h-3 w-3" />
-                Вставить
-              </Button>
-            </div>
-            <p className="text-xs text-foreground/80 leading-relaxed">{s.text}</p>
+            )}
           </div>
         ))}
+
+        {/* ── Current / latest suggestions ── */}
+        <div className="p-3 space-y-3">
+          {/* Error */}
+          {suggestionsError && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+              {suggestionsError}
+            </p>
+          )}
+
+          {/* Loading skeleton */}
+          {suggestionsLoading && (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="border rounded-xl p-3 space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-4/5" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!suggestionsLoading && !currentItem && !suggestionsError && (
+            <div className="text-center py-10 space-y-3 text-muted-foreground">
+              <Sparkles className="h-9 w-9 mx-auto opacity-20" />
+              <p className="text-xs px-2">ИИ сформирует рекомендации автоматически, когда клиент напишет сообщение</p>
+            </div>
+          )}
+
+          {/* Current suggestions */}
+          {!suggestionsLoading && currentItem && (
+            <>
+              {currentItem.summary && (
+                <p className="text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 leading-relaxed">
+                  {currentItem.summary}
+                </p>
+              )}
+              {currentItem.suggestions.map((s, i) => (
+                <div key={i} className="border rounded-xl p-3 space-y-2 bg-card hover:border-primary/30 transition-colors">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-semibold text-primary">{s.label}</span>
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-6 text-[10px] px-2 gap-1 flex-shrink-0"
+                      onClick={() => insertSuggestion(s.text)}
+                    >
+                      <CornerDownLeft className="h-3 w-3" />
+                      Вставить
+                    </Button>
+                  </div>
+                  <p className="text-xs text-foreground/80 leading-relaxed">{s.text}</p>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

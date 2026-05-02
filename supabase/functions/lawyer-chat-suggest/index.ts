@@ -13,6 +13,8 @@ const corsHeaders = (req: Request) => ({
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
 
+type MessageInput = { sender_id: string; content: string | null; message_type: string };
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
@@ -42,7 +44,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: "lawyerClientId и messages обязательны" }, { status: 400, headers: corsHeaders(req) });
     }
 
-    // Verify lawyer owns this client entry
     const { data: clientEntry, error: clientError } = await supabase
       .from("lawyer_clients")
       .select("client_name, crm_stage, diagnosis, expected_category")
@@ -57,7 +58,6 @@ Deno.serve(async (req) => {
     const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY не настроен");
 
-    // Build conversation transcript (last 20 text messages)
     const CRM_STAGES: Record<string, string> = {
       initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
       has_diagnosis: "Есть диагноз", examinations: "Обследования",
@@ -67,40 +67,58 @@ Deno.serve(async (req) => {
       military_ticket: "Получение ВБ",
     };
 
-    const transcript = messages
-      .slice(-20)
-      .map((m: { sender_id: string; content: string | null; message_type: string }) => {
+    const allMsgs: MessageInput[] = (messages as MessageInput[]).slice(-40);
+
+    // ── Find the last client text message — this is what we answer ─────────
+    let lastClientMsgContent: string | null = null;
+    let lastClientMsgIdx = -1;
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+      const m = allMsgs[i];
+      if (m.message_type === "text" && m.sender_id !== user.id && m.content?.trim()) {
+        lastClientMsgContent = m.content.trim();
+        lastClientMsgIdx = i;
+        break;
+      }
+    }
+
+    if (!lastClientMsgContent) {
+      return Response.json({ summary: "", suggestions: [] }, { headers: corsHeaders(req) });
+    }
+
+    // ── History: messages BEFORE the last client question (max 12) ─────────
+    const historyMsgs = allMsgs.slice(0, lastClientMsgIdx).slice(-12);
+    const historyLines = historyMsgs
+      .map((m) => {
         const role = m.sender_id === user.id ? "Юрист" : "Клиент";
         if (m.message_type === "text" && m.content) return `${role}: ${m.content}`;
-        if (m.message_type === "image") return `${role}: [отправил фото]`;
-        if (m.message_type === "file") return `${role}: [отправил файл]`;
+        if (m.message_type === "image") return `${role}: [фото]`;
+        if (m.message_type === "file") return `${role}: [файл]`;
         return null;
       })
       .filter(Boolean)
       .join("\n");
 
-    const prompt = `Ты — опытный юрист по военному праву и призыву в РФ, помогаешь юристу-практику вести переписку с клиентом.
+    const prompt = `Ты — опытный юрист по военному праву и призыву в РФ, помогаешь юристу-практику отвечать клиентам.
 
 Данные клиента:
 - ФИО: ${clientEntry.client_name}
 - Этап дела: ${CRM_STAGES[clientEntry.crm_stage] || clientEntry.crm_stage || "не указан"}
 - Диагноз: ${clientEntry.diagnosis || "не указан"}
 
-Последние сообщения в чате:
-${transcript}
+ПОСЛЕДНИЙ ВОПРОС КЛИЕНТА (именно на него нужен ответ):
+"${lastClientMsgContent}"
+${historyLines ? `\nПредыстория переписки (используй ТОЛЬКО если она напрямую влияет на ответ к текущему вопросу):\n${historyLines}` : ""}
 
-Задача: предложи 3 варианта ответа юриста клиенту.
+ЗАДАЧА: дай 3 варианта ответа ТОЛЬКО на текущий вопрос клиента. Не суммируй предыдущую переписку — отвечай на то, что спросил клиент прямо сейчас.
 
-Требования:
-- Вариант 1 («Кратко»): деловой, 1–2 предложения, без воды
-- Вариант 2 («Подробно»): развёрнутый с пояснениями по ситуации
-- Вариант 3 («Следующие шаги»): конкретные действия, которые клиент должен предпринять
-
-Все варианты должны логично продолжать переписку и учитывать этап дела.
+Требования к вариантам:
+- «Кратко»: 1–2 предложения, деловой тон, без воды
+- «Подробно»: развёрнуто, с пояснением почему именно так
+- «Следующие шаги»: чёткий список действий для клиента
 
 Отвечай строго в JSON:
 {
-  "summary": "одно предложение о чём переписка",
+  "summary": "одно предложение — что именно спрашивает клиент",
   "suggestions": [
     {"label": "Кратко", "text": "..."},
     {"label": "Подробно", "text": "..."},
@@ -122,7 +140,7 @@ ${transcript}
           { role: "system", content: "Ты помощник юриста по военному праву РФ. Отвечай строго в JSON без markdown-обёртки." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.4,
+        temperature: 0.35,
         max_tokens: 1200,
       }),
     });
@@ -142,7 +160,7 @@ ${transcript}
       result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawContent);
     } catch {
       result = {
-        summary: "Не удалось проанализировать переписку",
+        summary: "Не удалось проанализировать вопрос",
         suggestions: [{ label: "Ответ", text: rawContent.slice(0, 300) }],
       };
     }
