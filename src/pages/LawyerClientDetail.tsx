@@ -92,6 +92,7 @@ const LawyerClientDetail = () => {
       notes: data.notes || "",
       priority: data.priority || "normal",
       conscription_date: data.conscription_date || "",
+      client_user_id: data.client_user_id || "",
     });
     setLoading(false);
     loadNotes();
@@ -127,10 +128,12 @@ const LawyerClientDetail = () => {
       crm_stage: form.crm_stage, diagnosis: form.diagnosis || null,
       expected_category: form.expected_category || null, notes: form.notes || null,
       priority: form.priority, conscription_date: form.conscription_date || null,
+      client_user_id: form.client_user_id || null,
     }).eq("id", clientId);
     if (error) { toast({ title: "Ошибка", description: error.message, variant: "destructive" }); }
     else {
       setClient((prev) => ({ ...prev, ...form }));
+      if (form.client_user_id) loadMedDocs(form.client_user_id);
       if (prevStage !== form.crm_stage) {
         await supabase.from("case_notes").insert({
           lawyer_client_id: clientId, author_id: user!.id,
@@ -253,6 +256,15 @@ const LawyerClientDetail = () => {
                 <div><Label>Ожидаемая категория</Label><Input value={form.expected_category} onChange={(e) => setForm((f) => ({ ...f, expected_category: e.target.value }))} /></div>
                 <div className="sm:col-span-2"><Label>Заметки</Label>
                   <Textarea rows={4} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>ID аккаунта клиента (для доступа к документам)</Label>
+                  <Input
+                    value={form.client_user_id}
+                    onChange={(e) => setForm((f) => ({ ...f, client_user_id: e.target.value }))}
+                    placeholder="UUID из профиля клиента на сайте"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Клиент найдёт свой ID в личном кабинете → блок «Доступ юриста к документам»</p>
                 </div>
               </CardContent>
             </Card>
