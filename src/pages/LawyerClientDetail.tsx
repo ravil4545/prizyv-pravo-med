@@ -47,7 +47,8 @@ const CRM_STAGES = [
 interface MedDoc {
   id: string; title: string | null; document_date: string | null;
   ai_fitness_category: string | null; ai_category_chance: number | null;
-  ai_recommendations: string[] | null; ai_explanation: string | null; file_url: string;
+  ai_recommendations: string[] | null; ai_explanation: string | null;
+  file_url: string; created_at: string;
 }
 interface CaseNote { id: string; content: string; note_type: string; created_at: string; }
 interface AIAnalysis {
@@ -79,6 +80,8 @@ const LawyerClientDetail = () => {
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [lastAnalysisAt, setLastAnalysisAt] = useState<string | null>(null);
+  const [newDocsDetected, setNewDocsDetected] = useState(false);
 
   const [previewDoc, setPreviewDoc] = useState<{ title: string; file_url: string } | null>(null);
   const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null);
@@ -119,7 +122,7 @@ const LawyerClientDetail = () => {
     setHasDocAccess(!!access);
     if (access) {
       const { data } = await supabase.from("medical_documents_v2")
-        .select("id,title,document_date,ai_fitness_category,ai_category_chance,ai_recommendations,ai_explanation,file_url")
+        .select("id,title,document_date,ai_fitness_category,ai_category_chance,ai_recommendations,ai_explanation,file_url,created_at")
         .eq("user_id", clientUserId).order("document_date", { ascending: false });
       setMedDocs((data as MedDoc[]) || []);
     }
@@ -128,8 +131,37 @@ const LawyerClientDetail = () => {
 
   const loadNotes = async () => {
     const { data } = await supabase.from("case_notes").select("*").eq("lawyer_client_id", clientId).order("created_at", { ascending: false });
-    setNotes((data as CaseNote[]) || []);
+    const allNotes = (data as CaseNote[]) || [];
+    setNotes(allNotes);
+    // Restore the most recent AI analysis so it persists across tab switches / page reloads
+    const lastAiNote = allNotes.find(n => n.note_type === "ai_analysis");
+    if (lastAiNote) {
+      try {
+        setAiAnalysis(JSON.parse(lastAiNote.content));
+        setLastAnalysisAt(lastAiNote.created_at);
+      } catch { /* ignore malformed */ }
+    }
   };
+
+  // Detect docs uploaded after the last analysis
+  useEffect(() => {
+    if (!lastAnalysisAt || !aiAnalysis || medDocs.length === 0) {
+      setNewDocsDetected(false);
+      return;
+    }
+    setNewDocsDetected(medDocs.some(doc => doc.created_at > lastAnalysisAt));
+  }, [medDocs, lastAnalysisAt, aiAnalysis]);
+
+  // Live updates: new client documents while the tab is open
+  useEffect(() => {
+    if (!client?.client_user_id || !hasDocAccess) return;
+    const uid = client.client_user_id;
+    const channel = supabase.channel(`medDocs-${uid}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "medical_documents_v2", filter: `user_id=eq.${uid}` },
+        (payload) => { setMedDocs(prev => [payload.new as MedDoc, ...prev]); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [client?.client_user_id, hasDocAccess]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -378,6 +410,17 @@ const LawyerClientDetail = () => {
                 <CardContent className="p-4 flex items-center gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <p className="text-sm">ИИ-анализ доступен в тарифе <strong>Pro</strong>. Upgrade для получения комплексного анализа дела.</p>
+                </CardContent>
+              </Card>
+            )}
+            {newDocsDetected && (
+              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Новые документы с момента последнего анализа</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Клиент загрузил новые документы. Рекомендуем запустить повторный анализ.</p>
+                  </div>
                 </CardContent>
               </Card>
             )}
