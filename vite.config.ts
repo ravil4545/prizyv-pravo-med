@@ -21,24 +21,27 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          // Heavy optional deps — only loaded when the relevant lazy page opens
+          // Each chunk loads in parallel via HTTP/2 — max chunk ≈46 kB gzip
+          if (id.includes("/node_modules/react/") || id.includes("/node_modules/react-dom/") || id.includes("/node_modules/scheduler/"))
+            return "vendor-react";
+          if (id.includes("react-router") || id.includes("@tanstack/react-query"))
+            return "vendor-ecosystem";
+          if (id.includes("@supabase/"))
+            return "vendor-supabase";
+          if (id.includes("@radix-ui/"))
+            return "vendor-radix";
+          // Heavy optional — only fetched when the relevant lazy page opens
+          if (id.includes("react-markdown") || id.includes("remark") || id.includes("rehype") ||
+              id.includes("unified") || id.includes("mdast") || id.includes("hast") ||
+              id.includes("micromark") || id.includes("vfile") || id.includes("is-plain-obj") ||
+              id.includes("trough"))
+            return "vendor-markdown";
           if (id.includes("pdfjs-dist") || id.includes("jspdf") || id.includes("mammoth") || id.includes("html2canvas"))
             return "vendor-pdf";
           if (id.includes("recharts") || id.includes("d3-") || id.includes("d3/"))
             return "vendor-charts";
           if (id.includes("react-quill") || id.includes("quill"))
             return "vendor-editor";
-          if (
-            id.includes("react-markdown") || id.includes("remark") ||
-            id.includes("rehype") || id.includes("unified") ||
-            id.includes("micromark") || id.includes("mdast") ||
-            id.includes("hast") || id.includes("vfile")
-          )
-            return "vendor-markdown";
-          // Supabase — no React deps, safe to load in parallel with React bundle
-          if (id.includes("@supabase/")) return "vendor-supabase";
-          // Everything else (React, router, Radix, react-query, lucide, etc.)
-          return "vendor";
         },
       },
     },
