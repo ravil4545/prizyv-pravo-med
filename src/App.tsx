@@ -163,7 +163,9 @@ const App = () => (
           </Suspense>
           </ErrorBoundary>
           <QuickActionFAB />
-          <Suspense fallback={null}><RagChat /></Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={null}><RagChat /></Suspense>
+          </ErrorBoundary>
           <MobileBottomNav />
         </AuthProvider>
       </BrowserRouter>
