@@ -14,11 +14,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import PdfViewer from "@/components/PdfViewer";
+import DocxViewer from "@/components/DocxViewer";
 import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
-  ClipboardList, Plus, Loader2, ExternalLink, Trophy,
+  ClipboardList, Plus, Loader2, Eye, Download, Trophy,
 } from "lucide-react";
 
 const CRM_STAGES = [
@@ -70,6 +74,10 @@ const LawyerClientDetail = () => {
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; file_url: string } | null>(null);
+  const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!user || profileLoading) return;
@@ -190,6 +198,15 @@ const LawyerClientDetail = () => {
     </div>
   );
 
+  const openPreview = async (doc: { title: string; file_url: string }) => {
+    setPreviewDoc(doc);
+    setPreviewSignedUrl(null);
+    setPreviewLoading(true);
+    const url = await getSignedDocumentUrl(doc.file_url);
+    setPreviewSignedUrl(url);
+    setPreviewLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -300,7 +317,7 @@ const LawyerClientDetail = () => {
                 : (
                     <div className="space-y-3">
                       {medDocs.map((doc) => (
-                        <Card key={doc.id}>
+                        <Card key={doc.id} className="hover:shadow-sm transition-shadow">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
@@ -308,18 +325,28 @@ const LawyerClientDetail = () => {
                                 <p className="text-sm text-muted-foreground">{doc.document_date || "Дата не указана"}</p>
                                 {doc.ai_fitness_category && (
                                   <div className="mt-2 space-y-1">
-                                    <p className="text-sm"><span className="font-medium">Категория ИИ:</span> {doc.ai_fitness_category}</p>
-                                    {doc.ai_explanation && <p className="text-sm text-muted-foreground">{doc.ai_explanation}</p>}
+                                    <Badge variant="outline" className="text-xs font-semibold">
+                                      Категория: {doc.ai_fitness_category}
+                                    </Badge>
+                                    {doc.ai_explanation && (
+                                      <p className="text-xs text-muted-foreground mt-1">{doc.ai_explanation}</p>
+                                    )}
                                     {doc.ai_recommendations && doc.ai_recommendations.length > 0 && (
-                                      <ul className="text-sm text-muted-foreground list-disc list-inside">
+                                      <ul className="text-xs text-muted-foreground list-disc list-inside mt-1">
                                         {doc.ai_recommendations.map((r, i) => <li key={i}>{r}</li>)}
                                       </ul>
                                     )}
                                   </div>
                                 )}
                               </div>
-                              <Button variant="ghost" size="icon" asChild>
-                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-shrink-0 gap-1.5"
+                                onClick={() => openPreview({ title: doc.title || "Документ", file_url: doc.file_url })}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Открыть
                               </Button>
                             </div>
                           </CardContent>
@@ -440,6 +467,47 @@ const LawyerClientDetail = () => {
         </Tabs>
       </main>
       <Footer />
+      {/* ── Document Preview Dialog ─────────────────────────────────────── */}
+      <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) { setPreviewDoc(null); setPreviewSignedUrl(null); } }}>
+        <DialogContent className="max-w-4xl w-full h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-4 pt-4 pb-2 flex-shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-base truncate">{previewDoc?.title}</DialogTitle>
+              {previewSignedUrl && (
+                <a
+                  href={previewSignedUrl}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0"
+                >
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Download className="h-3.5 w-3.5" />
+                    Скачать
+                  </Button>
+                </a>
+              )}
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto px-4 pb-4">
+            {previewLoading && (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            )}
+            {!previewLoading && !previewSignedUrl && (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Не удалось загрузить документ
+              </div>
+            )}
+            {previewSignedUrl && previewDoc && (
+              extractFilePath(previewDoc.file_url).toLowerCase().endsWith(".docx")
+                ? <DocxViewer url={previewSignedUrl} />
+                : <PdfViewer url={previewSignedUrl} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
