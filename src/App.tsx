@@ -116,57 +116,54 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AnalyticsTracker />
           <ErrorBoundary>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<AuthPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/services" element={<ServicesPage />} />
-              <Route path="/testimonials" element={<TestimonialsPage />} />
-              <Route path="/templates" element={<TemplatesPage />} />
-              <Route path="/diagnoses" element={<DiagnosesPage />} />
-              <Route path="/forum" element={<ForumPage />} />
-              <Route path="/blog" element={<BlogPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
-              <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
-              <Route path="/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
-              <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
-              <Route path="/medical-history" element={<MedicalHistoryPage />} />
-              <Route path="/medical-questionnaire" element={<MedicalQuestionnairePage />} />
-              <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
-              <Route path="/success-cases" element={<SuccessCasesPage />} />
-              <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
-              <Route path="/admin/forum" element={<AdminForumPage />} />
-              <Route path="/admin/blog" element={<AdminBlogPage />} />
-              <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
-              <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
-              <Route path="/admin/articles" element={<AdminArticlesPage />} />
-              <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/lawyer" element={<LawyerDashboard />} />
-              <Route path="/lawyer/clients" element={<LawyerClientsPage />} />
-              <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
-              <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
-              <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
-              <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
-              <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
-              <Route path="/client/messages" element={<ClientMessagesPage />} />
-              <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-          </ErrorBoundary>
-          <QuickActionFAB />
-          <ErrorBoundary>
+            <AnalyticsTracker />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/services" element={<ServicesPage />} />
+                <Route path="/testimonials" element={<TestimonialsPage />} />
+                <Route path="/templates" element={<TemplatesPage />} />
+                <Route path="/diagnoses" element={<DiagnosesPage />} />
+                <Route path="/forum" element={<ForumPage />} />
+                <Route path="/blog" element={<BlogPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
+                <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
+                <Route path="/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
+                <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
+                <Route path="/medical-history" element={<MedicalHistoryPage />} />
+                <Route path="/medical-questionnaire" element={<MedicalQuestionnairePage />} />
+                <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                <Route path="/success-cases" element={<SuccessCasesPage />} />
+                <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
+                <Route path="/admin/forum" element={<AdminForumPage />} />
+                <Route path="/admin/blog" element={<AdminBlogPage />} />
+                <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
+                <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+                <Route path="/admin/articles" element={<AdminArticlesPage />} />
+                <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/lawyer" element={<LawyerDashboard />} />
+                <Route path="/lawyer/clients" element={<LawyerClientsPage />} />
+                <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
+                <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
+                <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
+                <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
+                <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
+                <Route path="/client/messages" element={<ClientMessagesPage />} />
+                <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            <QuickActionFAB />
             <Suspense fallback={null}><RagChat /></Suspense>
+            <MobileBottomNav />
           </ErrorBoundary>
-          <MobileBottomNav />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
