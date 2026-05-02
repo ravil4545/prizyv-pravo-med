@@ -13,7 +13,8 @@ interface Message {
 const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag";
 
 const HIDDEN_ROUTES = [
-  "/auth", "/login", "/register", "/reset-password", "/dashboard/ai-chat",
+  "/auth", "/login", "/register", "/reset-password",
+  "/dashboard", "/lawyer/chat", "/client/chat",
 ];
 
 const WELCOME_MESSAGE: Message = {

@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download, Users,
   Search, User, FileText, CheckCheck, Check, Pencil,
-  Image as ImageIcon,
+  Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,11 @@ interface SidebarClient {
   client_phone: string | null; updated_at: string;
 }
 
+interface AISuggestion {
+  label: string;
+  text: string;
+}
+
 const CRM_STAGES: Record<string, string> = {
   initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
   has_diagnosis: "Есть диагноз", examinations: "Обследования",
@@ -36,6 +42,8 @@ const CRM_STAGES: Record<string, string> = {
   regional_commission: "Комиссия субъекта", courts: "Суды",
   military_ticket: "Получение ВБ ✓",
 };
+
+const SUGGEST_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/lawyer-chat-suggest";
 
 const LawyerChatPage = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -58,6 +66,14 @@ const LawyerChatPage = () => {
   const [allClients, setAllClients] = useState<SidebarClient[]>([]);
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [sidebarSearch, setSidebarSearch] = useState("");
+
+  // AI suggestions
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
+  const [suggestionsSummary, setSuggestionsSummary] = useState("");
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const autoSuggestRef = useRef<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -108,6 +124,16 @@ const LawyerChatPage = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, clientId, isLawyer]);
 
+  // Auto-trigger AI suggestions when last text message is from client
+  useEffect(() => {
+    if (!messages.length || !user || !clientId) return;
+    const lastText = [...messages].reverse().find(m => m.message_type === "text");
+    if (!lastText || lastText.sender_id === user.id) return;
+    if (autoSuggestRef.current === lastText.id) return;
+    autoSuggestRef.current = lastText.id;
+    loadSuggestionsFor(messages);
+  }, [messages, user?.id, clientId]);
+
   const loadSidebar = async () => {
     const { data: clients } = await supabase
       .from("lawyer_clients")
@@ -141,6 +167,48 @@ const LawyerChatPage = () => {
     await supabase.from("lawyer_chat_messages")
       .update({ is_read: true }).eq("lawyer_client_id", clientId).neq("sender_id", user!.id);
     setUnreadMap((prev) => ({ ...prev, [clientId!]: 0 }));
+  };
+
+  const loadSuggestionsFor = async (currentMessages: Message[]) => {
+    if (!clientId || !user || currentMessages.length === 0) return;
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(SUGGEST_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          lawyerClientId: clientId,
+          messages: currentMessages.map(m => ({
+            sender_id: m.sender_id,
+            content: m.content,
+            message_type: m.message_type,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Ошибка ${res.status}`);
+      }
+      const data = await res.json();
+      setSuggestions(data.suggestions || []);
+      setSuggestionsSummary(data.summary || "");
+    } catch (err) {
+      setSuggestionsError(err instanceof Error ? err.message : "Ошибка ИИ");
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
+
+  const insertSuggestion = (suggText: string) => {
+    setText(suggText);
+    setAiPanelOpen(false);
+    setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
@@ -217,6 +285,83 @@ const LawyerChatPage = () => {
   );
   const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
 
+  // AI panel content as JSX variable (avoids component-inside-render issues)
+  const aiPanelContent = (
+    <div className="flex flex-col h-full">
+      <div className="px-3 py-3 border-b flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+          <span className="font-semibold text-sm">ИИ-помощник</span>
+        </div>
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7"
+          onClick={() => loadSuggestionsFor(messages)}
+          disabled={suggestionsLoading}
+          title="Обновить рекомендации"
+        >
+          {suggestionsLoading
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <RefreshCw className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Conversation summary */}
+        {suggestionsSummary && (
+          <p className="text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 leading-relaxed">
+            {suggestionsSummary}
+          </p>
+        )}
+
+        {/* Error */}
+        {suggestionsError && (
+          <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+            {suggestionsError}
+          </p>
+        )}
+
+        {/* Loading skeleton */}
+        {suggestionsLoading && suggestions.length === 0 && (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="border rounded-xl p-3 space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!suggestionsLoading && suggestions.length === 0 && !suggestionsError && (
+          <div className="text-center py-10 space-y-3 text-muted-foreground">
+            <Sparkles className="h-9 w-9 mx-auto opacity-20" />
+            <p className="text-xs">ИИ сформирует рекомендации автоматически, когда клиент напишет сообщение, или нажмите кнопку обновления</p>
+          </div>
+        )}
+
+        {/* Suggestions */}
+        {suggestions.map((s, i) => (
+          <div key={i} className="border rounded-xl p-3 space-y-2 bg-card hover:border-primary/30 transition-colors">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] font-semibold text-primary">{s.label}</span>
+              <Button
+                variant="outline" size="sm"
+                className="h-6 text-[10px] px-2 gap-1 flex-shrink-0"
+                onClick={() => insertSuggestion(s.text)}
+              >
+                <CornerDownLeft className="h-3 w-3" />
+                Вставить
+              </Button>
+            </div>
+            <p className="text-xs text-foreground/80 leading-relaxed">{s.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   if (loading || profileLoading) return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <Header />
@@ -235,7 +380,7 @@ const LawyerChatPage = () => {
       <div className="flex-1 min-h-0 p-0 lg:p-3">
         <div className="h-full flex overflow-hidden lg:rounded-xl lg:border lg:shadow-md bg-background lg:bg-card/50">
 
-          {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+          {/* ── Clients sidebar ─────────────────────────────────────────────── */}
           <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r bg-card/30 flex-shrink-0">
             <div className="px-3 py-3 border-b flex items-center gap-2">
               <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
@@ -316,6 +461,18 @@ const LawyerChatPage = () => {
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" asChild>
                   <Link to={`/lawyer/clients/${clientId}`}><User className="h-4 w-4" /></Link>
+                </Button>
+                {/* Mobile: open AI panel drawer */}
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-8 w-8 lg:hidden flex-shrink-0 relative"
+                  onClick={() => setAiPanelOpen(true)}
+                  title="ИИ-рекомендации"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {suggestions.length > 0 && (
+                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
                 </Button>
               </div>
             </div>
@@ -444,8 +601,20 @@ const LawyerChatPage = () => {
               </div>
             </div>
           </div>
+
+          {/* ── AI Panel — desktop right column ─────────────────────────────── */}
+          <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-l bg-card/30 flex-shrink-0">
+            {aiPanelContent}
+          </aside>
         </div>
       </div>
+
+      {/* ── AI Panel — mobile Sheet from right ───────────────────────────────── */}
+      <Sheet open={aiPanelOpen} onOpenChange={setAiPanelOpen}>
+        <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0 flex flex-col">
+          {aiPanelContent}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
