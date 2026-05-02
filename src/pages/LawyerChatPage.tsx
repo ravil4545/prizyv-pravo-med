@@ -52,12 +52,12 @@ const LawyerChatPage = () => {
     setLoading(false);
     subscribeRealtime();
     // Mark messages as read
-    await supabase.from("chat_messages").update({ is_read: true })
+    await supabase.from("lawyer_chat_messages").update({ is_read: true })
       .eq("lawyer_client_id", clientId).neq("sender_id", user!.id);
   };
 
   const loadMessages = async () => {
-    const { data } = await supabase.from("chat_messages")
+    const { data } = await supabase.from("lawyer_chat_messages")
       .select("*").eq("lawyer_client_id", clientId).order("created_at", { ascending: true });
     setMessages((data as Message[]) || []);
   };
@@ -65,7 +65,7 @@ const LawyerChatPage = () => {
   const subscribeRealtime = () => {
     const channel = supabase.channel(`chat:${clientId}`)
       .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "chat_messages",
+        event: "INSERT", schema: "public", table: "lawyer_chat_messages",
         filter: `lawyer_client_id=eq.${clientId}`,
       }, (payload) => {
         setMessages((prev) => {
@@ -73,7 +73,7 @@ const LawyerChatPage = () => {
           return [...prev, payload.new as Message];
         });
         if ((payload.new as Message).sender_id !== user!.id) {
-          supabase.from("chat_messages").update({ is_read: true }).eq("id", (payload.new as Message).id);
+          supabase.from("lawyer_chat_messages").update({ is_read: true }).eq("id", (payload.new as Message).id);
         }
       })
       .subscribe();
@@ -82,7 +82,7 @@ const LawyerChatPage = () => {
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
-    const { error } = await supabase.from("chat_messages").insert({
+    const { error } = await supabase.from("lawyer_chat_messages").insert({
       lawyer_client_id: clientId, sender_id: user!.id,
       content: content || null, message_type: type,
       file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
