@@ -16,18 +16,78 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    // Raise warning threshold — we know about pdf/charts, they're lazy
+    chunkSizeWarningLimit: 700,
+    // Minify with esbuild (default, fast + good compression)
+    minify: "esbuild",
+    // Target modern browsers for better tree-shaking on mobile
+    target: "es2020",
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Heavy PDF/document processing — lazy-loaded only when user opens medical docs
-          if (id.includes("pdfjs-dist") || id.includes("jspdf") || id.includes("mammoth")) {
+          // ── React core — tiny, always needed, maximally cacheable ──────────
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/scheduler/")
+          ) {
+            return "vendor-react";
+          }
+
+          // ── Routing + server state ────────────────────────────────────────
+          if (
+            id.includes("react-router") ||
+            id.includes("@tanstack/react-query")
+          ) {
+            return "vendor-ecosystem";
+          }
+
+          // ── Supabase client ───────────────────────────────────────────────
+          if (id.includes("@supabase/")) {
+            return "vendor-supabase";
+          }
+
+          // ── Radix UI primitives (shared by all shadcn/ui components) ──────
+          if (id.includes("@radix-ui/")) {
+            return "vendor-radix";
+          }
+
+          // ── Markdown rendering — only for chat/blog features ──────────────
+          if (
+            id.includes("react-markdown") ||
+            id.includes("remark") ||
+            id.includes("rehype") ||
+            id.includes("unified") ||
+            id.includes("mdast") ||
+            id.includes("hast") ||
+            id.includes("micromark") ||
+            id.includes("vfile") ||
+            id.includes("is-plain-obj") ||
+            id.includes("trough")
+          ) {
+            return "markdown-chunk";
+          }
+
+          // ── Heavy PDF / document processing ──────────────────────────────
+          if (
+            id.includes("pdfjs-dist") ||
+            id.includes("jspdf") ||
+            id.includes("mammoth") ||
+            id.includes("html2canvas")
+          ) {
             return "pdf-chunk";
           }
-          // Charts — lazy-loaded only in admin analytics
-          if (id.includes("recharts") || id.includes("d3-") || id.includes("d3/")) {
+
+          // ── Charts — admin analytics only ─────────────────────────────────
+          if (
+            id.includes("recharts") ||
+            id.includes("d3-") ||
+            id.includes("d3/")
+          ) {
             return "charts-chunk";
           }
-          // Rich text editor — lazy-loaded only in forum/blog forms
+
+          // ── Rich text editor ──────────────────────────────────────────────
           if (id.includes("react-quill") || id.includes("quill")) {
             return "editor-chunk";
           }

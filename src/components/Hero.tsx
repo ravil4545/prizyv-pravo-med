@@ -23,8 +23,9 @@ const Hero = () => {
   return (
     <section className="relative bg-gradient-hero text-primary-foreground overflow-hidden" aria-label="Главная информация">
       <div className="absolute inset-0 bg-black/30" aria-hidden />
+      {/* Background texture — desktop only (decorative, 25% opacity, skip download on mobile) */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25 hidden md:block"
         style={{ backgroundImage: "url(/hero.jpg)" }}
         aria-hidden
       />

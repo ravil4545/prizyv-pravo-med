@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense, Component, ReactNode } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
-import RagChat from "./components/RagChat";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
@@ -86,6 +85,8 @@ const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
 const LawyerAnalyticsPage = lazy(() => import("./pages/LawyerAnalyticsPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
+// Lazy-load RagChat — keeps react-markdown out of the main bundle
+const RagChat = lazy(() => import("./components/RagChat"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -98,7 +99,15 @@ const AnalyticsTracker = () => {
   return null;
 };
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,       // 1 min — reduces background refetches on slow mobile
+      retry: 1,                    // only 1 retry (default 3 wastes mobile data on errors)
+      refetchOnWindowFocus: false, // don't hammer API when user switches apps
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -154,7 +163,7 @@ const App = () => (
           </Suspense>
           </ErrorBoundary>
           <QuickActionFAB />
-          <RagChat />
+          <Suspense fallback={null}><RagChat /></Suspense>
           <MobileBottomNav />
         </AuthProvider>
       </BrowserRouter>

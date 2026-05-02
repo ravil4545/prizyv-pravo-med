@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export const useUnreadMessages = () => {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = async () => {
     if (!user) { setUnreadCount(0); return; }
@@ -31,14 +32,23 @@ export const useUnreadMessages = () => {
     setUnreadCount(count || 0);
   };
 
+  // Debounced refresh — rapid message bursts fire only one query
+  const debouncedRefresh = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(refresh, 600);
+  };
+
   useEffect(() => {
     if (!user) return;
     refresh();
     const ch = supabase
       .channel(`unread-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_chat_messages" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_chat_messages" }, debouncedRefresh)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      supabase.removeChannel(ch);
+    };
   }, [user?.id]);
 
   return { unreadCount, refresh };
