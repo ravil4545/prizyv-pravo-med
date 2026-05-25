@@ -1,8 +1,12 @@
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
+import AboutLawyer from "@/components/AboutLawyer";
+import ConscriptionMap from "@/components/ConscriptionMap";
+import ComplexCases from "@/components/ComplexCases";
+import Services from "@/components/Services";
+import Pricing from "@/components/Pricing";
 import AIFeaturesSection from "@/components/AIFeaturesSection";
 import DashboardPromo from "@/components/DashboardPromo";
-import Services from "@/components/Services";
 import BlogPreview from "@/components/BlogPreview";
 import Testimonials from "@/components/Testimonials";
 import ContactForm from "@/components/ContactForm";
@@ -17,11 +21,15 @@ const Index = () => {
         <Header />
         <main>
           <Hero />
+          <AboutLawyer />
+          <ConscriptionMap />
+          <ComplexCases />
+          <Services />
+          <Pricing />
           <AIFeaturesSection />
           <DashboardPromo />
-          <Services />
-          <BlogPreview />
           <Testimonials />
+          <BlogPreview />
           <ContactForm />
         </main>
         <Footer />

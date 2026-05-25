@@ -59,17 +59,24 @@ const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/85 backdrop-blur-lg supports-[backdrop-filter]:bg-background/70">
-      <div className="container mx-auto px-3 sm:px-4 lg:px-8">
+    <header className="sticky top-0 z-50 w-full border-b border-ink/10 bg-paper/90 backdrop-blur-lg supports-[backdrop-filter]:bg-paper/75">
+      <div className="container mx-auto px-3 sm:px-4 lg:px-12">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-sm flex-shrink-0">
-              <span className="text-base sm:text-lg font-bold text-primary-foreground">ЮП</span>
+          {/* Logo — editorial monogram */}
+          <Link to="/" className="flex items-center gap-3 min-w-0 group" aria-label="Главная — Важанина Александра, юрист">
+            <div className="relative flex h-10 w-10 items-center justify-center border border-ink/80 flex-shrink-0 group-hover:border-gold group-hover:bg-ink transition-colors">
+              <span className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors">
+                ВА
+              </span>
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
             </div>
-            <div className="hidden sm:block min-w-0">
-              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">Юридическая помощь</h1>
-              <p className="text-[11px] text-muted-foreground -mt-0.5">призывникам</p>
+            <div className="hidden sm:flex flex-col min-w-0">
+              <h1 className="font-serif text-base sm:text-lg leading-none text-ink truncate">
+                Важанина Александра
+              </h1>
+              <p className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/60 mt-1">
+                Юрист · Призывное право
+              </p>
             </div>
           </Link>
 

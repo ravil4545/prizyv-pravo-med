@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, CheckCircle2, Bot, ChevronDown, FileSearch, Brain, MessageSquarePlus, Sparkles, Shield } from "lucide-react";
+import { Phone, MessageCircle, Send, Bot, ChevronDown, Sparkles, ArrowRight } from "lucide-react";
 
 const Hero = () => {
   const [aiOpen, setAiOpen] = useState(false);
@@ -12,8 +11,10 @@ const Hero = () => {
   };
 
   const handleWhatsApp = () => {
-    const message = encodeURIComponent("Добрый день! Мне необходима консультация по поводу призыва на срочную службу...");
-    window.open(`https://wa.me/79253500533?text=${message}`, "_blank");
+    const msg = encodeURIComponent(
+      "Здравствуйте, Александра Евгеньевна! Мне нужна консультация по призыву..."
+    );
+    window.open(`https://wa.me/79253500533?text=${msg}`, "_blank");
   };
 
   const handleTelegram = () => {
@@ -21,121 +22,204 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative bg-gradient-hero text-primary-foreground overflow-hidden" aria-label="Главная информация">
-      <div className="absolute inset-0 bg-black/30" aria-hidden />
-      {/* Background texture — desktop only (decorative, 25% opacity, skip download on mobile) */}
+    <section
+      className="relative bg-ink text-paper overflow-hidden"
+      aria-label="Главная информация"
+    >
+      {/* Background paper texture (subtle gold dots over ink) */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25 hidden md:block"
-        style={{ backgroundImage: "url(/hero.jpg)" }}
+        className="absolute inset-0 opacity-[0.06] pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(hsl(var(--gold)) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
         aria-hidden
       />
-      {/* Decorative gradients */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary/30 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
-      <div className="relative container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-24 lg:py-32">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Trust badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-5 sm:mb-6">
-            <Shield className="h-3.5 w-3.5 text-accent-light" />
-            <span className="text-xs sm:text-sm font-medium">Опыт 10+ лет · 500+ успешных дел</span>
-          </div>
+      {/* Decorative side rule (left) */}
+      <div className="absolute left-6 top-0 bottom-0 w-px bg-gold/30 hidden lg:block" aria-hidden />
+      {/* Decorative side rule (right) */}
+      <div className="absolute right-6 top-0 bottom-0 w-px bg-gold/30 hidden lg:block" aria-hidden />
 
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 tracking-tight leading-[1.1]">
-            Юридическая и медицинская помощь
-            <span className="block text-accent-light mt-1 sm:mt-2">призывникам</span>
-          </h1>
+      {/* Top archival label */}
+      <div className="relative border-b border-gold/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-3 flex items-center justify-between text-[10px] sm:text-xs font-mono tracking-[0.2em] text-gold/80 uppercase">
+          <span>досье · юрист.ва · est. 2014</span>
+          <span className="hidden sm:inline">RU · защита призывников · конфиденциально</span>
+          <span className="sm:hidden">конфиденциально</span>
+        </div>
+      </div>
 
-          <p className="text-base sm:text-lg md:text-xl mb-7 sm:mb-9 text-primary-foreground/90 max-w-2xl mx-auto leading-relaxed px-2">
-            ИИ анализ документов, правовое сопровождение и консультации по законному получению военного билета.
-          </p>
+      <div className="relative container mx-auto px-4 sm:px-6 lg:px-12 py-12 sm:py-16 md:py-20 lg:py-24">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+          {/* Left: editorial content */}
+          <div className="lg:col-span-7">
+            {/* Section number */}
+            <div className="flex items-center gap-3 mb-6">
+              <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 01</span>
+              <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
+              <span className="font-mono text-gold/70 text-xs tracking-[0.25em] uppercase">
+                Ваш юрист
+              </span>
+            </div>
 
-          {/* Primary CTAs */}
-          <div className="flex flex-col gap-3 justify-center items-stretch mb-3 max-w-lg mx-auto" role="group">
-            <Button
-              variant="hero"
-              size="lg"
-              onClick={handlePhoneCall}
-              className="w-full text-base px-6 py-6 sm:py-4 sm:text-lg font-semibold gap-2 shadow-lg"
-            >
-              <Phone className="h-5 w-5" />
-              Бесплатная консультация
-            </Button>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                size="lg"
-                onClick={handleTelegram}
-                className="w-full text-base px-4 py-5 sm:py-4 sm:text-lg font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-2 shadow-lg"
+            {/* Editorial headline */}
+            <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95] mb-4 sm:mb-6">
+              <span className="block italic font-normal text-gold text-2xl sm:text-3xl md:text-4xl mb-2 tracking-normal">
+                Важанина
+              </span>
+              <span className="block">Александра</span>
+              <span className="block font-light italic text-paper/70 text-3xl sm:text-4xl md:text-5xl mt-2">
+                — юрист призывного права
+              </span>
+            </h1>
+
+            {/* Quote-anchor */}
+            <blockquote className="relative my-8 sm:my-10 pl-5 sm:pl-6 max-w-xl border-l-2 border-gold/60">
+              <p className="font-serif italic text-base sm:text-lg md:text-xl text-paper/85 leading-relaxed">
+                «Призывная комиссия — это не приговор. Это процедура,
+                в которой у вас в десять раз больше прав, чем вам пытаются показать.»
+              </p>
+              <footer className="mt-3 font-mono text-[10px] sm:text-xs tracking-[0.2em] uppercase text-gold/70">
+                — А. Е. Важанина
+              </footer>
+            </blockquote>
+
+            {/* Primary CTAs — minimal, sharp */}
+            <div className="flex flex-col gap-3 max-w-md mb-8">
+              <button
+                onClick={handlePhoneCall}
+                className="group flex items-center justify-between px-6 py-4 bg-gold text-ink font-semibold text-base hover:bg-gold-deep hover:text-paper transition-all duration-300"
               >
-                <Send className="h-5 w-5" />
-                Telegram
-              </Button>
-              <Button
-                size="lg"
-                onClick={handleWhatsApp}
-                className="w-full text-base px-4 py-5 sm:py-4 sm:text-lg font-semibold bg-emerald-500 hover:bg-emerald-600 text-white gap-2 shadow-lg"
+                <span className="flex items-center gap-3">
+                  <Phone className="h-5 w-5" />
+                  Записаться на консультацию
+                </span>
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              </button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleTelegram}
+                  className="flex items-center justify-center gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
+                >
+                  <Send className="h-4 w-4" />
+                  Telegram
+                </button>
+                <button
+                  onClick={handleWhatsApp}
+                  className="flex items-center justify-center gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  WhatsApp
+                </button>
+              </div>
+            </div>
+
+            {/* Secondary AI option — understated */}
+            <div className="border-t border-paper/15 pt-6 max-w-md">
+              <button
+                onClick={() => setAiOpen(!aiOpen)}
+                className="group flex items-center gap-3 text-sm text-paper/70 hover:text-gold transition-colors"
+                aria-expanded={aiOpen}
               >
-                <MessageCircle className="h-5 w-5" />
-                WhatsApp
-              </Button>
+                <Sparkles className="h-4 w-4 text-gold" />
+                <span className="font-mono tracking-wider uppercase text-xs">
+                  Или начните с ИИ-помощника — 1 вопрос бесплатно
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform duration-300 ${aiOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {aiOpen && (
+                <div className="mt-4 p-5 border border-paper/15 bg-paper/5 backdrop-blur-sm">
+                  <p className="text-xs text-paper/75 mb-4 leading-relaxed">
+                    Инструмент предварительной оценки под надзором юриста.
+                    Не заменяет очной консультации, но помогает разобраться в документах
+                    и оценить шансы.
+                  </p>
+                  <button
+                    onClick={() => navigate("/dashboard")}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-paper/10 hover:bg-gold hover:text-ink text-paper text-sm font-medium transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Bot className="h-4 w-4" />
+                      Открыть ИИ-кабинет
+                    </span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* AI button */}
-          <div className="flex flex-col items-center mb-10 sm:mb-12 mt-4">
-            <button
-              onClick={() => setAiOpen(!aiOpen)}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/30 hover:bg-white/15 transition-all text-sm sm:text-base font-medium"
-              aria-expanded={aiOpen}
-            >
-              <Sparkles className="h-4 w-4 text-accent-light" />
-              <span>ИИ помощь — бесплатно</span>
-              <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${aiOpen ? "rotate-180" : ""}`} />
-            </button>
+          {/* Right: portrait as archival photograph */}
+          <div className="lg:col-span-5 flex justify-center lg:justify-end order-first lg:order-last">
+            <div className="relative w-full max-w-[300px] sm:max-w-[360px] md:max-w-[400px]">
+              {/* Gold frame corners */}
+              <div className="absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 border-gold z-10" aria-hidden />
+              <div className="absolute -top-2 -right-2 w-10 h-10 border-t-2 border-r-2 border-gold z-10" aria-hidden />
+              <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-2 border-l-2 border-gold z-10" aria-hidden />
+              <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 border-gold z-10" aria-hidden />
 
-            {aiOpen && (
-              <div className="mt-4 max-w-3xl w-full bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 sm:p-6 text-left animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="space-y-4">
-                  {[
-                    { icon: Brain, title: "Анализ 88 статей Расписания болезней", desc: "Постановление №565. ИИ оценивает вероятность категории «В» по вашим документам." },
-                    { icon: FileSearch, title: "Загрузка документов", desc: "PDF, фото, DOCX — ИИ извлечёт текст, привяжет к статьям, даст рекомендации." },
-                    { icon: MessageSquarePlus, title: "Чат-бот с контекстом", desc: "Учитывает ваши документы и диагнозы. Персонализированные ответы." },
-                  ].map(({ icon: Icon, title, desc }) => (
-                    <div key={title} className="flex gap-3">
-                      <div className="flex-shrink-0 mt-0.5 p-1.5 rounded-lg bg-accent/20">
-                        <Icon className="h-4 w-4 text-accent-light" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-white text-sm sm:text-base">{title}</p>
-                        <p className="text-xs sm:text-sm text-primary-foreground/85 mt-0.5">{desc}</p>
-                      </div>
-                    </div>
-                  ))}
+              <div className="relative overflow-hidden bg-paper-deep shadow-strong">
+                <img
+                  src="/lawyer-portrait.jpg"
+                  alt="Юрист Важанина Александра Евгеньевна в офисе"
+                  className="w-full aspect-[3/4] object-cover object-top"
+                  width={768}
+                  height={1024}
+                  loading="eager"
+                  onError={(e) => {
+                    // Fallback to SVG placeholder if jpg not yet uploaded
+                    (e.currentTarget as HTMLImageElement).src = "/lawyer-portrait.svg";
+                  }}
+                />
+                {/* Archival label strip */}
+                <div className="absolute bottom-0 inset-x-0 bg-ink/85 backdrop-blur-sm px-4 py-2.5 text-paper">
+                  <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.15em] uppercase">
+                    <span>А. Е. Важанина · юрист</span>
+                    <span className="text-gold">est. 2014</span>
+                  </div>
                 </div>
-                <Button
-                  onClick={() => navigate("/dashboard")}
-                  className="mt-5 w-full bg-accent hover:bg-accent/90 text-white font-semibold gap-2 h-11"
-                >
-                  <Bot className="h-4 w-4" />
-                  Попробовать бесплатно
-                </Button>
               </div>
-            )}
-          </div>
 
-          {/* Trust indicators */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-3xl mx-auto">
-            {[
-              "Опыт работы 10+ лет",
-              "Более 500 успешных случаев",
-              "Конфиденциальность гарантирована",
-            ].map((text) => (
-              <div key={text} className="flex items-center justify-center sm:justify-start gap-2.5 text-primary-foreground/90 px-3 py-2 sm:px-0 sm:py-0 rounded-xl bg-white/5 sm:bg-transparent">
-                <CheckCircle2 className="h-5 w-5 text-accent-light flex-shrink-0" />
-                <span className="text-sm sm:text-base font-medium">{text}</span>
+              {/* "Seal" — bordeaux stamp circle */}
+              <div className="absolute -bottom-7 -right-4 sm:-right-7 w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-seal/80 bg-paper backdrop-blur-sm flex items-center justify-center rotate-[-8deg] shadow-medium">
+                <div className="text-center">
+                  <div className="font-mono text-[8px] sm:text-[9px] tracking-[0.2em] text-seal uppercase">
+                    Подтверждено
+                  </div>
+                  <div className="font-serif italic text-seal text-xs sm:text-sm mt-0.5">
+                    500+ дел
+                  </div>
+                </div>
               </div>
-            ))}
+            </div>
           </div>
+        </div>
+
+        {/* Bottom strip — trust trio */}
+        <div className="mt-12 sm:mt-16 pt-6 border-t border-paper/15 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
+          {[
+            { num: "10+", label: "лет защиты призывников" },
+            { num: "500+", label: "дел доведено до результата" },
+            { num: "88", label: "статей Расписания болезней" },
+          ].map((t, i) => (
+            <div key={t.label} className="flex items-baseline gap-4">
+              <span className="font-mono text-gold/60 text-xs">0{i + 1}</span>
+              <div>
+                <div className="font-serif text-3xl sm:text-4xl text-gold leading-none">
+                  {t.num}
+                </div>
+                <div className="text-xs sm:text-sm text-paper/70 mt-1 leading-snug">
+                  {t.label}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
