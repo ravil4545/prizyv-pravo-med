@@ -424,11 +424,19 @@ export default function MedicalDocumentsPage() {
     setAnalyzingId(documentId);
 
     try {
+      // Get fresh user from live session — React state may not have caught up
+      // after a recent signInAnonymously()
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id ?? user?.id;
+      if (!currentUserId) {
+        throw new Error("Сессия не найдена. Обновите страницу и попробуйте снова.");
+      }
+
       const { data, error } = await supabase.functions.invoke("analyze-medical-document", {
         body: {
           manualText,
           documentId,
-          userId: user.id,
+          userId: currentUserId,
           isHandwritten: true,
         },
       });
@@ -935,6 +943,14 @@ export default function MedicalDocumentsPage() {
     setAnalyzingId(documentId);
 
     try {
+      // Get fresh user from live session — React state may lag behind after
+      // a recent signInAnonymously() in ensureAuthForUpload()
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id ?? user?.id;
+      if (!currentUserId) {
+        throw new Error("Сессия не найдена. Обновите страницу и попробуйте снова.");
+      }
+
       const doc = documents.find((d) => d.id === documentId);
 
       // If document has raw_text (questionnaires, previously extracted), use text-only analysis
@@ -943,7 +959,7 @@ export default function MedicalDocumentsPage() {
           body: {
             manualText: doc.raw_text,
             documentId,
-            userId: user.id,
+            userId: currentUserId,
             isHandwritten: true,
           },
         });
@@ -985,7 +1001,7 @@ export default function MedicalDocumentsPage() {
       }
 
       const { data, error } = await supabase.functions.invoke("analyze-medical-document", {
-        body: { imageBase64: base64, documentId, userId: user.id },
+        body: { imageBase64: base64, documentId, userId: currentUserId },
       });
 
       if (error) throw error;
