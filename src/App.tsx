@@ -57,6 +57,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const TestimonialsPage = lazy(() => import("./pages/TestimonialsPage"));
 const DiagnosesPage = lazy(() => import("./pages/DiagnosesPage"));
+const DiagnosisDetailPage = lazy(() => import("./pages/DiagnosisDetailPage"));
 const ForumPage = lazy(() => import("./pages/ForumPage"));
 const BlogPage = lazy(() => import("./pages/BlogPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -129,6 +130,7 @@ const App = () => (
                 <Route path="/testimonials" element={<TestimonialsPage />} />
                 <Route path="/templates" element={<TemplatesPage />} />
                 <Route path="/diagnoses" element={<DiagnosesPage />} />
+                <Route path="/diagnoses/:slug" element={<DiagnosisDetailPage />} />
                 <Route path="/forum" element={<ForumPage />} />
                 <Route path="/blog" element={<BlogPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
