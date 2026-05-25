@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase, Users, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
+import CaseRoadmap from "@/components/CaseRoadmap";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
 import { GridSkeleton } from "@/components/LoadingSkeleton";
@@ -204,6 +205,13 @@ const DashboardPage = () => {
               </Button>
             )}
           </div>
+
+          {/* Case roadmap (only for registered users — anonymous have no progress yet) */}
+          {!isDemoMode && (
+            <div className="mb-6">
+              <CaseRoadmap />
+            </div>
+          )}
 
           {/* Subscription Status */}
           <div className="mb-6">
