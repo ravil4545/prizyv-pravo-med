@@ -65,8 +65,10 @@ export function useDemoMode() {
 
   const isDemoMode = isAuthenticated === false || isAnonymous;
 
-  const demoDocLimit = 3;
-  const demoAiLimit = 3;
+  // Anonymous trial: 1 question + 1 document.
+  // Registration unlocks 3+3 (via useSubscription), paid plan removes limits.
+  const demoDocLimit = 1;
+  const demoAiLimit = 1;
 
   const canUploadDocument = useCallback((): boolean => {
     if (!isDemoMode) return true; // registered users use useSubscription

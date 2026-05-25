@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import LimitsBadge from "@/components/LimitsBadge";
 
 const NAV_ITEMS = [
   { to: "/", label: "Главная" },
@@ -113,6 +114,15 @@ const Header = () => {
 
           {/* Right actions */}
           <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Limits indicator — visible on md+ */}
+            <Link
+              to={user ? "/dashboard" : "/auth"}
+              className="hidden md:inline-flex mr-1 hover:opacity-80 transition-opacity"
+              aria-label="Ваши лимиты"
+            >
+              <LimitsBadge variant="pill" />
+            </Link>
+
             {/* Quick contact - desktop */}
             <Button
               variant="ghost"
@@ -199,6 +209,17 @@ const Header = () => {
                 <SheetHeader className="p-5 border-b">
                   <SheetTitle className="text-left">Меню</SheetTitle>
                 </SheetHeader>
+
+                {/* Limits indicator */}
+                <div className="px-4 py-3 border-b">
+                  <Link
+                    to={user ? "/dashboard" : "/auth"}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block hover:opacity-80 transition-opacity"
+                  >
+                    <LimitsBadge variant="row" />
+                  </Link>
+                </div>
 
                 {/* Nav links */}
                 <nav className="flex flex-col p-2 flex-1 overflow-y-auto">
