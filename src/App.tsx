@@ -60,6 +60,7 @@ const DiagnosesPage = lazy(() => import("./pages/DiagnosesPage"));
 const DiagnosisDetailPage = lazy(() => import("./pages/DiagnosisDetailPage"));
 const ForumPage = lazy(() => import("./pages/ForumPage"));
 const BlogPage = lazy(() => import("./pages/BlogPage"));
+const BlogDetailPage = lazy(() => import("./pages/BlogDetailPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const UserTemplatesPage = lazy(() => import("./pages/UserTemplatesPage"));
 const AIChatDashboardPage = lazy(() => import("./pages/AIChatDashboardPage"));
@@ -76,6 +77,7 @@ const MedicalQuestionnairePage = lazy(() => import("./pages/MedicalQuestionnaire
 const CaseTrackingPage = lazy(() => import("./pages/CaseTrackingPage"));
 const SuccessCasesPage = lazy(() => import("./pages/SuccessCasesPage"));
 const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirectoryPage"));
+const CommissariatDetailPage = lazy(() => import("./pages/CommissariatDetailPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
 const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
@@ -133,6 +135,7 @@ const App = () => (
                 <Route path="/diagnoses/:slug" element={<DiagnosisDetailPage />} />
                 <Route path="/forum" element={<ForumPage />} />
                 <Route path="/blog" element={<BlogPage />} />
+                <Route path="/blog/:slug" element={<BlogDetailPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
                 <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
@@ -143,6 +146,7 @@ const App = () => (
                 <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
+                <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
                 <Route path="/admin/forum" element={<AdminForumPage />} />
                 <Route path="/admin/blog" element={<AdminBlogPage />} />
                 <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />

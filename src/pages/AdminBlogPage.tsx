@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { enhanceTypography } from "@/lib/typography";
 import RichTextEditor from "@/components/RichTextEditor";
+import { autoSlugFromTitle, autoExcerpt, calcReadingTimeMin, readingTimeLabel } from "@/lib/blogUtils";
 
 interface BlogPost {
   id: string;
@@ -53,9 +54,28 @@ const AdminBlogPage = () => {
     category: "",
     slug: "",
     image_url: "",
+    status: "published",
   });
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [excerptTouched, setExcerptTouched] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // Авто-заполнение slug пока пользователь его не редактировал
+  useEffect(() => {
+    if (!slugTouched && formData.title) {
+      setFormData((prev) => ({ ...prev, slug: autoSlugFromTitle(formData.title) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.title, slugTouched]);
+
+  // Авто-заполнение excerpt из content
+  useEffect(() => {
+    if (!excerptTouched && formData.content) {
+      setFormData((prev) => ({ ...prev, excerpt: autoExcerpt(formData.content) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.content, excerptTouched]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -153,7 +173,10 @@ const AdminBlogPage = () => {
       category: "",
       slug: "",
       image_url: "",
+      status: "published",
     });
+    setSlugTouched(false);
+    setExcerptTouched(false);
     setImageFile(null);
     setShowDialog(true);
   };
@@ -167,7 +190,11 @@ const AdminBlogPage = () => {
       category: post.category,
       slug: post.slug,
       image_url: post.image_url || "",
+      status: post.status || "published",
     });
+    // Уже существующая запись — slug и excerpt считаем редактируемыми вручную
+    setSlugTouched(true);
+    setExcerptTouched(true);
     setImageFile(null);
     setShowDialog(true);
   };
@@ -239,12 +266,22 @@ const AdminBlogPage = () => {
       }
     }
 
-    const postData = {
+    const finalSlug = formData.slug || autoSlugFromTitle(formData.title);
+    const finalExcerpt = formData.excerpt || autoExcerpt(formData.content);
+    const isPublishing = formData.status === "published";
+    const wasPublished = editingPost?.status === "published";
+    const postData: Record<string, any> = {
       ...formData,
+      slug: finalSlug,
+      excerpt: finalExcerpt,
       image_url: imageUrl,
-      status: "published",
-      published_at: new Date().toISOString(),
     };
+    // published_at: при первой публикации — сейчас, для черновика — null, для уже опубликованного — не трогаем
+    if (isPublishing && !wasPublished) {
+      postData.published_at = new Date().toISOString();
+    } else if (!isPublishing) {
+      postData.published_at = null;
+    }
 
     if (editingPost) {
       const { error } = await supabase
@@ -561,13 +598,23 @@ const AdminBlogPage = () => {
               />
             </div>
             <div>
-              <Label htmlFor="slug">URL (slug)</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="slug">URL (slug)</Label>
+                {!slugTouched && formData.title && (
+                  <span className="text-[10px] text-muted-foreground font-mono">авто из заголовка</span>
+                )}
+              </div>
               <Input
                 id="slug"
                 value={formData.slug}
-                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                onChange={(e) => { setSlugTouched(true); setFormData({ ...formData, slug: e.target.value }); }}
                 placeholder="url-statii"
               />
+              {formData.slug && (
+                <p className="mt-1 text-[11px] text-muted-foreground font-mono break-all">
+                  /blog/{formData.slug}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="category">Категория</Label>
@@ -623,29 +670,71 @@ const AdminBlogPage = () => {
               </div>
             </div>
             <div>
-              <Label htmlFor="excerpt">Краткое описание</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="excerpt">Краткое описание</Label>
+                {!excerptTouched && formData.content && (
+                  <span className="text-[10px] text-muted-foreground font-mono">авто из текста</span>
+                )}
+              </div>
               <Textarea
                 id="excerpt"
                 value={formData.excerpt}
-                onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                onChange={(e) => { setExcerptTouched(true); setFormData({ ...formData, excerpt: e.target.value }); }}
                 placeholder="Краткое описание для превью"
                 rows={3}
               />
             </div>
             <div>
-              <Label htmlFor="content">Содержание</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="content">Содержание</Label>
+                {formData.content && (
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {readingTimeLabel(calcReadingTimeMin(formData.content))}
+                  </span>
+                )}
+              </div>
               <RichTextEditor
                 value={formData.content}
                 onChange={(value) => setFormData({ ...formData, content: value })}
                 placeholder="Полный текст статьи с форматированием"
               />
             </div>
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+              <div>
+                <Label className="text-sm font-medium block mb-0.5">
+                  Статус: {formData.status === "published" ? "Опубликовано" : "Черновик"}
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {formData.status === "published" ? "Видно всем посетителям сайта" : "Сохранится, но не появится в публичном списке"}
+                </p>
+              </div>
+              <div className="inline-flex border rounded-md overflow-hidden">
+                <Button
+                  type="button"
+                  variant={formData.status === "draft" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8"
+                  onClick={() => setFormData({ ...formData, status: "draft" })}
+                >
+                  Черновик
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.status === "published" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8"
+                  onClick={() => setFormData({ ...formData, status: "published" })}
+                >
+                  Опубликовать
+                </Button>
+              </div>
+            </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowDialog(false)}>
                 Отмена
               </Button>
               <Button onClick={handleSubmit} disabled={uploadingImage}>
-                {uploadingImage ? "Загрузка..." : editingPost ? "Сохранить" : "Создать"}
+                {uploadingImage ? "Загрузка..." : editingPost ? "Сохранить" : (formData.status === "published" ? "Создать и опубликовать" : "Создать черновик")}
               </Button>
             </div>
           </div>

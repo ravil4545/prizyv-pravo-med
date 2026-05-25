@@ -8,6 +8,7 @@ import { Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { enhanceTypography } from "@/lib/typography";
+import BlogPostImage from "@/components/BlogPostImage";
 
 interface BlogPost {
   id: string;
@@ -84,18 +85,14 @@ const BlogPreview = () => {
               ))
             : posts.map((post) => (
                 <article key={post.id} role="listitem">
-                  <Link to="/blog">
+                  <Link to={`/blog/${post.slug}`}>
                     <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
-                      {post.image_url && (
-                        <div className="w-full h-48 overflow-hidden">
-                          <img
-                            src={post.image_url}
-                            alt={`Изображение к статье: ${post.title}`}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
+                      <BlogPostImage
+                        src={post.image_url}
+                        alt={`Изображение к статье: ${post.title}`}
+                        category={post.category}
+                        aspect="video"
+                      />
                       <CardHeader>
                         <div className="flex items-center justify-between mb-2">
                           {post.category && (

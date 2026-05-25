@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
+import UploadProgress from "@/components/UploadProgress";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -65,6 +66,7 @@ import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import { getOcrQuality, ocrLevelColor } from "@/lib/ocrQuality";
 
 interface DocumentType {
   id: string;
@@ -137,9 +139,13 @@ export default function MedicalDocumentsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<MedicalDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [uploadMode, setUploadMode] = useState<"single" | "multi" | "handwritten" | null>(null);
+  const [uploadMode, setUploadMode] = useState<"handwritten" | "choose-combine" | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [enhancing, setEnhancing] = useState(false);
+
+  // Промежуточный шаг для выбора: объединить файлы в один документ или загрузить раздельно
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingCombineMode, setPendingCombineMode] = useState<"combine" | "separate">("combine");
 
   // Handwritten document form state
   const [handwrittenFiles, setHandwrittenFiles] = useState<File[]>([]);
@@ -168,6 +174,11 @@ export default function MedicalDocumentsPage() {
   const [documentToAddPages, setDocumentToAddPages] = useState<MedicalDocument | null>(null);
   const [addPagesFiles, setAddPagesFiles] = useState<File[]>([]);
   const [addingPages, setAddingPages] = useState(false);
+
+  // Ручное редактирование извлечённого текста (для случая, когда OCR распознал плохо)
+  const [editingTextDocId, setEditingTextDocId] = useState<string | null>(null);
+  const [editingTextDraft, setEditingTextDraft] = useState("");
+  const [savingEditedText, setSavingEditedText] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -247,34 +258,65 @@ export default function MedicalDocumentsPage() {
     setIsDragOver(false);
   }, []);
 
+  const startFilesUpload = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    if (files.length === 1) {
+      // Один файл — сразу загружаем как одностраничный
+      await uploadFiles(files, false);
+    } else {
+      // Несколько файлов — спрашиваем: объединить или разделить
+      setPendingFiles(files);
+      setPendingCombineMode("combine");
+      setUploadMode("choose-combine");
+    }
+  }, [user]);
+
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
       const files = Array.from(e.dataTransfer.files);
-      // Используем текущий режим загрузки
-      await uploadFiles(files, uploadMode === "multi");
+      await startFilesUpload(files);
     },
-    [user, uploadMode],
+    [startFilesUpload],
   );
 
-  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>, mode: "single" | "multi" | "handwritten") => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      if (mode === "handwritten") {
-        // Для рукописного - добавляем файлы к существующим
-        setHandwrittenFiles((prev) => [...prev, ...files]);
-        return;
-      }
-      if (mode === "single") {
-        // Для одностраничного - каждый файл отдельно
-        await uploadFiles(files, false);
-      } else {
-        // Для многостраничного - все файлы в один PDF
-        await uploadFiles(files, true);
-      }
-    }
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    // Сбрасываем value, иначе повторный выбор тех же файлов не сработает
+    e.target.value = "";
+    await startFilesUpload(files);
+  };
+
+  const handleHandwrittenFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    e.target.value = "";
+    setHandwrittenFiles((prev) => [...prev, ...files]);
+  };
+
+  const confirmPendingUpload = async () => {
+    const files = pendingFiles;
+    const combine = pendingCombineMode === "combine";
+    setPendingFiles([]);
     setUploadMode(null);
+    await uploadFiles(files, combine);
+  };
+
+  const cancelPendingUpload = () => {
+    setPendingFiles([]);
+    setUploadMode(null);
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length === 0) {
+        setUploadMode(null);
+      }
+      return next;
+    });
   };
 
   // Удаление файла из списка рукописных
@@ -466,6 +508,57 @@ export default function MedicalDocumentsPage() {
       });
     } finally {
       setAnalyzingId(null);
+    }
+  };
+
+  const startEditingText = (doc: MedicalDocument) => {
+    setEditingTextDocId(doc.id);
+    setEditingTextDraft(doc.raw_text || "");
+  };
+
+  const cancelEditingText = () => {
+    setEditingTextDocId(null);
+    setEditingTextDraft("");
+  };
+
+  const saveEditedText = async () => {
+    if (!editingTextDocId) return;
+    const trimmed = editingTextDraft.trim();
+    if (trimmed.length < 10) {
+      toast({
+        title: "Слишком короткий текст",
+        description: "Введите хотя бы несколько слов из документа",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingEditedText(true);
+    try {
+      const { error } = await supabase
+        .from("medical_documents_v2")
+        .update({ raw_text: trimmed })
+        .eq("id", editingTextDocId);
+      if (error) throw error;
+
+      toast({
+        title: "Текст сохранён",
+        description: "Запускаем повторный AI-анализ...",
+      });
+
+      const docId = editingTextDocId;
+      setEditingTextDocId(null);
+      setEditingTextDraft("");
+      await loadDocuments();
+      analyzeHandwrittenDocument(docId, trimmed);
+    } catch (error: any) {
+      toast({
+        title: "Ошибка сохранения",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEditedText(false);
     }
   };
 
@@ -1519,14 +1612,15 @@ export default function MedicalDocumentsPage() {
           {/* Drag & Drop Zone */}
           <Card className="mb-8">
             <CardContent className="p-6">
-              {uploading ? (
-                <div className="flex flex-col items-center gap-4 py-8">
-                  <Loader2 className="h-12 w-12 text-primary animate-spin" />
-                  <p className="text-lg font-medium">
-                    {enhancing ? "Улучшение качества документа..." : "Создание PDF..."}
-                  </p>
-                  {uploadProgress && <p className="text-sm text-muted-foreground">{uploadProgress}</p>}
-                </div>
+              {uploading || analyzingId ? (
+                <UploadProgress
+                  status={
+                    uploading
+                      ? uploadProgress || (enhancing ? "Улучшение качества документа..." : "Подготовка...")
+                      : "ИИ анализирует документ..."
+                  }
+                  stage={uploading ? "uploading" : "analyzing"}
+                />
               ) : uploadMode === "handwritten" ? (
                 <div className="py-6">
                   <div className="text-center mb-6">
@@ -1548,7 +1642,7 @@ export default function MedicalDocumentsPage() {
                         type="file"
                         multiple
                         accept=".jpg,.jpeg,.png,.webp,.pdf"
-                        onChange={(e) => handleFileInput(e, "handwritten")}
+                        onChange={handleHandwrittenFileInput}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
                     </div>
@@ -1653,100 +1747,131 @@ export default function MedicalDocumentsPage() {
                     </Button>
                   </div>
                 </div>
-              ) : uploadMode ? (
-                <div className="py-6">
-                  <div className="text-center mb-6">
-                    <h3 className="text-lg font-medium mb-2">
-                      {uploadMode === "single"
-                        ? "Загрузка одностраничных документов"
-                        : "Загрузка многостраничного документа"}
+              ) : uploadMode === "choose-combine" ? (
+                <div className="py-4">
+                  <div className="text-center mb-5">
+                    <FileStack className="h-10 w-10 mx-auto mb-3 text-primary" />
+                    <h3 className="text-lg font-medium mb-1">
+                      Выбрано файлов: {pendingFiles.length}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {uploadMode === "single"
-                        ? "Каждый файл будет сохранён как отдельный документ"
-                        : "Все выбранные файлы будут объединены в один PDF"}
+                      Как обработать эти файлы?
                     </p>
                   </div>
 
+                  <div className="space-y-3 mb-5">
+                    <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${pendingCombineMode === "combine" ? "border-primary bg-primary/5" : "border-muted hover:border-primary/40"}`}>
+                      <input
+                        type="radio"
+                        name="combine-mode"
+                        checked={pendingCombineMode === "combine"}
+                        onChange={() => setPendingCombineMode("combine")}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium flex items-center gap-2">
+                          <FileStack className="h-4 w-4" />
+                          Один документ
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Объединить все страницы в один PDF — для медкарт, многостраничных выписок
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${pendingCombineMode === "separate" ? "border-primary bg-primary/5" : "border-muted hover:border-primary/40"}`}>
+                      <input
+                        type="radio"
+                        name="combine-mode"
+                        checked={pendingCombineMode === "separate"}
+                        onChange={() => setPendingCombineMode("separate")}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium flex items-center gap-2">
+                          <File className="h-4 w-4" />
+                          Разные документы
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Каждый файл — отдельная справка или заключение
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="mb-5">
+                    <p className="text-sm font-medium mb-2">Файлы:</p>
+                    <div className="max-h-40 overflow-y-auto space-y-1 border rounded-lg p-2 bg-muted/30">
+                      {pendingFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-1.5 rounded">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs text-muted-foreground flex-shrink-0">{index + 1}.</span>
+                            <span className="text-sm truncate">{file.name}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 flex-shrink-0"
+                            onClick={() => removePendingFile(index)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1" onClick={cancelPendingUpload}>
+                      Отмена
+                    </Button>
+                    <Button className="flex-1" onClick={confirmPendingUpload}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Загрузить ({pendingFiles.length})
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2">
                   <div
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     className={`
-                      relative border-2 border-dashed rounded-lg p-8 text-center transition-all mb-4
+                      relative border-2 border-dashed rounded-lg p-8 sm:p-10 text-center transition-all
                       ${
                         isDragOver
                           ? "border-primary bg-primary/5"
-                          : "border-muted-foreground/25 hover:border-primary/50"
+                          : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
                       }
                     `}
                   >
-                    <div className="flex items-center justify-center gap-2 mb-3">
-                      <Upload className={`h-10 w-10 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
-                    </div>
-                    <p className="text-base font-medium mb-1">Перетащите файлы сюда</p>
-                    <p className="text-sm text-muted-foreground mb-3">или нажмите для выбора</p>
+                    <Upload className={`h-12 w-12 mx-auto mb-3 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                    <p className="text-base sm:text-lg font-medium mb-1">Перетащите документы сюда</p>
+                    <p className="text-sm text-muted-foreground mb-2">или нажмите для выбора файлов</p>
+                    <p className="text-xs text-muted-foreground">
+                      PDF · DOCX · JPEG · PNG · WebP
+                    </p>
                     <input
                       type="file"
                       multiple
                       accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
-                      onChange={(e) => handleFileInput(e, uploadMode)}
+                      onChange={handleFileInput}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
                   </div>
 
-                  <Button variant="outline" className="w-full" onClick={() => setUploadMode(null)}>
-                    Назад к выбору режима
-                  </Button>
-                </div>
-              ) : (
-                <div className="py-6">
-                  <div className="text-center mb-6">
-                    <div className="flex items-center justify-center gap-2 mb-3">
-                      <Upload className="h-10 w-10 text-muted-foreground" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2">Загрузка документов</h3>
-                    <p className="text-sm text-muted-foreground">ИИ конвертирует в PDF и проанализирует документ</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Card
-                      className="cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => setUploadMode("single")}
-                    >
-                      <CardContent className="p-6 text-center">
-                        <File className="h-12 w-12 mx-auto mb-4 text-primary" />
-                        <h4 className="font-medium mb-2">Одностраничный</h4>
-                        <p className="text-sm text-muted-foreground">Справки, заключения — каждый файл отдельно</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card
-                      className="cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => setUploadMode("multi")}
-                    >
-                      <CardContent className="p-6 text-center">
-                        <FileStack className="h-12 w-12 mx-auto mb-4 text-primary" />
-                        <h4 className="font-medium mb-2">Многостраничный</h4>
-                        <p className="text-sm text-muted-foreground">Медкарты — объединяются в один PDF</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card
-                      className="cursor-pointer hover:border-primary/50 transition-colors border-dashed"
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mt-4 text-sm">
+                    <span className="text-muted-foreground hidden sm:inline">Если ИИ не распознаёт текст —</span>
+                    <button
+                      type="button"
                       onClick={() => setUploadMode("handwritten")}
+                      className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
                     >
-                      <CardContent className="p-6 text-center">
-                        <PenLine className="h-12 w-12 mx-auto mb-4 text-primary" />
-                        <h4 className="font-medium mb-2">Рукописный</h4>
-                        <p className="text-sm text-muted-foreground">Ручной ввод текста для анализа</p>
-                      </CardContent>
-                    </Card>
+                      <PenLine className="h-4 w-4" />
+                      Ввести текст вручную
+                    </button>
                   </div>
-
-                  <p className="text-xs text-center text-muted-foreground mt-4">
-                    Поддерживаемые форматы: PDF, DOCX, JPEG, PNG, WebP
-                  </p>
                 </div>
               )}
             </CardContent>
@@ -1951,10 +2076,24 @@ export default function MedicalDocumentsPage() {
                                 Анализ...
                               </Badge>
                             ) : doc.is_classified ? (
-                              <Badge variant="default">
-                                <Check className="h-3 w-3 mr-1" />
-                                Обработан
-                              </Badge>
+                              <div className="flex flex-col gap-1 items-start">
+                                <Badge variant="default">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Обработан
+                                </Badge>
+                                {(() => {
+                                  const q = getOcrQuality(doc.raw_text, doc.is_classified);
+                                  if (!q) return null;
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] rounded border ${ocrLevelColor[q.level]}`}
+                                      title={q.advice || `Извлечено символов: ${q.charCount}`}
+                                    >
+                                      OCR: {q.label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             ) : (
                               <Badge variant="outline">Не обработан</Badge>
                             )}
@@ -2059,47 +2198,133 @@ export default function MedicalDocumentsPage() {
                                             </Card>
                                           )}
 
-                                          {/* Extracted Text */}
-                                          {doc.raw_text && (
-                                            <Card>
-                                              <CardHeader className="pb-2 px-3 sm:px-6">
-                                                <CardTitle className="text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                                  <span>Извлечённый текст</span>
-                                                  <div className="flex gap-1 sm:gap-2">
-                                                    <Button
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      className="h-8 px-2 sm:px-3 text-xs"
-                                                      onClick={() => copyExtractedText(doc.raw_text!, doc.id)}
-                                                    >
-                                                      {copiedId === doc.id ? (
-                                                        <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
-                                                      ) : (
-                                                        <Copy className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
-                                                      )}
-                                                      <span className="hidden sm:inline">Копировать</span>
-                                                    </Button>
-                                                    <Button
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      className="h-8 px-2 sm:px-3 text-xs"
-                                                      onClick={() => downloadAsText(doc)}
-                                                    >
-                                                      <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
-                                                      <span className="hidden sm:inline">Скачать .txt</span>
-                                                    </Button>
-                                                  </div>
-                                                </CardTitle>
-                                              </CardHeader>
-                                              <CardContent className="px-3 sm:px-6">
-                                                <Textarea
-                                                  value={doc.raw_text}
-                                                  readOnly
-                                                  className="min-h-[150px] sm:min-h-[200px] text-xs sm:text-sm font-mono"
-                                                />
-                                              </CardContent>
-                                            </Card>
-                                          )}
+                                          {/* OCR Quality + Extracted Text */}
+                                          {(() => {
+                                            const quality = getOcrQuality(doc.raw_text, doc.is_classified);
+                                            const isEditing = editingTextDocId === doc.id;
+                                            const showCard = doc.raw_text || quality?.level === "none" || isEditing;
+                                            if (!showCard) return null;
+                                            return (
+                                              <Card>
+                                                <CardHeader className="pb-2 px-3 sm:px-6">
+                                                  <CardTitle className="text-xs sm:text-sm flex flex-col gap-2">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                                      <span>Извлечённый текст</span>
+                                                      <div className="flex gap-1 sm:gap-2">
+                                                        {doc.raw_text && !isEditing && (
+                                                          <>
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              className="h-8 px-2 sm:px-3 text-xs"
+                                                              onClick={() => copyExtractedText(doc.raw_text!, doc.id)}
+                                                            >
+                                                              {copiedId === doc.id ? (
+                                                                <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                                              ) : (
+                                                                <Copy className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                                              )}
+                                                              <span className="hidden sm:inline">Копировать</span>
+                                                            </Button>
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              className="h-8 px-2 sm:px-3 text-xs"
+                                                              onClick={() => downloadAsText(doc)}
+                                                            >
+                                                              <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                                              <span className="hidden sm:inline">.txt</span>
+                                                            </Button>
+                                                          </>
+                                                        )}
+                                                        {!isEditing && (
+                                                          <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-8 px-2 sm:px-3 text-xs"
+                                                            onClick={() => startEditingText(doc)}
+                                                          >
+                                                            <PenLine className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                                            <span className="hidden sm:inline">Уточнить вручную</span>
+                                                            <span className="sm:hidden">Уточнить</span>
+                                                          </Button>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                    {quality && (
+                                                      <div className="flex items-center gap-2 flex-wrap font-normal">
+                                                        <span
+                                                          className={`inline-flex items-center px-2 py-0.5 text-[11px] rounded border ${ocrLevelColor[quality.level]}`}
+                                                        >
+                                                          Качество: {quality.label}
+                                                        </span>
+                                                        <span className="text-[11px] text-muted-foreground">
+                                                          {quality.charCount} симв.
+                                                        </span>
+                                                        {quality.advice && (
+                                                          <span className="text-[11px] text-muted-foreground italic">
+                                                            {quality.advice}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                  </CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="px-3 sm:px-6">
+                                                  {isEditing ? (
+                                                    <div className="space-y-3">
+                                                      <Textarea
+                                                        value={editingTextDraft}
+                                                        onChange={(e) => setEditingTextDraft(e.target.value)}
+                                                        placeholder="Перепишите текст из документа: диагноз, заключение, обследования..."
+                                                        className="min-h-[180px] sm:min-h-[240px] text-xs sm:text-sm"
+                                                        autoFocus
+                                                      />
+                                                      <div className="flex flex-col sm:flex-row gap-2">
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="flex-1"
+                                                          onClick={cancelEditingText}
+                                                          disabled={savingEditedText}
+                                                        >
+                                                          Отмена
+                                                        </Button>
+                                                        <Button
+                                                          size="sm"
+                                                          className="flex-1"
+                                                          onClick={saveEditedText}
+                                                          disabled={savingEditedText}
+                                                        >
+                                                          {savingEditedText ? (
+                                                            <>
+                                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                              Сохранение...
+                                                            </>
+                                                          ) : (
+                                                            <>
+                                                              <Brain className="h-4 w-4 mr-2" />
+                                                              Сохранить и проанализировать заново
+                                                            </>
+                                                          )}
+                                                        </Button>
+                                                      </div>
+                                                    </div>
+                                                  ) : doc.raw_text ? (
+                                                    <Textarea
+                                                      value={doc.raw_text}
+                                                      readOnly
+                                                      className="min-h-[150px] sm:min-h-[200px] text-xs sm:text-sm font-mono"
+                                                    />
+                                                  ) : (
+                                                    <p className="text-sm text-muted-foreground italic py-4 text-center">
+                                                      Текст не извлечён. Нажмите «Уточнить вручную» и впишите содержимое документа.
+                                                    </p>
+                                                  )}
+                                                </CardContent>
+                                              </Card>
+                                            );
+                                          })()}
 
                                           {/* Link to Medical History */}
                                           {doc.linked_article_id && (
@@ -2294,10 +2519,10 @@ export default function MedicalDocumentsPage() {
             </div>
 
             {addingPages ? (
-              <div className="flex flex-col items-center gap-4 py-8">
-                <Loader2 className="h-10 w-10 text-primary animate-spin" />
-                <p className="text-sm text-muted-foreground">{uploadProgress}</p>
-              </div>
+              <UploadProgress
+                status={uploadProgress || "Подготовка..."}
+                stage="uploading"
+              />
             ) : (
               <>
                 <div className="relative border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -10,9 +11,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Search, Star, Plus, MapPin } from "lucide-react";
+import { Building2, Search, Star, Plus, MapPin, ChevronRight } from "lucide-react";
 import EmptyState from "@/components/EmptyState";
 import { PageLoader } from "@/components/LoadingSkeleton";
+import { makeCommissariatSlug } from "@/lib/slug";
 
 interface Rating {
   id: string;
@@ -172,39 +174,46 @@ export default function CommissariatDirectoryPage() {
           ) : (
             <div className="space-y-4">
               {filteredGroups.map((g) => (
-                <Card key={`${g.name}|${g.city}`} className="hover:shadow-soft transition-shadow">
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="font-semibold text-foreground">{g.name}</span>
+                <Link
+                  key={`${g.name}|${g.city}`}
+                  to={`/commissariats/${makeCommissariatSlug(g.name, g.city)}`}
+                  className="block group"
+                >
+                  <Card className="hover:shadow-soft hover:border-primary/40 transition-all">
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{g.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground mb-3">
+                            <span>{g.city}</span>
+                            {g.region && <><span>·</span><span>{g.region}</span></>}
+                            <span>·</span>
+                            <span>{g.count} {g.count === 1 ? "отзыв" : g.count < 5 ? "отзыва" : "отзывов"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <StarRow value={g.avgRating} />
+                            <Badge variant="secondary" className="text-xs font-semibold">
+                              {g.avgRating.toFixed(1)}
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground mb-3">
-                          <span>{g.city}</span>
-                          {g.region && <><span>·</span><span>{g.region}</span></>}
-                          <span>·</span>
-                          <span>{g.count} {g.count === 1 ? "отзыв" : g.count < 5 ? "отзыва" : "отзывов"}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <StarRow value={g.avgRating} />
-                          <Badge variant="secondary" className="text-xs font-semibold">
-                            {g.avgRating.toFixed(1)}
-                          </Badge>
-                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                       </div>
-                    </div>
-                    {g.ratings.filter(r => r.comment).slice(0, 2).map(r => (
-                      <div key={r.id} className="mt-3 pt-3 border-t border-border/40">
-                        <div className="flex items-center gap-2 mb-1">
-                          <StarRow value={r.rating} />
-                          <span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString("ru-RU")}</span>
+                      {g.ratings.filter(r => r.comment).slice(0, 2).map(r => (
+                        <div key={r.id} className="mt-3 pt-3 border-t border-border/40">
+                          <div className="flex items-center gap-2 mb-1">
+                            <StarRow value={r.rating} />
+                            <span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString("ru-RU")}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{r.comment}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground">{r.comment}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}
