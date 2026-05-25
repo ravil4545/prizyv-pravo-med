@@ -1,165 +1,155 @@
-import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, Mail, MapPin, Clock, Github } from "lucide-react";
+import { Phone, MessageCircle, Send, Mail, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const Footer = () => {
   const isMobile = useIsMobile();
+
   const handlePhoneCall = () => {
     window.location.href = "tel:+79253500533";
   };
-
   const handleWhatsApp = () => {
-    const message = encodeURIComponent("Добрый день! Мне необходима консультация по поводу призыва на срочную службу...");
-    window.open(`https://wa.me/79253500533?text=${message}`, "_blank");
+    const msg = encodeURIComponent("Добрый день! Мне необходима консультация...");
+    window.open(`https://wa.me/79253500533?text=${msg}`, "_blank");
   };
-
   const handleTelegram = () => {
     window.open("https://t.me/nepriziv2", "_blank");
   };
-
   const handleEmail = () => {
     window.location.href = "mailto:dompc9@gmail.com";
   };
 
   return (
-    <footer className={`bg-foreground text-background py-16 ${isMobile ? 'pb-24' : ''}`}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Logo and Description */}
-          <div className="col-span-1 lg:col-span-2">
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-                <span className="text-xl font-bold text-primary-foreground">ЮП</span>
+    <footer className={`bg-ink text-paper py-16 sm:py-20 ${isMobile ? "pb-24" : ""}`}>
+      {/* Top stamp strip */}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-12 mb-12">
+        <div className="flex items-center gap-3 pb-4 border-b border-paper/15 font-mono text-[10px] tracking-[0.25em] uppercase text-gold/80">
+          <span>контакты · реквизиты · позиция</span>
+          <span className="h-px flex-1 bg-paper/15" />
+          <span className="hidden sm:inline">2014 → {new Date().getFullYear()}</span>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 sm:px-6 lg:px-12">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-14">
+          {/* Brand block */}
+          <div className="md:col-span-5">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="relative flex h-14 w-14 items-center justify-center border border-paper/40 flex-shrink-0">
+                <span className="font-serif italic text-2xl leading-none text-paper">ВА</span>
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
               </div>
               <div>
-                <h3 className="text-xl font-bold">Юридическая помощь призывникам</h3>
-                <p className="text-sm text-background/70">Профессиональные консультации</p>
+                <h3 className="font-serif text-xl sm:text-2xl leading-tight text-paper">
+                  Важанина Александра Евгеньевна
+                </h3>
+                <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1">
+                  Юрист · Призывное право
+                </p>
               </div>
             </div>
-            <p className="text-background/80 mb-6 max-w-md">
-              Оказываем профессиональную юридическую и медицинскую помощь по вопросам 
-              военного призыва. Гарантируем конфиденциальность и индивидуальный подход.
+            <p className="text-sm text-paper/75 leading-relaxed max-w-md mb-6">
+              Помогаю призывникам и их семьям законно получить отсрочку,
+              освобождение или военный билет. Работаю на основании договора,
+              соблюдаю адвокатскую тайну.
             </p>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" size="sm" onClick={handlePhoneCall}>
-                <Phone className="h-4 w-4" />
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleWhatsApp}>
-                <MessageCircle className="h-4 w-4" />
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleTelegram}>
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleEmail}>
-                <Mail className="h-4 w-4" />
-              </Button>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                { onClick: handlePhoneCall, icon: Phone, label: "Телефон" },
+                { onClick: handleTelegram, icon: Send, label: "Telegram" },
+                { onClick: handleWhatsApp, icon: MessageCircle, label: "WhatsApp" },
+                { onClick: handleEmail, icon: Mail, label: "Email" },
+              ].map(({ onClick, icon: Icon, label }) => (
+                <button
+                  key={label}
+                  onClick={onClick}
+                  className="flex items-center gap-2 px-3 py-2 border border-paper/25 hover:border-gold hover:text-gold text-xs font-mono uppercase tracking-wider transition-colors"
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h4 className="text-lg font-semibold mb-4">Навигация</h4>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/" className="text-background/80 hover:text-background transition-smooth">
-                  Главная
-                </Link>
-              </li>
-              <li>
-                <Link to="/services" className="text-background/80 hover:text-background transition-smooth">
-                  Услуги
-                </Link>
-              </li>
-              <li>
-                <Link to="/testimonials" className="text-background/80 hover:text-background transition-smooth">
-                  Отзывы
-                </Link>
-              </li>
-              <li>
-                <Link to="/templates" className="text-background/80 hover:text-background transition-smooth">
-                  Шаблоны документов
-                </Link>
-              </li>
-              <li>
-                <Link to="/diagnoses" className="text-background/80 hover:text-background transition-smooth">
-                  Диагнозы
-                </Link>
-              </li>
-              <li>
-                <Link to="/forum" className="text-background/80 hover:text-background transition-smooth">
-                  Форум
-                </Link>
-              </li>
+          {/* Nav */}
+          <nav className="md:col-span-3">
+            <h4 className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-5">
+              Разделы
+            </h4>
+            <ul className="space-y-2.5">
+              {[
+                { to: "/", label: "Главная" },
+                { to: "/services", label: "Услуги" },
+                { to: "/diagnoses", label: "Диагнозы" },
+                { to: "/templates", label: "Шаблоны" },
+                { to: "/blog", label: "Блог" },
+                { to: "/forum", label: "Форум" },
+                { to: "/testimonials", label: "Отзывы" },
+              ].map((l) => (
+                <li key={l.to}>
+                  <Link
+                    to={l.to}
+                    className="text-sm text-paper/75 hover:text-gold transition-colors inline-flex items-center gap-2"
+                  >
+                    <span className="font-mono text-[10px] text-gold/50">→</span>
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
-          </div>
+          </nav>
 
-          {/* Contact Info */}
-          <div>
-            <h4 className="text-lg font-semibold mb-4">Контакты</h4>
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3">
-                <Phone className="h-5 w-5 text-primary mt-0.5" />
+          {/* Contacts */}
+          <div className="md:col-span-4">
+            <h4 className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-5">
+              Связаться напрямую
+            </h4>
+            <dl className="space-y-4">
+              <div className="flex gap-3">
+                <Phone className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-background font-medium">+7 (925) 350-05-33</p>
-                  <p className="text-background/70 text-sm">Бесплатные консультации</p>
+                  <dt className="font-serif text-base text-paper">+7 (925) 350-05-33</dt>
+                  <dd className="text-xs text-paper/60 mt-0.5">Звонок и бесплатная вводная</dd>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
-                <Mail className="h-5 w-5 text-primary mt-0.5" />
+              <div className="flex gap-3">
+                <Mail className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-background font-medium">dompc9@gmail.com</p>
-                  <p className="text-background/70 text-sm">Письменные консультации</p>
+                  <dt className="font-mono text-sm text-paper">dompc9@gmail.com</dt>
+                  <dd className="text-xs text-paper/60 mt-0.5">Письменные обращения</dd>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
-                <Clock className="h-5 w-5 text-primary mt-0.5" />
+              <div className="flex gap-3">
+                <Clock className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-background font-medium">Пн-Пт: 9:00-20:00</p>
-                  <p className="text-background/70 text-sm">Сб-Вс: по предварительной записи</p>
+                  <dt className="text-sm text-paper">Пн–Пт: 9:00–20:00 МСК</dt>
+                  <dd className="text-xs text-paper/60 mt-0.5">Сб–Вс — по предварительной записи</dd>
                 </div>
               </div>
-            </div>
+            </dl>
           </div>
         </div>
 
-        <div className="border-t border-background/20 mt-12 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex flex-col md:flex-row items-center gap-4">
-              <p className="text-background/70 text-sm">
-                © 2024 Юридическая помощь призывникам. Все права защищены.
-              </p>
-              <div className="flex items-center gap-3">
-                <a 
-                  href="https://github.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-background/70 hover:text-background transition-smooth flex items-center gap-1"
-                  aria-label="GitHub"
-                >
-                  <Github className="h-5 w-5" />
-                </a>
-                <a 
-                  href="https://supabase.com/dashboard/project/kqbetheonxiclwgyatnm" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-background/70 hover:text-background transition-smooth flex items-center gap-1"
-                  aria-label="Supabase"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M13.885 22.532c-.697.446-1.636-.118-1.636-.982V13.47h8.138c1.027 0 1.686 1.116 1.176 1.995l-7.678 13.067zm-3.77-22.532c.697-.446 1.636.118 1.636.982V10.53H3.613c-1.027 0-1.686-1.116-1.176-1.995L10.115.468z"/>
-                  </svg>
-                </a>
-              </div>
-            </div>
-            <div className="flex space-x-6">
-              <a href="#" className="text-background/70 hover:text-background text-sm transition-smooth">
-                Политика конфиденциальности
-              </a>
-              <a href="#" className="text-background/70 hover:text-background text-sm transition-smooth">
-                Условия использования
-              </a>
-            </div>
+        {/* Bottom strip */}
+        <div className="border-t border-paper/15 mt-14 pt-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
+            <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-paper/55">
+              © {new Date().getFullYear()} Важанина А.Е. · Все права защищены
+            </p>
+            <p className="text-[11px] text-paper/40 max-w-md leading-relaxed">
+              Информация на сайте не является публичной офертой и не заменяет очной
+              консультации. Услуги оказываются на основании договора.
+            </p>
+          </div>
+          <div className="flex gap-5 font-mono text-[10px] tracking-[0.15em] uppercase">
+            <a href="#" className="text-paper/55 hover:text-gold transition-colors">
+              Конфиденциальность
+            </a>
+            <a href="#" className="text-paper/55 hover:text-gold transition-colors">
+              Условия
+            </a>
           </div>
         </div>
       </div>
