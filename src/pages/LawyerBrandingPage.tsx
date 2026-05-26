@@ -147,6 +147,10 @@ const LawyerBrandingPage = () => {
       user_id: user.id,
       slug: form.slug || null,
       full_name: safeName,
+      // ВАЖНО: гарантируем is_active=true. Без этого запись не попадает
+      // в публичный каталог /lawyers и не подхватывается BrandingContext
+      // на /u/<slug> (там фильтр is_active = true).
+      is_active: true,
       brand_subtitle: form.brand_subtitle || null,
       brand_about: form.brand_about || null,
       photo_url: form.photo_url || null,
@@ -164,20 +168,43 @@ const LawyerBrandingPage = () => {
       .upsert(payload as any, { onConflict: "user_id" });
     setSaving(false);
     if (error) {
-      // Самый частый случай: миграция полей бренда ещё не применена в БД —
-      // PostgREST возвращает PGRST204 «column ... does not exist».
-      const isSchemaError = /column .+ does not exist|PGRST204|schema cache/i.test(error.message);
-      toast({
-        title: isSchemaError ? "База ещё не обновлена" : "Не удалось сохранить",
-        description: isSchemaError
-          ? "Поля бренда не созданы. Админу: примени миграцию 20260526233000_lawyer_branding.sql в Supabase SQL Editor."
-          : error.message,
-        variant: "destructive",
-      });
-      console.error("Branding save error:", error);
+      // Распознаём типовые ошибки PostgREST/Postgres и даём осмысленные сообщения
+      const msg = error.message || "";
+      const code = (error as any).code || "";
+      const isSchemaError = /column .+ does not exist|PGRST204|schema cache/i.test(msg);
+      const isPermissionError = /permission denied|RLS|row-level security/i.test(msg) || code === "42501";
+      const isUniqueError = /unique|duplicate/i.test(msg) || code === "23505";
+      const isConstraintError = /check constraint/i.test(msg) || code === "23514";
+
+      let title = "Не удалось сохранить";
+      let description = msg;
+      if (isSchemaError) {
+        title = "База ещё не обновлена";
+        description = "Поля бренда не созданы. Админу: примените миграцию 20260526233000_lawyer_branding.sql в Supabase SQL Editor.";
+      } else if (isUniqueError && msg.toLowerCase().includes("slug")) {
+        title = "Адрес занят";
+        description = `Slug «${form.slug}» уже используется другим юристом — выберите другой.`;
+      } else if (isConstraintError && msg.toLowerCase().includes("slug")) {
+        title = "Неверный формат slug";
+        description = "Только латиница, цифры и дефис; 3-40 символов; не начинается и не заканчивается дефисом.";
+      } else if (isPermissionError) {
+        title = "Нет прав на запись";
+        description = "RLS-политика не разрешает сохранение. Админу: примените миграцию 20260526230000_lawyer_profiles_public_and_admin.sql.";
+      } else {
+        description = `${msg}${(error as any).hint ? "  ·  " + (error as any).hint : ""}${code ? "  [" + code + "]" : ""}`;
+      }
+      toast({ title, description, variant: "destructive" });
+      console.error("Branding save error:", { error, code, hint: (error as any).hint, details: (error as any).details });
       return;
     }
-    toast({ title: "Сохранено", description: "Бренд обновлён" });
+    toast({
+      title: "Сохранено",
+      description: form.slug
+        ? `Бренд активен по адресу /u/${form.slug}`
+        : "Бренд обновлён",
+    });
+    // Перечитываем чтобы превью отражало то что в БД и slug закрепился
+    loadBranding();
   };
 
   const brandUrl = form.slug ? `${PUBLIC_BASE}/u/${form.slug}` : "";
