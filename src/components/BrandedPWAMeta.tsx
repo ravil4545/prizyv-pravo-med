@@ -41,9 +41,7 @@ const BrandedPWAMeta = () => {
   useEffect(() => {
     if (branding.loading) return;
 
-    const themeColor = branding.isBranded
-      ? (branding.about ? "#0d1b2a" : "#0d1b2a") // ink — общий тон
-      : "#0d1b2a";
+    const themeColor = "#0d1b2a"; // ink — общий тон бренда
 
     setMeta("theme-color", themeColor);
     setMeta("apple-mobile-web-app-capable", "yes");
@@ -55,7 +53,16 @@ const BrandedPWAMeta = () => {
       setLink("apple-touch-icon", branding.photoUrl);
     }
 
-    // Динамический manifest как blob URL
+    // Динамический manifest как blob URL.
+    // Иконки добавляем только если есть фото — иначе manifest без icons,
+    // браузер использует apple-touch-icon / favicon.
+    const icons = branding.photoUrl
+      ? [
+          { src: branding.photoUrl, sizes: "192x192", type: "image/jpeg", purpose: "any" },
+          { src: branding.photoUrl, sizes: "512x512", type: "image/jpeg", purpose: "any" },
+        ]
+      : [];
+
     const manifest = {
       name: branding.isBranded ? branding.displayName : "nepriziv.ru — юрист по призыву",
       short_name: branding.displayName.split(/\s+/)[0] || "Юрист",
@@ -66,24 +73,16 @@ const BrandedPWAMeta = () => {
       orientation: "portrait",
       background_color: "#f4ecdd",
       theme_color: themeColor,
-      icons: branding.photoUrl ? [
-        { src: branding.photoUrl, sizes: "192x192", type: "image/jpeg", purpose: "any" },
-        { src: branding.photoUrl, sizes: "512x512", type: "image/jpeg", purpose: "any" },
-      ] : [
-        { src: "/lawyer-portrait.jpg", sizes: "192x192", type: "image/jpeg", purpose: "any" },
-        { src: "/lawyer-portrait.jpg", sizes: "512x512", type: "image/jpeg", purpose: "any" },
-      ],
+      ...(icons.length ? { icons } : {}),
     };
 
     const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
     const url = URL.createObjectURL(blob);
-    const link = setLink("manifest", url);
+    setLink("manifest", url);
 
-    return () => {
-      URL.revokeObjectURL(url);
-      // namestre оставляем для следующего рендера — он сам перезапишет href
-      void link;
-    };
+    // ВАЖНО: НЕ revoke URL в cleanup. Браузер читает manifest асинхронно;
+    // если revoke до чтения — рендерятся артефакты иконок/имени. Blob
+    // живёт пока вкладка не закрыта (~1KB на manifest, не критично).
   }, [
     branding.loading,
     branding.isBranded,

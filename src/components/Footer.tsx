@@ -53,11 +53,28 @@ const Footer = () => {
           <div className={isLawyer ? "md:col-span-4" : "md:col-span-5"}>
             <div className="flex items-start gap-4 mb-5">
               <div className="relative flex h-14 w-14 items-center justify-center border border-paper/40 flex-shrink-0 overflow-hidden">
-                {branding.isBranded && branding.photoUrl ? (
-                  <img src={branding.photoUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="font-serif italic text-2xl leading-none text-paper">{monogram}</span>
-                )}
+                {branding.isBranded && branding.photoUrl && /^(https?:|data:|blob:|\/)/.test(branding.photoUrl) ? (
+                  <img
+                    src={branding.photoUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                      const sibling = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (sibling) sibling.style.display = "flex";
+                    }}
+                  />
+                ) : null}
+                <span
+                  className="font-serif italic text-2xl leading-none text-paper items-center justify-center w-full h-full"
+                  style={{
+                    display: branding.isBranded && branding.photoUrl && /^(https?:|data:|blob:|\/)/.test(branding.photoUrl)
+                      ? "none"
+                      : "flex",
+                  }}
+                >
+                  {monogram}
+                </span>
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
               </div>
               <div>

@@ -83,7 +83,9 @@ const Header = () => {
           {/* Logo — editorial monogram */}
           <Link to={homePath} className="flex items-center gap-3 min-w-0 group" aria-label={`Главная — ${branding.displayName}`}>
             <div className="relative flex h-10 w-10 items-center justify-center border border-ink/80 flex-shrink-0 group-hover:border-gold group-hover:bg-ink transition-colors overflow-hidden">
-              {branding.photoUrl ? (
+              {/* Фото показываем только если URL непустой и валидный (https/http/data/blob) —
+                  иначе мерцает иконка «битая картинка» */}
+              {branding.photoUrl && /^(https?:|data:|blob:|\/)/.test(branding.photoUrl) ? (
                 <img
                   src={branding.photoUrl}
                   alt=""
@@ -98,7 +100,11 @@ const Header = () => {
               ) : null}
               <span
                 className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors flex items-center justify-center w-full h-full"
-                style={{ display: branding.photoUrl ? "none" : "flex" }}
+                style={{
+                  display: branding.photoUrl && /^(https?:|data:|blob:|\/)/.test(branding.photoUrl)
+                    ? "none"
+                    : "flex",
+                }}
               >
                 {monogram}
               </span>
