@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +103,10 @@ const unsupportedProviders = [
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextRaw = searchParams.get("next");
+  // Защита от open-redirect — только относительные пути
+  const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
@@ -123,13 +127,13 @@ const LoginPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     });
 
@@ -182,7 +186,7 @@ const LoginPage = () => {
         }
       } else {
         toast({ title: "Вход выполнен", description: "Добро пожаловать!" });
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Ошибка", description: error.message });
@@ -226,7 +230,7 @@ const LoginPage = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}${nextPath}`
         }
       });
 
@@ -290,7 +294,7 @@ const LoginPage = () => {
         toast({ variant: "destructive", title: "Ошибка", description: error.message });
       } else {
         toast({ title: "Вход выполнен", description: "Добро пожаловать!" });
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Ошибка", description: error.message });

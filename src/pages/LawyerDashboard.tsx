@@ -55,8 +55,11 @@ const LawyerDashboard = () => {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || profileLoading) return;
-    if (!isLawyer) { navigate("/dashboard"); return; }
+    if (profileLoading) return;
+    // Не залогинен — на авторизацию с возвратом сюда
+    if (!user) { navigate("/auth?next=/lawyer", { replace: true }); return; }
+    // Залогинен, но не юрист — на обычный кабинет
+    if (!isLawyer) { navigate("/dashboard", { replace: true }); return; }
     loadStats();
   }, [user, profileLoading, isLawyer]);
 
@@ -80,15 +83,15 @@ const LawyerDashboard = () => {
     setDataLoading(false);
   };
 
-  if (profileLoading) return (
+  // Загрузка профиля либо ожидание редиректа (не залогинен / не юрист) — показываем skeleton,
+  // чтобы пользователь не видел вспышку белого экрана
+  if (profileLoading || !user || !isLawyer) return (
     <div className="min-h-screen bg-background"><Header />
       <main className="container mx-auto px-4 py-8 space-y-6">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
       </main>
     </div>
   );
-
-  if (!isLawyer) return null;
 
   const usedClients = totalClients;
   const clientLimit = profile?.clients_limit ?? 5;

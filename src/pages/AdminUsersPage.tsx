@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Users, Search, ArrowLeft, Eye } from "lucide-react";
+import { Loader2, Users, Search, ArrowLeft, Eye, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserRow {
@@ -26,6 +26,8 @@ interface UserRow {
   ai_questions_used: number;
   subscription_id: string | null;
   payment_link_clicked_at: string | null;
+  is_lawyer: boolean;
+  lawyer_active: boolean;
 }
 
 interface DemoVisitorRow {
@@ -89,9 +91,10 @@ const AdminUsersPage = () => {
       if (edgeError) throw new Error(edgeError.message || "Ошибка загрузки пользователей");
       const authUsers = edgeData?.users || [];
 
-      const [profilesRes, subsRes] = await Promise.all([
+      const [profilesRes, subsRes, lawyersRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, phone"),
         supabase.from("user_subscriptions").select("*"),
+        supabase.from("lawyer_profiles").select("user_id, is_active"),
       ]);
 
       const profilesMap = new Map<string, any>();
@@ -100,9 +103,13 @@ const AdminUsersPage = () => {
       const subsMap = new Map<string, any>();
       subsRes.data?.forEach(s => subsMap.set(s.user_id, s));
 
+      const lawyersMap = new Map<string, { is_active: boolean }>();
+      lawyersRes.data?.forEach((l: any) => lawyersMap.set(l.user_id, { is_active: !!l.is_active }));
+
       const userRows: UserRow[] = (authUsers || []).map((au: any) => {
         const profile = profilesMap.get(au.id);
         const sub = subsMap.get(au.id);
+        const lawyer = lawyersMap.get(au.id);
         return {
           id: au.id,
           email: au.email || "—",
@@ -116,6 +123,8 @@ const AdminUsersPage = () => {
           ai_questions_used: sub?.ai_questions_used || 0,
           subscription_id: sub?.id || null,
           payment_link_clicked_at: sub?.payment_link_clicked_at || null,
+          is_lawyer: !!lawyer,
+          lawyer_active: lawyer?.is_active || false,
         };
       });
 
@@ -187,6 +196,47 @@ const AdminUsersPage = () => {
     } catch (error) {
       console.error("Error toggling mode:", error);
       toast.error("Ошибка при изменении режима");
+    }
+  };
+
+  const toggleLawyerStatus = async (userId: string, currentIsLawyerActive: boolean) => {
+    try {
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+      const willBeActive = !currentIsLawyerActive;
+
+      if (!user.is_lawyer) {
+        // Записи в lawyer_profiles ещё нет — создаём
+        const { error } = await supabase
+          .from("lawyer_profiles")
+          .insert({
+            user_id: userId,
+            full_name: user.full_name || user.email || "Юрист",
+            subscription_tier: "basic",
+            is_active: true,
+            clients_limit: 5,
+          } as any);
+        if (error) throw error;
+      } else {
+        // Запись есть — переключаем is_active (сохраняем CRM-историю клиентов)
+        const { error } = await supabase
+          .from("lawyer_profiles")
+          .update({ is_active: willBeActive })
+          .eq("user_id", userId);
+        if (error) throw error;
+      }
+
+      setUsers(prev =>
+        prev.map(u =>
+          u.id === userId
+            ? { ...u, is_lawyer: true, lawyer_active: willBeActive }
+            : u
+        )
+      );
+      toast.success(willBeActive ? "Назначен юристом" : "Снят с роли юриста");
+    } catch (error: any) {
+      console.error("Error toggling lawyer:", error);
+      toast.error(error.message || "Ошибка при изменении статуса юриста");
     }
   };
 
@@ -267,12 +317,13 @@ const AdminUsersPage = () => {
                           <TableHead>Статус</TableHead>
                           <TableHead>Оплачено до</TableHead>
                           <TableHead>Режим</TableHead>
+                          <TableHead>Юрист</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredUsers.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                               Пользователи не найдены
                             </TableCell>
                           </TableRow>
@@ -312,6 +363,21 @@ const AdminUsersPage = () => {
                                     onCheckedChange={() => togglePaidMode(user.id, user.admin_override)}
                                   />
                                   <span className="text-xs text-muted-foreground">Платн.</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={user.lawyer_active}
+                                    onCheckedChange={() => toggleLawyerStatus(user.id, user.lawyer_active)}
+                                    aria-label="Назначить юристом"
+                                  />
+                                  {user.lawyer_active && (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-400 text-amber-700 dark:text-amber-300">
+                                      <Briefcase className="h-3 w-3" />
+                                      Юрист
+                                    </Badge>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

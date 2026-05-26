@@ -13,11 +13,15 @@
 const REPLACEMENT = "[контакт скрыт администрацией]";
 
 interface DetectionPattern {
-  name: "phone" | "email" | "telegram" | "whatsapp" | "url-messenger";
+  name: "phone" | "email" | "telegram" | "whatsapp" | "url-messenger" | "uuid";
   regex: RegExp;
 }
 
 const PATTERNS: DetectionPattern[] = [
+  // UUID v4-style (например, user_id из Supabase) — обработаем РАНЬШЕ телефонов,
+  // чтобы цифры из UUID не съел phone-regex
+  { name: "uuid", regex: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi },
+
   // Телефоны: +7XXXXXXXXXX, 8XXXXXXXXXX, +7 (XXX) XXX-XX-XX и вариации
   // 9+ подряд цифр (с возможными разделителями: пробел, дефис, скобка, точка)
   { name: "phone", regex: /(?:\+?\d[\s().-]?){9,15}\d/g },
@@ -75,6 +79,7 @@ const TYPE_LABELS: Record<DetectionPattern["name"], string> = {
   telegram: "Telegram-логин",
   whatsapp: "WhatsApp",
   "url-messenger": "ссылку на мессенджер",
+  uuid: "идентификатор",
 };
 
 export function describeDetected(types: DetectionPattern["name"][]): string {

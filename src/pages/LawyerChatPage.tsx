@@ -581,16 +581,20 @@ const LawyerChatPage = () => {
                 <Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" asChild>
                   <Link to={`/lawyer/clients/${clientId}`}><User className="h-4 w-4" /></Link>
                 </Button>
-                {/* Mobile: open AI panel drawer */}
+                {/* Открыть AI-панель на узких экранах (где постоянная панель скрыта) */}
                 <Button
-                  variant="ghost" size="icon"
-                  className="h-8 w-8 lg:hidden flex-shrink-0 relative"
+                  variant={suggestionHistory.length > 0 ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 md:hidden flex-shrink-0 relative"
                   onClick={() => setAiPanelOpen(true)}
-                  title="ИИ-рекомендации"
+                  title="ИИ-помощник: подсказки ответа клиенту"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-3.5 w-3.5" />
+                  ИИ
                   {suggestionHistory.length > 0 && (
-                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                    <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-foreground text-primary text-[10px] px-1">
+                      {suggestionHistory.length}
+                    </span>
                   )}
                 </Button>
               </div>
@@ -721,8 +725,8 @@ const LawyerChatPage = () => {
             </div>
           </div>
 
-          {/* ── AI Panel — desktop right column ─────────────────────────────── */}
-          <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-l bg-card/30 flex-shrink-0">
+          {/* ── AI Panel — постоянно справа на экранах ≥ md ─────────────────── */}
+          <aside className="hidden md:flex flex-col w-60 lg:w-64 xl:w-72 border-l bg-card/30 flex-shrink-0">
             {aiPanelContent}
           </aside>
         </div>
