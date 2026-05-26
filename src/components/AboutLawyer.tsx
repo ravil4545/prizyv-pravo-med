@@ -1,4 +1,6 @@
 import { ArrowRight, Phone } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
+import BrandedAvatar from "@/components/BrandedAvatar";
 
 const credentials = [
   { label: "Образование", value: "Высшее юридическое" },
@@ -28,8 +30,11 @@ const principles = [
 ];
 
 const AboutLawyer = () => {
+  const branding = useBranding();
+
   const handlePhoneCall = () => {
-    window.location.href = "tel:+79253500533";
+    const digits = (branding.phone || "+79253500533").replace(/\D/g, "");
+    window.location.href = `tel:+${digits}`;
   };
 
   return (
@@ -74,17 +79,17 @@ const AboutLawyer = () => {
               <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-2 border-r-2 border-ink z-10" aria-hidden />
 
               <div className="bg-paper-deep overflow-hidden shadow-medium">
-                <img
-                  src="/lawyer-portrait.jpg"
-                  alt="Важанина Александра Евгеньевна — рабочий портрет"
-                  className="w-full aspect-[3/4] object-cover"
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = "/lawyer-portrait.svg";
-                  }}
-                />
+                <div className="relative w-full aspect-[3/4]">
+                  <BrandedAvatar
+                    src={branding.photoUrl}
+                    name={branding.displayName}
+                    className="absolute inset-0"
+                  />
+                </div>
                 <div className="px-4 py-3 border-t border-ink/10 flex items-center justify-between font-mono text-[10px] tracking-[0.15em] uppercase">
-                  <span className="text-ink/60">Файл · ВА-001</span>
+                  <span className="text-ink/60">
+                    Досье · {branding.displayName.split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "ЮР"}
+                  </span>
                   <span className="text-gold">оригинал</span>
                 </div>
               </div>
