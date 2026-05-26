@@ -844,28 +844,52 @@ export type Database = {
       }
       lawyer_profiles: {
         Row: {
+          accent_color: string | null
+          brand_about: string | null
+          brand_email: string | null
+          brand_phone: string | null
+          brand_subtitle: string | null
+          brand_telegram: string | null
+          brand_whatsapp: string | null
           clients_limit: number | null
           created_at: string | null
           full_name: string
           is_active: boolean | null
+          slug: string | null
           subscription_tier: string | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          accent_color?: string | null
+          brand_about?: string | null
+          brand_email?: string | null
+          brand_phone?: string | null
+          brand_subtitle?: string | null
+          brand_telegram?: string | null
+          brand_whatsapp?: string | null
           clients_limit?: number | null
           created_at?: string | null
           full_name: string
           is_active?: boolean | null
+          slug?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          accent_color?: string | null
+          brand_about?: string | null
+          brand_email?: string | null
+          brand_phone?: string | null
+          brand_subtitle?: string | null
+          brand_telegram?: string | null
+          brand_whatsapp?: string | null
           clients_limit?: number | null
           created_at?: string | null
           full_name?: string
           is_active?: boolean | null
+          slug?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
           user_id?: string
