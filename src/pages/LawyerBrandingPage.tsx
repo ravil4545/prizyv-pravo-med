@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Briefcase, ArrowLeft, Save, Loader2, Link as LinkIcon, Copy, Check, ExternalLink, QrCode, Eye, AlertCircle } from "lucide-react";
 import { slugifyRu } from "@/lib/slug";
+import BrandedAvatar from "@/components/BrandedAvatar";
 
 interface BrandingForm {
   slug: string;
@@ -139,9 +140,13 @@ const LawyerBrandingPage = () => {
     }
 
     setSaving(true);
+    // full_name в lawyer_profiles в части окружений NOT NULL — подстраховываемся
+    // непустым fallback'ом, чтобы upsert не падал при первичном сохранении.
+    const safeName = form.full_name?.trim() || profile?.full_name?.trim() || user.email?.split("@")[0] || "Юрист";
     const payload = {
+      user_id: user.id,
       slug: form.slug || null,
-      full_name: form.full_name || null,
+      full_name: safeName,
       brand_subtitle: form.brand_subtitle || null,
       brand_about: form.brand_about || null,
       photo_url: form.photo_url || null,
@@ -151,13 +156,25 @@ const LawyerBrandingPage = () => {
       brand_email: form.brand_email || null,
       accent_color: form.accent_color || null,
     };
+    // upsert: если записи нет — создаст, если есть — обновит. Это устойчиво
+    // к тому, что юрист попал на /lawyer/branding без существующей строки
+    // (например, профиль создавался ранее в /admin/users).
     const { error } = await supabase
       .from("lawyer_profiles")
-      .update(payload as any)
-      .eq("user_id", user.id);
+      .upsert(payload as any, { onConflict: "user_id" });
     setSaving(false);
     if (error) {
-      toast({ title: "Не удалось сохранить", description: error.message, variant: "destructive" });
+      // Самый частый случай: миграция полей бренда ещё не применена в БД —
+      // PostgREST возвращает PGRST204 «column ... does not exist».
+      const isSchemaError = /column .+ does not exist|PGRST204|schema cache/i.test(error.message);
+      toast({
+        title: isSchemaError ? "База ещё не обновлена" : "Не удалось сохранить",
+        description: isSchemaError
+          ? "Поля бренда не созданы. Админу: примени миграцию 20260526233000_lawyer_branding.sql в Supabase SQL Editor."
+          : error.message,
+        variant: "destructive",
+      });
+      console.error("Branding save error:", error);
       return;
     }
     toast({ title: "Сохранено", description: "Бренд обновлён" });
@@ -314,23 +331,25 @@ const LawyerBrandingPage = () => {
               <CardContent>
                 <div className="border border-ink/15 bg-paper p-4">
                   <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 rounded-full border border-ink/30 overflow-hidden flex items-center justify-center flex-shrink-0 bg-paper-deep">
-                      {form.photo_url ? (
-                        <img src={form.photo_url} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="font-serif italic text-ink text-base">
-                          {form.full_name.split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?"}
-                        </span>
-                      )}
-                    </div>
+                    <BrandedAvatar
+                      src={form.photo_url}
+                      name={form.full_name || "Юрист"}
+                      shape="round"
+                      className="h-12 w-12 border border-ink/30 flex-shrink-0"
+                    />
                     <div className="min-w-0">
-                      <div className="font-serif text-base text-ink leading-tight">{form.full_name || "Ваше ФИО"}</div>
-                      <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1">{form.brand_subtitle}</div>
+                      <div className="font-serif text-base text-ink leading-tight">
+                        {form.full_name || "Ваше ФИО — обновится после сохранения"}
+                      </div>
+                      <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1">
+                        {form.brand_subtitle || "Юрист по призывному праву"}
+                      </div>
                     </div>
                   </div>
-                  {form.brand_about && (
-                    <p className="text-xs text-ink-soft mt-3 leading-relaxed">{form.brand_about}</p>
-                  )}
+                  <p className="text-xs text-ink-soft mt-3 leading-relaxed">
+                    {form.brand_about
+                      || "Краткое описание появится здесь — заполните блок «О себе» выше."}
+                  </p>
                   {form.brand_phone && (
                     <p className="text-xs text-ink-soft mt-2 font-mono">📞 {form.brand_phone}</p>
                   )}

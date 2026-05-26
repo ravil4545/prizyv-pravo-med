@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, MessageCircle, Send, Bot, ChevronDown, Sparkles, ArrowRight } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
+import BrandedAvatar from "@/components/BrandedAvatar";
 
 const Hero = () => {
   const [aiOpen, setAiOpen] = useState(false);
@@ -180,17 +181,11 @@ const Hero = () => {
               <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-2 border-l-2 border-gold z-10" aria-hidden />
               <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 border-gold z-10" aria-hidden />
 
-              <div className="relative overflow-hidden bg-paper-deep shadow-strong">
-                <img
+              <div className="relative overflow-hidden bg-paper-deep shadow-strong aspect-[3/4]">
+                <BrandedAvatar
                   src={branding.photoUrl}
-                  alt={`Юрист ${branding.displayName}`}
-                  className="w-full aspect-[3/4] object-cover object-top"
-                  width={768}
-                  height={1024}
-                  loading="eager"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = "/lawyer-portrait.svg";
-                  }}
+                  name={branding.displayName}
+                  className="absolute inset-0"
                 />
                 {/* Archival label strip */}
                 <div className="absolute bottom-0 inset-x-0 bg-ink/85 backdrop-blur-sm px-4 py-2.5 text-paper">

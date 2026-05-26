@@ -83,13 +83,25 @@ const Header = () => {
           {/* Logo — editorial monogram */}
           <Link to={homePath} className="flex items-center gap-3 min-w-0 group" aria-label={`Главная — ${branding.displayName}`}>
             <div className="relative flex h-10 w-10 items-center justify-center border border-ink/80 flex-shrink-0 group-hover:border-gold group-hover:bg-ink transition-colors overflow-hidden">
-              {branding.isBranded && branding.photoUrl ? (
-                <img src={branding.photoUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors">
-                  {monogram}
-                </span>
-              )}
+              {branding.photoUrl ? (
+                <img
+                  src={branding.photoUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    // Тихий фолбэк на монограмму если фото не загрузилось
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    const sibling = e.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (sibling) sibling.style.display = "flex";
+                  }}
+                />
+              ) : null}
+              <span
+                className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors flex items-center justify-center w-full h-full"
+                style={{ display: branding.photoUrl ? "none" : "flex" }}
+              >
+                {monogram}
+              </span>
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
             </div>
             <div className="hidden sm:flex flex-col min-w-0">
