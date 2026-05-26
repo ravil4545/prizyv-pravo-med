@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, AlertTriangle, Trophy, TrendingUp,
-  Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText,
+  Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
 } from "lucide-react";
+import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 
 const CRM_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Первичный контакт",
@@ -108,7 +109,13 @@ const LawyerDashboard = () => {
               {profile?.full_name || user?.email} · {isPro ? "Pro" : "Basic"}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <DiseaseScheduleDrawer>
+              <Button variant="outline">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Расписание болезней
+              </Button>
+            </DiseaseScheduleDrawer>
             <Button variant="outline" asChild><Link to="/lawyer/templates"><FileText className="h-4 w-4 mr-2" />Шаблоны</Link></Button>
             <Button asChild><Link to="/lawyer/clients"><Plus className="h-4 w-4 mr-2" />Добавить клиента</Link></Button>
           </div>

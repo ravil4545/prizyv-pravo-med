@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,10 @@ import { Chrome, Loader2, ArrowLeft } from "lucide-react";
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextRaw = searchParams.get("next");
+  // Защита: разрешаем только относительные пути, чтобы избежать open-redirect
+  const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,13 +33,13 @@ const AuthPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     });
 
@@ -48,7 +52,7 @@ const AuthPage = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}${nextPath}`
         }
       });
 
@@ -173,7 +177,7 @@ const AuthPage = () => {
           title: "Вход выполнен",
           description: "Добро пожаловать!",
         });
-        navigate("/dashboard");
+        navigate(nextPath);
       }
     } catch (error: any) {
       toast({

@@ -18,8 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, MessageSquare, ChevronRight,
   Phone, Calendar, AlertTriangle, Crown, Filter,
-  LayoutList, KanbanSquare,
+  LayoutList, KanbanSquare, BookOpen,
 } from "lucide-react";
+import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 
 const CRM_STAGES = [
   { value: "initial_contact",    label: "Первичный контакт" },
@@ -289,6 +290,12 @@ const LawyerClientsPage = () => {
                 <KanbanSquare className="h-4 w-4" />
               </Button>
             </div>
+            <DiseaseScheduleDrawer>
+              <Button variant="outline" size="sm" className="h-9">
+                <BookOpen className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Расписание</span>
+              </Button>
+            </DiseaseScheduleDrawer>
             <Button variant="outline" asChild><Link to="/lawyer">← Кабинет</Link></Button>
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild>

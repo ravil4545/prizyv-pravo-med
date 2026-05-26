@@ -33,7 +33,7 @@ const Footer = () => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-12">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-14">
           {/* Brand block */}
-          <div className="md:col-span-5">
+          <div className="md:col-span-4">
             <div className="flex items-start gap-4 mb-5">
               <div className="relative flex h-14 w-14 items-center justify-center border border-paper/40 flex-shrink-0">
                 <span className="font-serif italic text-2xl leading-none text-paper">ВА</span>
@@ -74,7 +74,7 @@ const Footer = () => {
           </div>
 
           {/* Nav */}
-          <nav className="md:col-span-3">
+          <nav className="md:col-span-2">
             <h4 className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-5">
               Разделы
             </h4>
@@ -101,8 +101,34 @@ const Footer = () => {
             </ul>
           </nav>
 
+          {/* For lawyers */}
+          <nav className="md:col-span-3">
+            <h4 className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-5">
+              Для юристов
+            </h4>
+            <ul className="space-y-2.5">
+              {[
+                { to: "/lawyers", label: "Каталог юристов" },
+                { to: "/lawyer", label: "Кабинет юриста" },
+                { to: "/lawyer/clients", label: "CRM клиентов" },
+                { to: "/lawyer/chats", label: "Чаты с клиентами" },
+                { to: "/lawyer/templates", label: "Библиотека шаблонов" },
+              ].map((l) => (
+                <li key={l.to}>
+                  <Link
+                    to={l.to}
+                    className="text-sm text-paper/75 hover:text-gold transition-colors inline-flex items-center gap-2"
+                  >
+                    <span className="font-mono text-[10px] text-gold/50">→</span>
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
           {/* Contacts */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-3">
             <h4 className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-5">
               Связаться напрямую
             </h4>

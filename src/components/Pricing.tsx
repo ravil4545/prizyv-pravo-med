@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Bot, Phone } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Plan {
   no: string;
@@ -31,7 +32,7 @@ const plans: Plan[] = [
   {
     no: "02",
     name: "ИИ-кабинет",
-    price: "от 9 000 ₽",
+    price: "990 ₽",
     unit: "в месяц",
     desc: "Самостоятельная работа с ИИ-помощником под надзором юриста.",
     includes: [
@@ -82,11 +83,18 @@ const plans: Plan[] = [
 const Pricing = () => {
   const navigate = useNavigate();
 
-  const handle = (action: "phone" | "dashboard") => {
+  const handle = async (action: "phone" | "dashboard") => {
     if (action === "phone") {
       window.location.href = "tel:+79253500533";
+      return;
+    }
+    // Для ИИ-кабинета: если авторизован — открываем кабинет с авто-диалогом оплаты;
+    // иначе ведём через авторизацию и продолжаем сценарий
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      navigate("/dashboard?pay=1");
     } else {
-      navigate("/dashboard");
+      navigate("/auth?next=" + encodeURIComponent("/dashboard?pay=1"));
     }
   };
 

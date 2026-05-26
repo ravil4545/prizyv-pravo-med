@@ -78,6 +78,7 @@ const CaseTrackingPage = lazy(() => import("./pages/CaseTrackingPage"));
 const SuccessCasesPage = lazy(() => import("./pages/SuccessCasesPage"));
 const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirectoryPage"));
 const CommissariatDetailPage = lazy(() => import("./pages/CommissariatDetailPage"));
+const LawyersDirectoryPage = lazy(() => import("./pages/LawyersDirectoryPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
 const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
@@ -147,6 +148,7 @@ const App = () => (
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
                 <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
+                <Route path="/lawyers" element={<LawyersDirectoryPage />} />
                 <Route path="/admin/forum" element={<AdminForumPage />} />
                 <Route path="/admin/blog" element={<AdminBlogPage />} />
                 <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />

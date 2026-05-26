@@ -16,6 +16,9 @@ import {
   Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
+import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
+import { BookOpen } from "lucide-react";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -251,9 +254,23 @@ const LawyerChatPage = () => {
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
+
+    // Защита: блокируем обмен внешними контактами в чате до подписания договора
+    let safeContent = content;
+    if (content && type === "text") {
+      const check = sanitizeChatMessage(content);
+      if (check.hasReplacements) {
+        safeContent = check.sanitized;
+        toast({
+          title: "Контакты скрыты",
+          description: `Мы скрыли ${describeDetected(check.detected)} в вашем сообщении. До договора общение только в чате сайта.`,
+        });
+      }
+    }
+
     const { data, error } = await supabase.from("lawyer_chat_messages").insert({
       lawyer_client_id: clientId, sender_id: user!.id,
-      content: content || null, message_type: type,
+      content: safeContent || null, message_type: type,
       file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
     }).select().single();
     if (error) {
@@ -546,6 +563,11 @@ const LawyerChatPage = () => {
                 </p>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
+                <DiseaseScheduleDrawer>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex">
+                    <BookOpen className="h-3.5 w-3.5" />Расписание
+                  </Button>
+                </DiseaseScheduleDrawer>
                 <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex" asChild>
                   <Link to={`/lawyer/clients/${clientId}`}>
                     <User className="h-3.5 w-3.5" />Дело
