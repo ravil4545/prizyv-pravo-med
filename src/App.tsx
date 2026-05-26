@@ -9,6 +9,7 @@ import QuickActionFAB from "./components/QuickActionFAB";
 import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
+import RoleGuard from "./components/RoleGuard";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -158,14 +159,15 @@ const App = () => (
                 <Route path="/forum" element={<ForumPage />} />
                 <Route path="/blog" element={<BlogPage />} />
                 <Route path="/blog/:slug" element={<BlogDetailPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
-                <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
-                <Route path="/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
+                {/* Клиентский кабинет — юристов отсюда редиректит на /lawyer */}
+                <Route path="/dashboard" element={<RoleGuard role="client"><DashboardPage /></RoleGuard>} />
+                <Route path="/dashboard/templates" element={<RoleGuard role="client"><UserTemplatesPage /></RoleGuard>} />
+                <Route path="/dashboard/ai-chat" element={<RoleGuard role="client"><AIChatDashboardPage /></RoleGuard>} />
+                <Route path="/dashboard/medical-documents" element={<RoleGuard role="client"><MedicalDocumentsPage /></RoleGuard>} />
                 <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
-                <Route path="/medical-history" element={<MedicalHistoryPage />} />
-                <Route path="/medical-questionnaire" element={<MedicalQuestionnairePage />} />
-                <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                <Route path="/medical-history" element={<RoleGuard role="client"><MedicalHistoryPage /></RoleGuard>} />
+                <Route path="/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
+                <Route path="/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
                 <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
@@ -177,16 +179,18 @@ const App = () => (
                 <Route path="/admin/articles" element={<AdminArticlesPage />} />
                 <Route path="/admin/users" element={<AdminUsersPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/lawyer" element={<LawyerDashboard />} />
-                <Route path="/lawyer/clients" element={<LawyerClientsPage />} />
-                <Route path="/lawyer/clients/:clientId" element={<LawyerClientDetail />} />
-                <Route path="/lawyer/chat/:clientId" element={<LawyerChatPage />} />
-                <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
-                <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
-                <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
-                <Route path="/lawyer/branding" element={<LawyerBrandingPage />} />
-                <Route path="/client/messages" element={<ClientMessagesPage />} />
-                <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
+                {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard */}
+                <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
+                <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />
+                <Route path="/lawyer/clients/:clientId" element={<RoleGuard role="lawyer"><LawyerClientDetail /></RoleGuard>} />
+                <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
+                <Route path="/lawyer/templates" element={<RoleGuard role="lawyer"><LawyerTemplatesPage /></RoleGuard>} />
+                <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
+                <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />
+                <Route path="/lawyer/branding" element={<RoleGuard role="lawyer"><LawyerBrandingPage /></RoleGuard>} />
+                {/* /client/* — переписки клиента с юристами; доступны только клиентам */}
+                <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
+                <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

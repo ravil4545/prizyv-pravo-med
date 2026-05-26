@@ -24,8 +24,10 @@ import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
-  ShieldCheck, Lock,
+  ShieldCheck, Lock, FileSignature,
 } from "lucide-react";
+import TemplatePickerDialog from "@/components/TemplatePickerDialog";
+import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
 
 const stripMarkdown = (s: string) =>
   s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
@@ -88,6 +90,11 @@ const LawyerClientDetail = () => {
   const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // Адрес из profiles — для авто-заполнения шаблонов; подгружается когда
+  // клиент привязан и есть доступ к его данным
+  const [clientAddress, setClientAddress] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isLawyer) { navigate("/dashboard"); return; }
@@ -126,6 +133,18 @@ const LawyerClientDetail = () => {
         .select("id,title,document_date,ai_fitness_category,ai_category_chance,ai_recommendations,ai_explanation,file_url,created_at")
         .eq("user_id", clientUserId).order("document_date", { ascending: false });
       setMedDocs((data as MedDoc[]) || []);
+
+      // Подтягиваем адрес из profiles — для авто-подстановки в шаблоны
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("registration_address, actual_address")
+        .eq("id", clientUserId)
+        .maybeSingle();
+      if (prof) {
+        setClientAddress(
+          (prof as any).registration_address || (prof as any).actual_address || null,
+        );
+      }
     }
     setDocsLoading(false);
   };
@@ -275,6 +294,9 @@ const LawyerClientDetail = () => {
                 <Trophy className="h-4 w-4 mr-1" />ВБ получен
               </Button>
             )}
+            <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+              <FileSignature className="h-4 w-4 mr-1" />Из шаблона
+            </Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/chat/${clientId}`)}>
               <MessageSquare className="h-4 w-4 mr-1" />Чат
             </Button>
@@ -657,6 +679,24 @@ const LawyerClientDetail = () => {
         </Tabs>
       </main>
       <Footer />
+
+      {/* ── Templates Picker: подставит данные клиента ─────────────────── */}
+      <TemplatePickerDialog
+        open={templatesOpen}
+        onOpenChange={setTemplatesOpen}
+        isPro={isPro}
+        prefillSource={client ? {
+          client_name: client.client_name,
+          client_phone: client.client_phone,
+          client_email: client.client_email,
+          client_birth_year: client.client_birth_year,
+          conscription_date: client.conscription_date,
+          diagnosis: client.diagnosis,
+          expected_category: client.expected_category,
+          client_address: clientAddress,
+        } as ClientPrefillSource : null}
+      />
+
       {/* ── Document Preview Dialog ─────────────────────────────────────── */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) { setPreviewDoc(null); setPreviewSignedUrl(null); } }}>
         <DialogContent className="max-w-4xl w-full h-[90vh] flex flex-col p-0">
