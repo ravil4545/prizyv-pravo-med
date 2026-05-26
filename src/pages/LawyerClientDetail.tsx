@@ -24,6 +24,7 @@ import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
+  ShieldCheck, Lock,
 } from "lucide-react";
 
 const stripMarkdown = (s: string) =>
@@ -293,13 +294,57 @@ const LawyerClientDetail = () => {
 
           {/* ── TAB: Overview ────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-4">
+            {/* Карточка контактных данных */}
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">Данные клиента</CardTitle></CardHeader>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base flex items-center gap-2">
+                  {client?.client_user_id && !hasDocAccess ? (
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <User className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  Контактные данные клиента
+                </CardTitle>
+                {client?.client_user_id && (
+                  hasDocAccess ? (
+                    <Badge variant="outline" className="text-[10px] gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
+                      <ShieldCheck className="h-3 w-3" /> Доступ открыт
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Lock className="h-3 w-3" /> Скрыто до согласия
+                    </Badge>
+                  )
+                )}
+              </CardHeader>
+              <CardContent>
+                {client?.client_user_id && !hasDocAccess ? (
+                  <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+                    <p className="text-sm font-medium mb-1.5">Контакты клиента пока скрыты</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Клиент пришёл через каталог сайта и общается с вами анонимно. ФИО, телефон
+                      и email откроются автоматически, как только клиент даст вам доступ к своим
+                      медицинским документам в личном кабинете.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Попросите его в чате открыть доступ — раздел «Доступ юриста к документам» в кабинете.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div><Label>ФИО</Label><Input value={form.client_name} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))} /></div>
+                    <div><Label>Телефон</Label><Input value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} /></div>
+                    <div><Label>Email</Label><Input value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} /></div>
+                    <div><Label>Год рождения</Label><Input type="number" value={form.client_birth_year} onChange={(e) => setForm((f) => ({ ...f, client_birth_year: e.target.value }))} /></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Карточка дела — заполняет юрист */}
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base">Дело и параметры</CardTitle></CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-4">
-                <div><Label>ФИО</Label><Input value={form.client_name} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))} /></div>
-                <div><Label>Телефон</Label><Input value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} /></div>
-                <div><Label>Email</Label><Input value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} /></div>
-                <div><Label>Год рождения</Label><Input type="number" value={form.client_birth_year} onChange={(e) => setForm((f) => ({ ...f, client_birth_year: e.target.value }))} /></div>
                 <div><Label>Дата призыва</Label><Input type="date" value={form.conscription_date} onChange={(e) => setForm((f) => ({ ...f, conscription_date: e.target.value }))} /></div>
                 <div><Label>Приоритет</Label>
                   <Select value={form.priority} onValueChange={(v) => setForm((f) => ({ ...f, priority: v }))}>
@@ -321,15 +366,19 @@ const LawyerClientDetail = () => {
                 <div className="sm:col-span-2"><Label>Заметки</Label>
                   <Textarea rows={4} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
                 </div>
-                <div className="sm:col-span-2">
-                  <Label>ID аккаунта клиента (для доступа к документам)</Label>
-                  <Input
-                    value={form.client_user_id}
-                    onChange={(e) => setForm((f) => ({ ...f, client_user_id: e.target.value }))}
-                    placeholder="UUID из профиля клиента на сайте"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Клиент найдёт свой ID в личном кабинете → блок «Доступ юриста к документам»</p>
-                </div>
+
+                {/* UUID-поле — только если клиент НЕ привязан (manual mode) */}
+                {!client?.client_user_id && (
+                  <div className="sm:col-span-2">
+                    <Label>ID аккаунта клиента (для доступа к документам)</Label>
+                    <Input
+                      value={form.client_user_id}
+                      onChange={(e) => setForm((f) => ({ ...f, client_user_id: e.target.value }))}
+                      placeholder="UUID из профиля клиента на сайте"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Клиент найдёт свой ID в личном кабинете → блок «Доступ юриста к документам»</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -120,15 +120,6 @@ const LawyersDirectoryPage = () => {
 
     setRequesting(true);
     try {
-      // Получаем имя клиента из profiles
-      const { data: clientProfile } = await supabase
-        .from("profiles")
-        .select("full_name, phone")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      const clientName = clientProfile?.full_name || session.user.email || "Новый клиент";
-
       // Проверяем — может уже есть запись от этого клиента к этому юристу
       const { data: existing } = await supabase
         .from("lawyer_clients")
@@ -140,14 +131,15 @@ const LawyersDirectoryPage = () => {
       let lawyerClientId = existing?.id;
 
       if (!lawyerClientId) {
+        // Обезличенное имя — реальные ФИО/телефон/email раскроются юристу
+        // только когда клиент сам откроет доступ к документам через профиль
+        const anonName = `Клиент #${session.user.id.substring(0, 8)}`;
         const { data: created, error: insertError } = await supabase
           .from("lawyer_clients")
           .insert({
             lawyer_id: selectedLawyer.user_id,
             client_user_id: session.user.id,
-            client_name: clientName,
-            client_phone: clientProfile?.phone || null,
-            client_email: session.user.email || null,
+            client_name: anonName,
             crm_stage: "initial_contact",
             priority: "high",
           })
