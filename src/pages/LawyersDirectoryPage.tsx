@@ -175,7 +175,7 @@ const LawyersDirectoryPage = () => {
       setSelectedLawyer(null);
       setRequestMessage("");
       // Ведём клиента в его «Сообщения» в кабинете
-      navigate("/dashboard/messages");
+      navigate("/client/messages");
     } catch (error: any) {
       toast({
         title: "Не удалось отправить запрос",
