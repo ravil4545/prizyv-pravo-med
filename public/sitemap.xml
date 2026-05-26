@@ -1,44 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Статический sitemap для основных разделов.
+  Карточки диагнозов /diagnoses/{article_number} индексируются через
+  ссылки из /diagnoses (краулер обходит динамически).
+  Для production-уровня — сгенерировать через Supabase Edge Function.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://nepriziv.ru/</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://nepriziv.ru/services</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nepriziv.ru/diagnoses</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nepriziv.ru/commissariats</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nepriziv.ru/success-cases</loc>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://nepriziv.ru/templates</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://nepriziv.ru/blog</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://nepriziv.ru/testimonials</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://nepriziv.ru/forum</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://nepriziv.ru/dashboard</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://nepriziv.ru/auth</loc>
-    <lastmod>2025-10-05</lastmod>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

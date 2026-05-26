@@ -5,9 +5,10 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase, Users, Scale } from "lucide-react";
+import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase, Users, Scale, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
+import CaseRoadmap from "@/components/CaseRoadmap";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
 import { GridSkeleton } from "@/components/LoadingSkeleton";
@@ -161,6 +162,13 @@ const DashboardPage = () => {
 
   const communityCards: DashboardCard[] = [
     {
+      title: "Юристы платформы",
+      description: "Подобрать юриста и написать в защищённом чате — без обмена контактами",
+      icon: Briefcase,
+      path: "/lawyers",
+      tag: "Сделка на сайте",
+    },
+    {
       title: "База успешных кейсов",
       description: "Реальные истории призывников с непризывными категориями",
       icon: Trophy,
@@ -204,6 +212,13 @@ const DashboardPage = () => {
               </Button>
             )}
           </div>
+
+          {/* Case roadmap (only for registered users — anonymous have no progress yet) */}
+          {!isDemoMode && (
+            <div className="mb-6">
+              <CaseRoadmap />
+            </div>
+          )}
 
           {/* Subscription Status */}
           <div className="mb-6">
@@ -256,49 +271,69 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {/* Chat Banner — client version */}
+          {/* Юристы — две карты рядом: подобрать нового + текущие чаты */}
           {!isDemoMode && !isLawyer && (
-            <div
-              onClick={() => navigate("/client/messages")}
-              className={cn(
-                "mb-6 cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
-                "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
-                unreadCount > 0
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-border/60 bg-muted/20 hover:bg-muted/40"
-              )}
-            >
-              <div className={cn(
-                "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
-                unreadCount > 0
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
-              )}>
-                <Briefcase className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
-                    Чат с юристом
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Найти юриста */}
+              <div
+                onClick={() => navigate("/lawyers")}
+                className="cursor-pointer rounded-xl border border-gold/40 bg-gradient-to-br from-gold/5 to-paper-deep/20 px-4 py-3.5 flex items-center gap-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-gold group"
+              >
+                <div className="flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center bg-gold/15 text-gold-deep group-hover:bg-gold/25 transition-colors">
+                  <Search className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-foreground">Найти юриста</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    Каталог юристов · защищённый чат до договора
                   </p>
+                </div>
+                <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/50 group-hover:text-gold-deep transition-colors" />
+              </div>
+
+              {/* Мои чаты с юристами */}
+              <div
+                onClick={() => navigate("/client/messages")}
+                className={cn(
+                  "cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
+                  "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
+                  unreadCount > 0
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 bg-muted/20 hover:bg-muted/40"
+                )}
+              >
+                <div className={cn(
+                  "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
+                  unreadCount > 0
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
+                )}>
+                  <Briefcase className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0 h-4">
-                      {unreadCount} новых
+                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
+                      {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {unreadCount > 0
-                    ? "Юрист написал вам — нажмите, чтобы ответить"
-                    : "Переписка с вашим юристом"}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
+                      Мои чаты с юристами
+                    </p>
+                    {unreadCount > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0 h-4">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {unreadCount > 0
+                      ? "Юрист написал — нажмите, чтобы ответить"
+                      : "История переписки с вашими юристами"}
+                  </p>
+                </div>
+                <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
               </div>
-              <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
             </div>
           )}
 

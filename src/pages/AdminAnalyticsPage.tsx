@@ -7,8 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { ArrowLeft, Users, Eye, Clock, MousePointer } from 'lucide-react';
-import { format } from 'date-fns';
+import { ArrowLeft, Users, Eye, Clock, MousePointer, TrendingDown, Activity, ShieldAlert } from 'lucide-react';
+import { format, startOfWeek, differenceInDays } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 interface AnalyticsEvent {
   id: string;
@@ -36,6 +37,33 @@ interface DeviceStats {
   count: number;
 }
 
+interface CohortRow {
+  weekStart: string;
+  weekLabel: string;
+  total: number;
+  d1: number;
+  d7: number;
+  d30: number;
+  weekAgeDays: number;
+}
+
+interface FunnelStep {
+  name: string;
+  count: number;
+  pctFromFirst: number;
+  pctFromPrev: number;
+}
+
+interface AdminEvent {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  page_url: string;
+  created_at: string;
+  browser: string | null;
+  device_type: string | null;
+}
+
 const AdminAnalyticsPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -46,6 +74,11 @@ const AdminAnalyticsPage = () => {
   const [totalSessions, setTotalSessions] = useState(0);
   const [totalPageViews, setTotalPageViews] = useState(0);
   const [avgDuration, setAvgDuration] = useState(0);
+
+  // Cohorts / funnel / audit
+  const [cohorts, setCohorts] = useState<CohortRow[]>([]);
+  const [funnel, setFunnel] = useState<FunnelStep[]>([]);
+  const [adminEvents, setAdminEvents] = useState<AdminEvent[]>([]);
 
   useEffect(() => {
     checkAdminAndLoadData();
@@ -72,11 +105,116 @@ const AdminAnalyticsPage = () => {
         return;
       }
 
-      await loadAnalytics();
+      await Promise.all([loadAnalytics(), loadAdvanced()]);
     } catch (error) {
       console.error('Error checking admin status:', error);
       navigate('/dashboard');
     }
+  };
+
+  const loadAdvanced = async () => {
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - 90);
+    const sinceIso = sinceDate.toISOString();
+    const now = new Date();
+
+    const [{ data: profiles }, { data: subs }, { data: docs }, { data: aEvents }, { data: adminRoles }] = await Promise.all([
+      supabase.from('profiles').select('id, created_at, full_name').gte('created_at', sinceIso),
+      supabase.from('user_subscriptions').select('user_id, is_paid, paid_until, created_at'),
+      supabase.from('medical_documents_v2').select('user_id, uploaded_at, is_classified').gte('uploaded_at', sinceIso),
+      supabase.from('analytics_events').select('user_id, session_id, page_url, created_at, browser, device_type, id').gte('created_at', sinceIso).order('created_at', { ascending: false }).limit(5000),
+      supabase.from('user_roles').select('user_id').eq('role', 'admin'),
+    ]);
+
+    const lastActivityByUser: Record<string, string> = {};
+    (aEvents || []).forEach((e: any) => {
+      if (!e.user_id) return;
+      if (!lastActivityByUser[e.user_id] || lastActivityByUser[e.user_id] < e.created_at) {
+        lastActivityByUser[e.user_id] = e.created_at;
+      }
+    });
+
+    // ── Cohorts: weekly registration buckets + retention ──────────────
+    const cohortMap = new Map<string, { users: { id: string; created: Date }[] }>();
+    (profiles || []).forEach((p: any) => {
+      if (!p.created_at) return;
+      const created = new Date(p.created_at);
+      const weekStart = startOfWeek(created, { weekStartsOn: 1 });
+      const key = format(weekStart, 'yyyy-MM-dd');
+      if (!cohortMap.has(key)) cohortMap.set(key, { users: [] });
+      cohortMap.get(key)!.users.push({ id: p.id, created });
+    });
+
+    const rows: CohortRow[] = [];
+    cohortMap.forEach(({ users }, weekStart) => {
+      const weekDate = new Date(weekStart);
+      const weekAgeDays = differenceInDays(now, weekDate);
+      const total = users.length;
+      let d1 = 0, d7 = 0, d30 = 0;
+      users.forEach((u) => {
+        const last = lastActivityByUser[u.id];
+        if (!last) return;
+        const lastDate = new Date(last);
+        const daysActive = differenceInDays(lastDate, u.created);
+        if (daysActive >= 1) d1++;
+        if (daysActive >= 7) d7++;
+        if (daysActive >= 30) d30++;
+      });
+      rows.push({
+        weekStart,
+        weekLabel: format(weekDate, 'd MMM', { locale: ru }),
+        total, d1, d7, d30, weekAgeDays,
+      });
+    });
+    rows.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+    setCohorts(rows);
+
+    // ── Funnel ───────────────────────────────────────────────────────
+    const visitorSessions = new Set<string>();
+    (aEvents || []).forEach((e: any) => visitorSessions.add(e.session_id));
+    const visitors = visitorSessions.size;
+    const registered = (profiles || []).length;
+    const uploaders = new Set<string>();
+    const analyzed = new Set<string>();
+    (docs || []).forEach((d: any) => {
+      uploaders.add(d.user_id);
+      if (d.is_classified) analyzed.add(d.user_id);
+    });
+    const subscribers = (subs || []).filter((s: any) => s.is_paid && (!s.paid_until || new Date(s.paid_until) > now)).length;
+
+    const stepValues = [
+      { name: 'Посетители', count: visitors },
+      { name: 'Регистрация', count: registered },
+      { name: 'Загрузил документ', count: uploaders.size },
+      { name: 'AI-анализ', count: analyzed.size },
+      { name: 'Подписка', count: subscribers },
+    ];
+    const first = stepValues[0].count || 1;
+    const steps: FunnelStep[] = stepValues.map((s, i) => ({
+      name: s.name,
+      count: s.count,
+      pctFromFirst: Math.round((s.count / first) * 100),
+      pctFromPrev: i === 0 ? 100 : Math.round((s.count / Math.max(1, stepValues[i - 1].count)) * 100),
+    }));
+    setFunnel(steps);
+
+    // ── Admin audit (events with /admin/ path from admin users) ─────
+    const adminIds = new Set((adminRoles || []).map((r: any) => r.user_id));
+    const profileMap = new Map<string, string>();
+    (profiles || []).forEach((p: any) => { if (p.full_name) profileMap.set(p.id, p.full_name); });
+    const audit: AdminEvent[] = (aEvents || [])
+      .filter((e: any) => e.page_url?.startsWith('/admin') && (e.user_id ? adminIds.has(e.user_id) : false))
+      .slice(0, 200)
+      .map((e: any) => ({
+        id: e.id,
+        user_id: e.user_id,
+        user_email: e.user_id ? (profileMap.get(e.user_id) || e.user_id.substring(0, 8)) : null,
+        page_url: e.page_url,
+        created_at: e.created_at,
+        browser: e.browser,
+        device_type: e.device_type,
+      }));
+    setAdminEvents(audit);
   };
 
   const loadAnalytics = async () => {
@@ -239,11 +377,14 @@ const AdminAnalyticsPage = () => {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
+            <TabsTrigger value="funnel">Воронка</TabsTrigger>
+            <TabsTrigger value="cohorts">Когорты</TabsTrigger>
             <TabsTrigger value="pages">Страницы</TabsTrigger>
             <TabsTrigger value="devices">Устройства</TabsTrigger>
             <TabsTrigger value="events">События</TabsTrigger>
+            <TabsTrigger value="audit">Аудит</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -342,6 +483,113 @@ const AdminAnalyticsPage = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="funnel" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingDown className="h-5 w-5 text-primary" />
+                  Воронка конверсии (90 дней)
+                </CardTitle>
+                <CardDescription>
+                  От посетителей до оплативших подписку. % from prev — конверсия от предыдущего шага.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {funnel.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Нет данных за период</p>
+                ) : (
+                  <div className="space-y-3">
+                    {funnel.map((step, i) => (
+                      <div key={step.name}>
+                        <div className="flex items-center justify-between mb-1 text-sm">
+                          <span className="font-medium">
+                            <span className="text-muted-foreground mr-2">{i + 1}.</span>
+                            {step.name}
+                          </span>
+                          <span className="flex items-center gap-3 font-mono">
+                            <span className="font-semibold">{step.count}</span>
+                            <span className="text-xs text-muted-foreground w-20 text-right">
+                              {i > 0 && `→ ${step.pctFromPrev}%`}
+                            </span>
+                            <span className="text-xs text-muted-foreground w-16 text-right">
+                              {step.pctFromFirst}% от 1
+                            </span>
+                          </span>
+                        </div>
+                        <div className="h-8 bg-muted rounded relative overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all flex items-center px-2"
+                            style={{ width: `${Math.max(step.pctFromFirst, 2)}%` }}
+                          >
+                            <span className="text-xs text-primary-foreground font-mono whitespace-nowrap">
+                              {step.count}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="cohorts" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-primary" />
+                  Когорты регистраций (последние 90 дней)
+                </CardTitle>
+                <CardDescription>
+                  Retention: % зарегистрированных, которые проявили активность через 1/7/30 дней. «—» — когорта моложе периода.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {cohorts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Нет регистраций за период</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Неделя</TableHead>
+                          <TableHead className="text-right">Регистраций</TableHead>
+                          <TableHead className="text-right">D1</TableHead>
+                          <TableHead className="text-right">D7</TableHead>
+                          <TableHead className="text-right">D30</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cohorts.map((c) => {
+                          const fmt = (n: number, threshold: number) => {
+                            if (c.weekAgeDays < threshold) return <span className="text-muted-foreground">—</span>;
+                            const pct = c.total > 0 ? Math.round((n / c.total) * 100) : 0;
+                            return (
+                              <span>
+                                <span className="font-semibold">{n}</span>
+                                <span className="text-xs text-muted-foreground ml-1">({pct}%)</span>
+                              </span>
+                            );
+                          };
+                          return (
+                            <TableRow key={c.weekStart}>
+                              <TableCell className="font-mono text-xs">{c.weekLabel}</TableCell>
+                              <TableCell className="text-right font-semibold">{c.total}</TableCell>
+                              <TableCell className="text-right">{fmt(c.d1, 1)}</TableCell>
+                              <TableCell className="text-right">{fmt(c.d7, 7)}</TableCell>
+                              <TableCell className="text-right">{fmt(c.d30, 30)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="events" className="space-y-4">
             <Card>
               <CardHeader>
@@ -379,6 +627,52 @@ const AdminAnalyticsPage = () => {
                     </TableBody>
                   </Table>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="audit" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-primary" />
+                  Аудит админских заходов
+                </CardTitle>
+                <CardDescription>
+                  Посещения /admin/* админами за последние 90 дней (до 200 событий).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {adminEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Нет административных событий</p>
+                ) : (
+                  <div className="max-h-[600px] overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Время</TableHead>
+                          <TableHead>Админ</TableHead>
+                          <TableHead>Раздел</TableHead>
+                          <TableHead>Браузер</TableHead>
+                          <TableHead>Устройство</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {adminEvents.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell className="text-xs font-mono">
+                              {format(new Date(e.created_at), 'dd.MM HH:mm:ss')}
+                            </TableCell>
+                            <TableCell className="text-xs">{e.user_email || '—'}</TableCell>
+                            <TableCell className="text-xs font-mono">{e.page_url}</TableCell>
+                            <TableCell className="text-xs">{e.browser || '—'}</TableCell>
+                            <TableCell className="text-xs">{e.device_type || '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

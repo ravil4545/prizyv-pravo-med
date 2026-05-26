@@ -12,6 +12,7 @@ import {
   Briefcase, Check, CheckCheck, MessageSquare, ChevronRight, Image as ImageIcon, Pencil, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -156,9 +157,23 @@ const ClientChatPage = () => {
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
+
+    // Защита: блокируем обмен внешними контактами в чате до подписания договора
+    let safeContent = content;
+    if (content && type === "text") {
+      const check = sanitizeChatMessage(content);
+      if (check.hasReplacements) {
+        safeContent = check.sanitized;
+        toast({
+          title: "Контакты скрыты",
+          description: `Мы скрыли ${describeDetected(check.detected)} в вашем сообщении. До договора общение только в чате сайта.`,
+        });
+      }
+    }
+
     const { data, error } = await supabase.from("lawyer_chat_messages").insert({
       lawyer_client_id: lawyerClientId, sender_id: user!.id,
-      content: content || null, message_type: type,
+      content: safeContent || null, message_type: type,
       file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
     }).select().single();
     if (error) {

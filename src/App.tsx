@@ -7,6 +7,8 @@ import { lazy, Suspense, Component, ReactNode } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
 import { AuthProvider } from "./contexts/AuthContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
+import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -57,8 +59,10 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const TestimonialsPage = lazy(() => import("./pages/TestimonialsPage"));
 const DiagnosesPage = lazy(() => import("./pages/DiagnosesPage"));
+const DiagnosisDetailPage = lazy(() => import("./pages/DiagnosisDetailPage"));
 const ForumPage = lazy(() => import("./pages/ForumPage"));
 const BlogPage = lazy(() => import("./pages/BlogPage"));
+const BlogDetailPage = lazy(() => import("./pages/BlogDetailPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const UserTemplatesPage = lazy(() => import("./pages/UserTemplatesPage"));
 const AIChatDashboardPage = lazy(() => import("./pages/AIChatDashboardPage"));
@@ -75,6 +79,8 @@ const MedicalQuestionnairePage = lazy(() => import("./pages/MedicalQuestionnaire
 const CaseTrackingPage = lazy(() => import("./pages/CaseTrackingPage"));
 const SuccessCasesPage = lazy(() => import("./pages/SuccessCasesPage"));
 const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirectoryPage"));
+const CommissariatDetailPage = lazy(() => import("./pages/CommissariatDetailPage"));
+const LawyersDirectoryPage = lazy(() => import("./pages/LawyersDirectoryPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
 const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
@@ -83,6 +89,7 @@ const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
 const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
 const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
 const LawyerAnalyticsPage = lazy(() => import("./pages/LawyerAnalyticsPage"));
+const LawyerBrandingPage = lazy(() => import("./pages/LawyerBrandingPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 // Lazy-load RagChat — keeps react-markdown out of the main bundle
@@ -116,10 +123,28 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <BrandingProvider>
+          <BrandedPWAMeta />
           <ErrorBoundary>
             <AnalyticsTracker />
             <Suspense fallback={<PageLoader />}>
               <Routes>
+                {/* White-label маршруты юриста — точка входа клиента по ссылке/QR */}
+                <Route path="/u/:slug" element={<Index />} />
+                <Route path="/u/:slug/auth" element={<AuthPage />} />
+                <Route path="/u/:slug/register" element={<RegisterPage />} />
+                <Route path="/u/:slug/login" element={<LoginPage />} />
+                <Route path="/u/:slug/dashboard" element={<DashboardPage />} />
+                <Route path="/u/:slug/dashboard/ai-chat" element={<AIChatDashboardPage />} />
+                <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
+                <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
+                <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
+                <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
+                <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
+                <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
+                <Route path="/u/:slug/profile" element={<ProfilePage />} />
+
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/register" element={<RegisterPage />} />
@@ -129,8 +154,10 @@ const App = () => (
                 <Route path="/testimonials" element={<TestimonialsPage />} />
                 <Route path="/templates" element={<TemplatesPage />} />
                 <Route path="/diagnoses" element={<DiagnosesPage />} />
+                <Route path="/diagnoses/:slug" element={<DiagnosisDetailPage />} />
                 <Route path="/forum" element={<ForumPage />} />
                 <Route path="/blog" element={<BlogPage />} />
+                <Route path="/blog/:slug" element={<BlogDetailPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/dashboard/templates" element={<UserTemplatesPage />} />
                 <Route path="/dashboard/ai-chat" element={<AIChatDashboardPage />} />
@@ -141,6 +168,8 @@ const App = () => (
                 <Route path="/dashboard/case-tracking" element={<CaseTrackingPage />} />
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
+                <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
+                <Route path="/lawyers" element={<LawyersDirectoryPage />} />
                 <Route path="/admin/forum" element={<AdminForumPage />} />
                 <Route path="/admin/blog" element={<AdminBlogPage />} />
                 <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
@@ -155,6 +184,7 @@ const App = () => (
                 <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
                 <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
                 <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
+                <Route path="/lawyer/branding" element={<LawyerBrandingPage />} />
                 <Route path="/client/messages" element={<ClientMessagesPage />} />
                 <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
                 <Route path="*" element={<NotFound />} />
@@ -164,6 +194,7 @@ const App = () => (
             <Suspense fallback={null}><RagChat /></Suspense>
             <MobileBottomNav />
           </ErrorBoundary>
+          </BrandingProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

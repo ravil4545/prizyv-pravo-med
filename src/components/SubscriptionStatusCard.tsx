@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { Card, CardContent } from "@/components/ui/card";
@@ -5,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Crown, FileText, MessageSquare, AlertTriangle, UserPlus, Sparkles, Shield, Zap } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-
-const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import PaymentInstructionsDialog from "./PaymentInstructionsDialog";
 
 interface SubscriptionStatusCardProps {
   compact?: boolean;
@@ -16,8 +15,21 @@ interface SubscriptionStatusCardProps {
 
 export default function SubscriptionStatusCard({ compact = false }: SubscriptionStatusCardProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const { subscription, loading: subLoading, isActive, remainingDocUploads, remainingAIQuestions } = useSubscription();
   const { isDemoMode, remainingDemoDocs, remainingDemoAI, demoDocLimit, demoAiLimit } = useDemoMode();
+
+  // Авто-открытие диалога оплаты по ?pay=1 — поддержка перехода с лендинга Pricing
+  useEffect(() => {
+    if (searchParams.get("pay") === "1" && !isDemoMode) {
+      setPaymentDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("pay");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isDemoMode]);
 
   if (subLoading && !isDemoMode) return null;
 
@@ -37,52 +49,45 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
   const handlePayment = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    window.open(YOOMONEY_PAYMENT_URL, "_blank");
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await supabase.functions.invoke('notify-payment-click', {
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        });
-      } catch (err) {
-        console.error('Notification error:', err);
-      }
-    })();
+    setPaymentDialogOpen(true);
   };
 
   // PAID MODE
   if (mode === "paid") {
     return (
-      <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-accent/5 shadow-soft overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <CardContent className={compact ? "p-3" : "p-5"}>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md">
-              <Crown className="h-5 w-5 text-white" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-foreground">Премиум подписка</span>
-                <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">Активна</Badge>
-                {subscription?.paid_until && (
-                  <Badge variant="outline" className="text-xs">
-                    до {new Date(subscription.paid_until).toLocaleDateString("ru-RU")}
-                  </Badge>
+      <>
+        <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-accent/5 shadow-soft overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <CardContent className={compact ? "p-3" : "p-5"}>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md">
+                <Crown className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-foreground">Премиум подписка</span>
+                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">Активна</Badge>
+                  {subscription?.paid_until && (
+                    <Badge variant="outline" className="text-xs">
+                      до {new Date(subscription.paid_until).toLocaleDateString("ru-RU")}
+                    </Badge>
+                  )}
+                </div>
+                {!compact && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Безлимитный доступ ко всем функциям
+                  </p>
                 )}
               </div>
-              {!compact && (
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Безлимитный доступ ко всем функциям
-                </p>
-              )}
+              <div className="flex items-center gap-1.5 text-primary">
+                <Sparkles className="h-4 w-4" />
+                <span className="text-sm font-medium">∞</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-primary">
-              <Sparkles className="h-4 w-4" />
-              <span className="text-sm font-medium">∞</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        <PaymentInstructionsDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} />
+      </>
     );
   }
 
@@ -120,6 +125,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
   const Icon = config.icon;
 
   return (
+    <>
     <Card className={`${config.borderClass} ${config.bgClass} shadow-soft overflow-hidden relative`}>
       <div className="absolute top-0 right-0 w-24 h-24 bg-primary/3 rounded-full -translate-y-1/2 translate-x-1/2" />
       <CardContent className={compact ? "p-3" : "p-5"}>
@@ -211,5 +217,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
         </div>
       </CardContent>
     </Card>
+    <PaymentInstructionsDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} />
+    </>
   );
 }

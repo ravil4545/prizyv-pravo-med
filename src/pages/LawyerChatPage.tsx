@@ -16,6 +16,9 @@ import {
   Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
+import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
+import { BookOpen } from "lucide-react";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -251,9 +254,23 @@ const LawyerChatPage = () => {
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
+
+    // Защита: блокируем обмен внешними контактами в чате до подписания договора
+    let safeContent = content;
+    if (content && type === "text") {
+      const check = sanitizeChatMessage(content);
+      if (check.hasReplacements) {
+        safeContent = check.sanitized;
+        toast({
+          title: "Контакты скрыты",
+          description: `Мы скрыли ${describeDetected(check.detected)} в вашем сообщении. До договора общение только в чате сайта.`,
+        });
+      }
+    }
+
     const { data, error } = await supabase.from("lawyer_chat_messages").insert({
       lawyer_client_id: clientId, sender_id: user!.id,
-      content: content || null, message_type: type,
+      content: safeContent || null, message_type: type,
       file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
     }).select().single();
     if (error) {
@@ -546,6 +563,11 @@ const LawyerChatPage = () => {
                 </p>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
+                <DiseaseScheduleDrawer>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex">
+                    <BookOpen className="h-3.5 w-3.5" />Расписание
+                  </Button>
+                </DiseaseScheduleDrawer>
                 <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 hidden sm:flex" asChild>
                   <Link to={`/lawyer/clients/${clientId}`}>
                     <User className="h-3.5 w-3.5" />Дело
@@ -559,16 +581,20 @@ const LawyerChatPage = () => {
                 <Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" asChild>
                   <Link to={`/lawyer/clients/${clientId}`}><User className="h-4 w-4" /></Link>
                 </Button>
-                {/* Mobile: open AI panel drawer */}
+                {/* Открыть AI-панель на узких экранах (где постоянная панель скрыта) */}
                 <Button
-                  variant="ghost" size="icon"
-                  className="h-8 w-8 lg:hidden flex-shrink-0 relative"
+                  variant={suggestionHistory.length > 0 ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 md:hidden flex-shrink-0 relative"
                   onClick={() => setAiPanelOpen(true)}
-                  title="ИИ-рекомендации"
+                  title="ИИ-помощник: подсказки ответа клиенту"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-3.5 w-3.5" />
+                  ИИ
                   {suggestionHistory.length > 0 && (
-                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                    <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-foreground text-primary text-[10px] px-1">
+                      {suggestionHistory.length}
+                    </span>
                   )}
                 </Button>
               </div>
@@ -699,8 +725,8 @@ const LawyerChatPage = () => {
             </div>
           </div>
 
-          {/* ── AI Panel — desktop right column ─────────────────────────────── */}
-          <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-l bg-card/30 flex-shrink-0">
+          {/* ── AI Panel — постоянно справа на экранах ≥ md ─────────────────── */}
+          <aside className="hidden md:flex flex-col w-60 lg:w-64 xl:w-72 border-l bg-card/30 flex-shrink-0">
             {aiPanelContent}
           </aside>
         </div>

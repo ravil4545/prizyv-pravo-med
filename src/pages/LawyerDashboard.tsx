@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, AlertTriangle, Trophy, TrendingUp,
-  Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText,
+  Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
 } from "lucide-react";
+import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 
 const CRM_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Первичный контакт",
@@ -54,8 +55,11 @@ const LawyerDashboard = () => {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || profileLoading) return;
-    if (!isLawyer) { navigate("/dashboard"); return; }
+    if (profileLoading) return;
+    // Не залогинен — на авторизацию с возвратом сюда
+    if (!user) { navigate("/auth?next=/lawyer", { replace: true }); return; }
+    // Залогинен, но не юрист — на обычный кабинет
+    if (!isLawyer) { navigate("/dashboard", { replace: true }); return; }
     loadStats();
   }, [user, profileLoading, isLawyer]);
 
@@ -79,15 +83,15 @@ const LawyerDashboard = () => {
     setDataLoading(false);
   };
 
-  if (profileLoading) return (
+  // Загрузка профиля либо ожидание редиректа (не залогинен / не юрист) — показываем skeleton,
+  // чтобы пользователь не видел вспышку белого экрана
+  if (profileLoading || !user || !isLawyer) return (
     <div className="min-h-screen bg-background"><Header />
       <main className="container mx-auto px-4 py-8 space-y-6">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
       </main>
     </div>
   );
-
-  if (!isLawyer) return null;
 
   const usedClients = totalClients;
   const clientLimit = profile?.clients_limit ?? 5;
@@ -108,7 +112,13 @@ const LawyerDashboard = () => {
               {profile?.full_name || user?.email} · {isPro ? "Pro" : "Basic"}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <DiseaseScheduleDrawer>
+              <Button variant="outline">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Расписание болезней
+              </Button>
+            </DiseaseScheduleDrawer>
             <Button variant="outline" asChild><Link to="/lawyer/templates"><FileText className="h-4 w-4 mr-2" />Шаблоны</Link></Button>
             <Button asChild><Link to="/lawyer/clients"><Plus className="h-4 w-4 mr-2" />Добавить клиента</Link></Button>
           </div>
@@ -227,6 +237,7 @@ const LawyerDashboard = () => {
             { to: "/lawyer/templates", icon: FileText,        label: "Шаблоны",       desc: "Документы" },
             { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами" },
             { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел" },
+            { to: "/lawyer/branding",  icon: Briefcase,      label: "Мой бренд",     desc: "Личное приложение и QR" },
           ].map(({ to, icon: Icon, label, desc }) => (
             <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(to)}>
               <CardContent className="p-4 text-center">

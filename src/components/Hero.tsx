@@ -1,24 +1,41 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, MessageCircle, Send, Bot, ChevronDown, Sparkles, ArrowRight } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
+import BrandedAvatar from "@/components/BrandedAvatar";
 
 const Hero = () => {
   const [aiOpen, setAiOpen] = useState(false);
   const navigate = useNavigate();
+  const branding = useBranding();
+
+  // Разбиваем ФИО на «фамилию» и «имя+отчество» для editorial-вёрстки
+  const nameParts = branding.displayName.trim().split(/\s+/);
+  const surname = nameParts[0] || "";
+  const givenNames = nameParts.slice(1).join(" ") || branding.displayName;
+  const initialsShort = nameParts.length >= 2
+    ? `${nameParts[1][0]}. ${nameParts[0]}`
+    : branding.displayName;
+
+  const phoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
+  const dashboardHome = `${branding.routePrefix}/dashboard`;
 
   const handlePhoneCall = () => {
-    window.location.href = "tel:+79253500533";
+    window.location.href = `tel:+${phoneDigits}`;
   };
 
   const handleWhatsApp = () => {
     const msg = encodeURIComponent(
-      "Здравствуйте, Александра Евгеньевна! Мне нужна консультация по призыву..."
+      `Здравствуйте, ${givenNames}! Мне нужна консультация по призыву...`
     );
-    window.open(`https://wa.me/79253500533?text=${msg}`, "_blank");
+    const wa = branding.whatsapp || "79253500533";
+    window.open(`https://wa.me/${wa}?text=${msg}`, "_blank");
   };
 
   const handleTelegram = () => {
-    window.open("https://t.me/nepriziv2", "_blank");
+    const tg = branding.telegram || "nepriziv2";
+    const url = tg.startsWith("http") ? tg : `https://t.me/${tg}`;
+    window.open(url, "_blank");
   };
 
   return (
@@ -67,11 +84,11 @@ const Hero = () => {
             {/* Editorial headline */}
             <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95] mb-4 sm:mb-6">
               <span className="block italic font-normal text-gold text-2xl sm:text-3xl md:text-4xl mb-2 tracking-normal">
-                Важанина
+                {surname}
               </span>
-              <span className="block">Александра</span>
+              <span className="block">{nameParts[1] || ""}</span>
               <span className="block font-light italic text-paper/70 text-3xl sm:text-4xl md:text-5xl mt-2">
-                — юрист призывного права
+                — {branding.subtitle.toLowerCase()}
               </span>
             </h1>
 
@@ -82,7 +99,7 @@ const Hero = () => {
                 в которой у вас в десять раз больше прав, чем вам пытаются показать.»
               </p>
               <footer className="mt-3 font-mono text-[10px] sm:text-xs tracking-[0.2em] uppercase text-gold/70">
-                — А. Е. Важанина
+                — {initialsShort}
               </footer>
             </blockquote>
 
@@ -141,7 +158,7 @@ const Hero = () => {
                     и оценить шансы.
                   </p>
                   <button
-                    onClick={() => navigate("/dashboard")}
+                    onClick={() => navigate(dashboardHome)}
                     className="w-full flex items-center justify-between px-4 py-3 bg-paper/10 hover:bg-gold hover:text-ink text-paper text-sm font-medium transition-colors"
                   >
                     <span className="flex items-center gap-2">
@@ -164,24 +181,17 @@ const Hero = () => {
               <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-2 border-l-2 border-gold z-10" aria-hidden />
               <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 border-gold z-10" aria-hidden />
 
-              <div className="relative overflow-hidden bg-paper-deep shadow-strong">
-                <img
-                  src="/lawyer-portrait.jpg"
-                  alt="Юрист Важанина Александра Евгеньевна в офисе"
-                  className="w-full aspect-[3/4] object-cover object-top"
-                  width={768}
-                  height={1024}
-                  loading="eager"
-                  onError={(e) => {
-                    // Fallback to SVG placeholder if jpg not yet uploaded
-                    (e.currentTarget as HTMLImageElement).src = "/lawyer-portrait.svg";
-                  }}
+              <div className="relative overflow-hidden bg-paper-deep shadow-strong aspect-[3/4]">
+                <BrandedAvatar
+                  src={branding.photoUrl}
+                  name={branding.displayName}
+                  className="absolute inset-0"
                 />
                 {/* Archival label strip */}
                 <div className="absolute bottom-0 inset-x-0 bg-ink/85 backdrop-blur-sm px-4 py-2.5 text-paper">
                   <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.15em] uppercase">
-                    <span>А. Е. Важанина · юрист</span>
-                    <span className="text-gold">est. 2014</span>
+                    <span className="truncate pr-2">{initialsShort} · юрист</span>
+                    <span className="text-gold flex-shrink-0">{branding.subtitle.split(" ")[0] || "юрист"}</span>
                   </div>
                 </div>
               </div>
