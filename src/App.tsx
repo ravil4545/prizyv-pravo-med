@@ -7,6 +7,8 @@ import { lazy, Suspense, Component, ReactNode } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
 import { AuthProvider } from "./contexts/AuthContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
+import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -87,6 +89,7 @@ const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
 const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
 const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
 const LawyerAnalyticsPage = lazy(() => import("./pages/LawyerAnalyticsPage"));
+const LawyerBrandingPage = lazy(() => import("./pages/LawyerBrandingPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 // Lazy-load RagChat — keeps react-markdown out of the main bundle
@@ -120,10 +123,28 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <BrandingProvider>
+          <BrandedPWAMeta />
           <ErrorBoundary>
             <AnalyticsTracker />
             <Suspense fallback={<PageLoader />}>
               <Routes>
+                {/* White-label маршруты юриста — точка входа клиента по ссылке/QR */}
+                <Route path="/u/:slug" element={<Index />} />
+                <Route path="/u/:slug/auth" element={<AuthPage />} />
+                <Route path="/u/:slug/register" element={<RegisterPage />} />
+                <Route path="/u/:slug/login" element={<LoginPage />} />
+                <Route path="/u/:slug/dashboard" element={<DashboardPage />} />
+                <Route path="/u/:slug/dashboard/ai-chat" element={<AIChatDashboardPage />} />
+                <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
+                <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
+                <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
+                <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
+                <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
+                <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
+                <Route path="/u/:slug/profile" element={<ProfilePage />} />
+
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/register" element={<RegisterPage />} />
@@ -163,6 +184,7 @@ const App = () => (
                 <Route path="/lawyer/templates" element={<LawyerTemplatesPage />} />
                 <Route path="/lawyer/chats" element={<LawyerChatsPage />} />
                 <Route path="/lawyer/analytics" element={<LawyerAnalyticsPage />} />
+                <Route path="/lawyer/branding" element={<LawyerBrandingPage />} />
                 <Route path="/client/messages" element={<ClientMessagesPage />} />
                 <Route path="/client/chat/:lawyerClientId" element={<ClientChatPage />} />
                 <Route path="*" element={<NotFound />} />
@@ -172,6 +194,7 @@ const App = () => (
             <Suspense fallback={null}><RagChat /></Suspense>
             <MobileBottomNav />
           </ErrorBoundary>
+          </BrandingProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

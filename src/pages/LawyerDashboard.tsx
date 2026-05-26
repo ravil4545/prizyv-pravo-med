@@ -237,6 +237,7 @@ const LawyerDashboard = () => {
             { to: "/lawyer/templates", icon: FileText,        label: "Шаблоны",       desc: "Документы" },
             { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами" },
             { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел" },
+            { to: "/lawyer/branding",  icon: Briefcase,      label: "Мой бренд",     desc: "Личное приложение и QR" },
           ].map(({ to, icon: Icon, label, desc }) => (
             <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(to)}>
               <CardContent className="p-4 text-center">

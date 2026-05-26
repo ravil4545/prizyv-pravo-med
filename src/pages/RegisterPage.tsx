@@ -11,6 +11,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Mail, Phone, Chrome, Loader2 } from "lucide-react";
 import { z } from "zod";
+import { useBranding } from "@/contexts/BrandingContext";
+import { autoAttachToBrand } from "@/lib/autoAttachToBrand";
 
 const emailRegisterSchema = z.object({
   email: z.string().trim().email({ message: "Введите корректный email" }).max(255),
@@ -29,6 +31,8 @@ const RegisterPage = () => {
   const [searchParams] = useSearchParams();
   const nextRaw = searchParams.get("next");
   const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  const branding = useBranding();
+  const brandLawyerId = branding.lawyerUserId;
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,18 +51,20 @@ const RegisterPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, nextPath, brandLawyerId]);
 
   // Countdown timer for resend OTP
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Bot, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface Plan {
   no: string;
@@ -82,19 +83,23 @@ const plans: Plan[] = [
 
 const Pricing = () => {
   const navigate = useNavigate();
+  const branding = useBranding();
 
   const handle = async (action: "phone" | "dashboard") => {
     if (action === "phone") {
-      window.location.href = "tel:+79253500533";
+      const digits = (branding.phone || "+79253500533").replace(/\D/g, "");
+      window.location.href = `tel:+${digits}`;
       return;
     }
     // Для ИИ-кабинета: если авторизован — открываем кабинет с авто-диалогом оплаты;
-    // иначе ведём через авторизацию и продолжаем сценарий
+    // иначе ведём через авторизацию и продолжаем сценарий. В branded-режиме все
+    // пути учитывают префикс /u/<slug>.
+    const dashboard = `${branding.routePrefix}/dashboard?pay=1`;
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      navigate("/dashboard?pay=1");
+      navigate(dashboard);
     } else {
-      navigate("/auth?next=" + encodeURIComponent("/dashboard?pay=1"));
+      navigate(`${branding.routePrefix}/auth?next=${encodeURIComponent(dashboard)}`);
     }
   };
 

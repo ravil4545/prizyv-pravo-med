@@ -12,8 +12,16 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBranding } from "@/contexts/BrandingContext";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import LimitsBadge from "@/components/LimitsBadge";
+
+const initials = (full: string): string => {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "ВА";
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
 
 const NAV_ITEMS = [
   { to: "/", label: "Главная" },
@@ -29,20 +37,29 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const branding = useBranding();
   const { unreadCount } = useUnreadMessages();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const brandPhoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
+  const brandWhatsapp = branding.whatsapp || "79253500533";
+  const brandShortName = branding.displayName.split(/\s+/).slice(0, 2).join(" ");
+  const monogram = initials(branding.displayName);
+  const homePath = branding.routePrefix || "/";
+
   const handlePhoneCall = () => {
-    window.location.href = "tel:+79253500533";
+    window.location.href = `tel:+${brandPhoneDigits}`;
   };
 
   const handleWhatsApp = () => {
     const message = encodeURIComponent("Добрый день! Мне необходима консультация по поводу призыва на срочную службу...");
-    window.open(`https://wa.me/79253500533?text=${message}`, "_blank");
+    window.open(`https://wa.me/${brandWhatsapp}?text=${message}`, "_blank");
   };
 
   const handleTelegram = () => {
-    window.open("https://t.me/nepriziv2", "_blank");
+    const tg = branding.telegram || "nepriziv2";
+    const url = tg.startsWith("http") ? tg : `https://t.me/${tg}`;
+    window.open(url, "_blank");
   };
 
   const handleAuth = async () => {
@@ -64,19 +81,23 @@ const Header = () => {
       <div className="container mx-auto px-3 sm:px-4 lg:px-12">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2">
           {/* Logo — editorial monogram */}
-          <Link to="/" className="flex items-center gap-3 min-w-0 group" aria-label="Главная — Важанина Александра, юрист">
-            <div className="relative flex h-10 w-10 items-center justify-center border border-ink/80 flex-shrink-0 group-hover:border-gold group-hover:bg-ink transition-colors">
-              <span className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors">
-                ВА
-              </span>
+          <Link to={homePath} className="flex items-center gap-3 min-w-0 group" aria-label={`Главная — ${branding.displayName}`}>
+            <div className="relative flex h-10 w-10 items-center justify-center border border-ink/80 flex-shrink-0 group-hover:border-gold group-hover:bg-ink transition-colors overflow-hidden">
+              {branding.isBranded && branding.photoUrl ? (
+                <img src={branding.photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="font-serif italic text-lg leading-none text-ink group-hover:text-gold transition-colors">
+                  {monogram}
+                </span>
+              )}
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
             </div>
             <div className="hidden sm:flex flex-col min-w-0">
               <h1 className="font-serif text-base sm:text-lg leading-none text-ink truncate">
-                Важанина Александра
+                {brandShortName}
               </h1>
               <p className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/60 mt-1">
-                Юрист · Призывное право
+                {branding.subtitle}
               </p>
             </div>
           </Link>

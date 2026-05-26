@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useBranding } from '@/contexts/BrandingContext';
 
 interface SEOHeadProps {
   title?: string;
@@ -61,34 +62,44 @@ const buildStructuredData = (url: string) => ({
 });
 
 const SEOHead = ({
-  title = DEFAULT_TITLE,
-  description = DEFAULT_DESCRIPTION,
+  title,
+  description,
   keywords = DEFAULT_KEYWORDS,
   ogImage = "https://nepriziv.ru/og-image.png",
   canonical,
 }: SEOHeadProps) => {
   const location = useLocation();
+  const branding = useBranding();
   const baseUrl = "https://nepriziv.ru";
   const fullUrl = `${baseUrl}${location.pathname}`;
   const canonicalUrl = canonical || fullUrl;
 
+  // В branded режиме title/description генерируются из данных юриста, если
+  // вызывающая сторона не передала свои.
+  const effectiveTitle = title
+    || (branding.isBranded
+      ? `${branding.displayName} · ${branding.subtitle}`
+      : DEFAULT_TITLE);
+  const effectiveDescription = description
+    || (branding.isBranded ? branding.about : DEFAULT_DESCRIPTION);
+
   useEffect(() => {
-    document.title = title;
+    document.title = effectiveTitle;
 
     const metaTags = [
-      { name: 'description', content: description },
+      { name: 'description', content: effectiveDescription },
       { name: 'keywords', content: keywords },
-      { name: 'author', content: 'Важанина Александра Евгеньевна' },
+      { name: 'author', content: branding.displayName },
       { property: 'og:type', content: 'website' },
-      { property: 'og:title', content: title },
-      { property: 'og:description', content: description },
+      { property: 'og:title', content: effectiveTitle },
+      { property: 'og:description', content: effectiveDescription },
       { property: 'og:url', content: fullUrl },
       { property: 'og:image', content: ogImage },
       { property: 'og:locale', content: 'ru_RU' },
-      { property: 'og:site_name', content: 'nepriziv.ru' },
+      { property: 'og:site_name', content: branding.isBranded ? branding.displayName : 'nepriziv.ru' },
       { name: 'twitter:card', content: 'summary_large_image' },
-      { name: 'twitter:title', content: title },
-      { name: 'twitter:description', content: description },
+      { name: 'twitter:title', content: effectiveTitle },
+      { name: 'twitter:description', content: effectiveDescription },
       { name: 'twitter:image', content: ogImage },
     ];
 
@@ -124,7 +135,7 @@ const SEOHead = ({
       document.head.appendChild(schemaEl);
     }
     schemaEl.textContent = JSON.stringify(buildStructuredData(`${baseUrl}/`));
-  }, [title, description, keywords, ogImage, fullUrl, canonicalUrl]);
+  }, [effectiveTitle, effectiveDescription, keywords, ogImage, fullUrl, canonicalUrl, branding.displayName, branding.isBranded]);
 
   return null;
 };

@@ -2,24 +2,39 @@ import { Phone, MessageCircle, Send, Mail, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
+import { useBranding } from "@/contexts/BrandingContext";
 
 const Footer = () => {
   const isMobile = useIsMobile();
   const { isLawyer } = useLawyerProfile();
+  const branding = useBranding();
+
+  const phoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
+  const phoneDisplay = branding.phone || "+7 (925) 350-05-33";
 
   const handlePhoneCall = () => {
-    window.location.href = "tel:+79253500533";
+    window.location.href = `tel:+${phoneDigits}`;
   };
   const handleWhatsApp = () => {
     const msg = encodeURIComponent("Добрый день! Мне необходима консультация...");
-    window.open(`https://wa.me/79253500533?text=${msg}`, "_blank");
+    const wa = branding.whatsapp || "79253500533";
+    window.open(`https://wa.me/${wa}?text=${msg}`, "_blank");
   };
   const handleTelegram = () => {
-    window.open("https://t.me/nepriziv2", "_blank");
+    const tg = branding.telegram || "nepriziv2";
+    const url = tg.startsWith("http") ? tg : `https://t.me/${tg}`;
+    window.open(url, "_blank");
   };
   const handleEmail = () => {
-    window.location.href = "mailto:dompc9@gmail.com";
+    window.location.href = `mailto:${branding.email || "dompc9@gmail.com"}`;
   };
+
+  const monogram = (() => {
+    const parts = branding.displayName.trim().split(/\s+/);
+    if (parts.length === 0) return "ВА";
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  })();
 
   return (
     <footer className={`bg-ink text-paper py-16 sm:py-20 ${isMobile ? "pb-24" : ""}`}>
@@ -37,23 +52,25 @@ const Footer = () => {
           {/* Brand block */}
           <div className={isLawyer ? "md:col-span-4" : "md:col-span-5"}>
             <div className="flex items-start gap-4 mb-5">
-              <div className="relative flex h-14 w-14 items-center justify-center border border-paper/40 flex-shrink-0">
-                <span className="font-serif italic text-2xl leading-none text-paper">ВА</span>
+              <div className="relative flex h-14 w-14 items-center justify-center border border-paper/40 flex-shrink-0 overflow-hidden">
+                {branding.isBranded && branding.photoUrl ? (
+                  <img src={branding.photoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="font-serif italic text-2xl leading-none text-paper">{monogram}</span>
+                )}
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
               </div>
               <div>
                 <h3 className="font-serif text-xl sm:text-2xl leading-tight text-paper">
-                  Важанина Александра Евгеньевна
+                  {branding.displayName}
                 </h3>
                 <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1">
-                  Юрист · Призывное право
+                  {branding.subtitle}
                 </p>
               </div>
             </div>
             <p className="text-sm text-paper/75 leading-relaxed max-w-md mb-6">
-              Помогаю призывникам и их семьям законно получить отсрочку,
-              освобождение или военный билет. Работаю на основании договора,
-              соблюдаю адвокатскую тайну.
+              {branding.about}
             </p>
 
             <div className="flex flex-wrap gap-2">
@@ -140,14 +157,14 @@ const Footer = () => {
               <div className="flex gap-3">
                 <Phone className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
                 <div>
-                  <dt className="font-serif text-base text-paper">+7 (925) 350-05-33</dt>
+                  <dt className="font-serif text-base text-paper">{phoneDisplay}</dt>
                   <dd className="text-xs text-paper/60 mt-0.5">Звонок и бесплатная вводная</dd>
                 </div>
               </div>
               <div className="flex gap-3">
                 <Mail className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
                 <div>
-                  <dt className="font-mono text-sm text-paper">dompc9@gmail.com</dt>
+                  <dt className="font-mono text-sm text-paper break-all">{branding.email || "dompc9@gmail.com"}</dt>
                   <dd className="text-xs text-paper/60 mt-0.5">Письменные обращения</dd>
                 </div>
               </div>
@@ -166,7 +183,7 @@ const Footer = () => {
         <div className="border-t border-paper/15 mt-14 pt-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-1">
             <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-paper/55">
-              © {new Date().getFullYear()} Важанина А.Е. · Все права защищены
+              © {new Date().getFullYear()} {branding.displayName} · Все права защищены
             </p>
             <p className="text-[11px] text-paper/40 max-w-md leading-relaxed">
               Информация на сайте не является публичной офертой и не заменяет очной

@@ -11,6 +11,8 @@ import Footer from "@/components/Footer";
 import { Mail, Phone, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { Provider } from "@supabase/supabase-js";
+import { useBranding } from "@/contexts/BrandingContext";
+import { autoAttachToBrand } from "@/lib/autoAttachToBrand";
 
 const emailLoginSchema = z.object({
   email: z.string().trim().email({ message: "Введите корректный email" }),
@@ -107,6 +109,8 @@ const LoginPage = () => {
   const nextRaw = searchParams.get("next");
   // Защита от open-redirect — только относительные пути
   const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  const branding = useBranding();
+  const brandLawyerId = branding.lawyerUserId;
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
@@ -127,18 +131,20 @@ const LoginPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, nextPath, brandLawyerId]);
 
   useEffect(() => {
     if (countdown > 0) {

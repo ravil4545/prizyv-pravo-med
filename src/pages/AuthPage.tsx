@@ -11,6 +11,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { signUpSchema, signInSchema } from "@/lib/validations";
 import { Chrome, Loader2, ArrowLeft } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
+import { autoAttachToBrand } from "@/lib/autoAttachToBrand";
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -18,6 +20,8 @@ const AuthPage = () => {
   const nextRaw = searchParams.get("next");
   // Защита: разрешаем только относительные пути, чтобы избежать open-redirect
   const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  const branding = useBranding();
+  const brandLawyerId = branding.lawyerUserId;
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,18 +37,20 @@ const AuthPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, nextPath, brandLawyerId]);
 
   const handleOAuth = async (provider: "google" | "azure" | "facebook") => {
     setOauthLoading(provider);
