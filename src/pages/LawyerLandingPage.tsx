@@ -4,9 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import BrandedAvatar from "@/components/BrandedAvatar";
-import {
-  Phone, Send, MessageCircle, Mail, CheckCircle2, ArrowRight, Shield, Award,
-} from "lucide-react";
+import { Phone, Send, MessageCircle, Mail, ArrowRight } from "lucide-react";
 
 type BrandTemplate = "classic" | "editorial" | "minimal";
 
@@ -28,12 +26,10 @@ interface LawyerBrand {
 /**
  * Личный лендинг юриста по адресу /u/:slug
  *
- * НЕ копия основного сайта — отдельный одностраничник, который:
- *  · показывает только данные юриста (бренд, контакты, оффер)
- *  · ведёт на регистрацию/логин клиента в его (юриста) кабинете
- *  · рендерится в одном из 3-х шаблонов: classic / editorial / minimal
+ * Подчёркнуто простая визитка — НЕ копия основного сайта.
+ * Только: имя/фото юриста, короткое «о себе», контакты, одна CTA в кабинет.
  *
- * Шаблон визуала юрист выбирает в /lawyer/branding (колонка brand_template).
+ * 3 шаблона визуала: classic / editorial / minimal — выбирается в /lawyer/branding.
  */
 const LawyerLandingPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -110,189 +106,122 @@ const buildContacts = (b: LawyerBrand) => ({
 
 const ENTER_PATH = (slug: string) => `/u/${slug}/auth`;
 
+// Маленькая ссылка контакта — единый стиль для всех шаблонов
+const ContactLink = ({
+  icon: Icon, label, onClick, accent,
+}: { icon: any; label: string; onClick: () => void; accent?: string }) => (
+  <button
+    onClick={onClick}
+    className="inline-flex items-center gap-1.5 text-sm hover:opacity-70 transition-opacity"
+    style={accent ? { color: accent } : undefined}
+  >
+    <Icon className="h-4 w-4" />
+    {label}
+  </button>
+);
+
 // ── ШАБЛОН 1: CLASSIC — карточка-визитка ─────────────────────────────────────
+// Одна карточка по центру экрана: фото, имя, 1 строка о себе, контакты, кнопка.
 
 const ClassicTemplate = ({ brand }: { brand: LawyerBrand }) => {
   const c = buildContacts(brand);
   const accent = brand.accent_color || "#C9A24A";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-stone-100 flex items-center justify-center px-4 py-12">
-      <div className="max-w-2xl w-full bg-white shadow-2xl rounded-3xl overflow-hidden">
-        {/* Top — аватар + имя */}
-        <div className="px-8 pt-10 pb-6 text-center" style={{ background: `linear-gradient(135deg, ${accent}22, transparent)` }}>
-          <BrandedAvatar
-            src={brand.photo_url || ""}
-            name={brand.full_name || "Юрист"}
-            shape="round"
-            className="h-28 w-28 mx-auto border-4 border-white shadow-lg"
-          />
-          <h1 className="text-3xl font-bold mt-5 text-stone-900">{brand.full_name}</h1>
-          {brand.brand_subtitle && (
-            <p className="text-sm uppercase tracking-[0.2em] mt-2" style={{ color: accent }}>
-              {brand.brand_subtitle}
-            </p>
-          )}
-        </div>
-
-        {/* О себе */}
-        {brand.brand_about && (
-          <div className="px-8 py-6 border-t border-stone-100">
-            <p className="text-stone-700 leading-relaxed text-center">{brand.brand_about}</p>
-          </div>
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center px-4 py-10">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-md p-8 text-center">
+        <BrandedAvatar
+          src={brand.photo_url || ""}
+          name={brand.full_name || "Юрист"}
+          shape="round"
+          className="h-24 w-24 mx-auto"
+        />
+        <h1 className="text-2xl font-semibold mt-5 text-stone-900">{brand.full_name}</h1>
+        {brand.brand_subtitle && (
+          <p className="text-xs uppercase tracking-widest mt-1.5" style={{ color: accent }}>
+            {brand.brand_subtitle}
+          </p>
         )}
 
-        {/* Преимущества */}
-        <div className="px-8 py-6 grid grid-cols-3 gap-3 border-t border-stone-100">
-          {[
-            { icon: Shield, label: "Опыт по 53-ФЗ" },
-            { icon: Award, label: "Военно-врачебная экспертиза" },
-            { icon: CheckCircle2, label: "Сопровождение под ключ" },
-          ].map((it) => (
-            <div key={it.label} className="text-center">
-              <div className="mx-auto w-10 h-10 rounded-full flex items-center justify-center mb-2"
-                   style={{ background: `${accent}22`, color: accent }}>
-                <it.icon className="h-5 w-5" />
-              </div>
-              <p className="text-xs text-stone-600 leading-tight">{it.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Контакты */}
-        <div className="px-8 py-6 border-t border-stone-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {c.phone    && <ContactPill icon={Phone}         label="Звонок"     onClick={c.phone}    color={accent} />}
-          {c.telegram && <ContactPill icon={Send}          label="Telegram"   onClick={c.telegram} color={accent} />}
-          {c.whatsapp && <ContactPill icon={MessageCircle} label="WhatsApp"   onClick={c.whatsapp} color={accent} />}
-          {c.email    && <ContactPill icon={Mail}          label="Email"      onClick={c.email}    color={accent} />}
-        </div>
-
-        {/* CTA — личный кабинет */}
-        <div className="px-8 py-6 bg-stone-900 text-white">
-          <p className="text-sm text-stone-300 mb-3 text-center">
-            Личный кабинет с ИИ-помощником и анализом ваших медицинских документов
+        {brand.brand_about && (
+          <p className="text-sm text-stone-600 leading-relaxed mt-5">
+            {brand.brand_about}
           </p>
-          <a
-            href={ENTER_PATH(brand.slug)}
-            className="block w-full text-center font-semibold py-3 rounded-xl transition-opacity hover:opacity-90"
-            style={{ background: accent, color: "#1c1917" }}
-          >
-            Войти / Зарегистрироваться <ArrowRight className="inline h-4 w-4 ml-1" />
-          </a>
-        </div>
+        )}
+
+        <a
+          href={ENTER_PATH(brand.slug)}
+          className="mt-7 inline-flex items-center justify-center gap-2 w-full py-3 rounded-xl font-medium transition-opacity hover:opacity-90"
+          style={{ background: accent, color: "#1c1917" }}
+        >
+          Личный кабинет <ArrowRight className="h-4 w-4" />
+        </a>
+
+        {(c.phone || c.telegram || c.whatsapp || c.email) && (
+          <div className="mt-5 pt-5 border-t border-stone-100 flex flex-wrap justify-center gap-x-4 gap-y-2 text-stone-600">
+            {c.phone    && <ContactLink icon={Phone}         label="Звонок"   onClick={c.phone} />}
+            {c.telegram && <ContactLink icon={Send}          label="Telegram" onClick={c.telegram} />}
+            {c.whatsapp && <ContactLink icon={MessageCircle} label="WhatsApp" onClick={c.whatsapp} />}
+            {c.email    && <ContactLink icon={Mail}          label="Email"    onClick={c.email} />}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const ContactPill = ({ icon: Icon, label, onClick, color }: any) => (
-  <button
-    onClick={onClick}
-    className="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-stone-200 hover:border-current transition-colors"
-    style={{ color }}
-  >
-    <Icon className="h-5 w-5" />
-    <span className="text-[11px] uppercase tracking-wider font-medium">{label}</span>
-  </button>
-);
-
 // ── ШАБЛОН 2: EDITORIAL — газетный стиль ─────────────────────────────────────
+// Серьёзная типография: большое имя, 1 параграф, контакты, кнопка. Без сетки услуг.
 
 const EditorialTemplate = ({ brand }: { brand: LawyerBrand }) => {
   const c = buildContacts(brand);
 
   return (
     <div className="min-h-screen bg-paper flex flex-col">
-      {/* Хедер-плашка с датой */}
-      <div className="container mx-auto px-6 pt-10 pb-4">
-        <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-ink/60 border-b border-ink/15 pb-3 flex justify-between">
-          <span>Личное представительство</span>
-          <span>nepriziv.ru / u / {brand.slug}</span>
-        </div>
-      </div>
-
-      {/* Основной разворот */}
-      <main className="container mx-auto px-6 pb-16 flex-1 grid md:grid-cols-12 gap-10">
-        {/* Левая колонка — портрет + контакты */}
-        <aside className="md:col-span-4 space-y-6">
-          <div className="aspect-[3/4] border border-ink/15 overflow-hidden bg-paper-deep/20 relative">
-            {brand.photo_url ? (
-              <img src={brand.photo_url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <BrandedAvatar
-                src=""
-                name={brand.full_name || "Юрист"}
-                shape="square"
-                className="h-full w-full"
-              />
-            )}
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-gold" aria-hidden />
-          </div>
-
-          <div className="space-y-2 text-sm">
-            {c.phone && (
-              <button onClick={c.phone} className="w-full text-left flex items-center gap-2 text-ink hover:text-gold transition-colors py-1 border-b border-ink/10">
-                <Phone className="h-3.5 w-3.5 text-gold" /> {brand.brand_phone}
-              </button>
-            )}
-            {c.telegram && (
-              <button onClick={c.telegram} className="w-full text-left flex items-center gap-2 text-ink hover:text-gold transition-colors py-1 border-b border-ink/10">
-                <Send className="h-3.5 w-3.5 text-gold" /> Telegram
-              </button>
-            )}
-            {c.whatsapp && (
-              <button onClick={c.whatsapp} className="w-full text-left flex items-center gap-2 text-ink hover:text-gold transition-colors py-1 border-b border-ink/10">
-                <MessageCircle className="h-3.5 w-3.5 text-gold" /> WhatsApp
-              </button>
-            )}
-            {c.email && (
-              <button onClick={c.email} className="w-full text-left flex items-center gap-2 text-ink hover:text-gold transition-colors py-1 border-b border-ink/10">
-                <Mail className="h-3.5 w-3.5 text-gold" /> {brand.brand_email}
-              </button>
-            )}
-          </div>
-        </aside>
-
-        {/* Правая колонка — главная статья */}
-        <article className="md:col-span-8">
-          <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-gold mb-3">
-            {brand.brand_subtitle || "Юрист по призывному и медицинскому праву"}
+      <main className="flex-1 container mx-auto px-6 py-16 max-w-2xl">
+        {brand.brand_subtitle && (
+          <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-gold mb-4">
+            {brand.brand_subtitle}
           </p>
-          <h1 className="font-serif text-5xl md:text-6xl leading-[1.05] text-ink mb-6">
-            {brand.full_name}
-          </h1>
-          <div className="h-px bg-ink/15 my-6 max-w-md" />
+        )}
+        <h1 className="font-serif text-4xl md:text-5xl leading-tight text-ink mb-6">
+          {brand.full_name}
+        </h1>
 
-          <p className="font-serif text-xl leading-relaxed text-ink-soft mb-6 first-letter:font-bold first-letter:text-5xl first-letter:float-left first-letter:mr-2 first-letter:leading-none">
-            {brand.brand_about || "Помогаю призывникам реализовать право на освобождение от службы по состоянию здоровья. Веду дело от первого звонка до получения военного билета."}
+        {brand.photo_url && (
+          <img
+            src={brand.photo_url}
+            alt=""
+            className="w-32 h-32 object-cover rounded-sm border border-ink/15 mb-6"
+          />
+        )}
+
+        {brand.brand_about && (
+          <p className="font-serif text-lg leading-relaxed text-ink-soft mb-8">
+            {brand.brand_about}
           </p>
+        )}
 
-          <div className="grid grid-cols-2 gap-6 my-10 pt-6 border-t border-ink/15">
-            {[
-              "Анализ медицинских документов",
-              "Сопровождение в военкомате",
-              "Жалобы и судебное обжалование",
-              "Военно-врачебная экспертиза",
-            ].map((s) => (
-              <div key={s} className="flex items-start gap-2">
-                <CheckCircle2 className="h-4 w-4 text-gold mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-ink-soft">{s}</p>
-              </div>
-            ))}
+        <a
+          href={ENTER_PATH(brand.slug)}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-ink text-paper font-mono text-xs uppercase tracking-[0.2em] hover:bg-gold hover:text-ink transition-colors"
+        >
+          Личный кабинет <ArrowRight className="h-3.5 w-3.5" />
+        </a>
+
+        {(c.phone || c.telegram || c.whatsapp || c.email) && (
+          <div className="mt-10 pt-6 border-t border-ink/15 flex flex-wrap gap-x-5 gap-y-2 text-ink-soft">
+            {c.phone    && <ContactLink icon={Phone}         label={brand.brand_phone || "Звонок"} onClick={c.phone} />}
+            {c.telegram && <ContactLink icon={Send}          label="Telegram"   onClick={c.telegram} />}
+            {c.whatsapp && <ContactLink icon={MessageCircle} label="WhatsApp"   onClick={c.whatsapp} />}
+            {c.email    && <ContactLink icon={Mail}          label={brand.brand_email || "Email"}   onClick={c.email} />}
           </div>
-
-          <a
-            href={ENTER_PATH(brand.slug)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-ink text-paper font-mono text-xs uppercase tracking-[0.2em] hover:bg-gold hover:text-ink transition-colors"
-          >
-            Личный кабинет клиента <ArrowRight className="h-3.5 w-3.5" />
-          </a>
-        </article>
+        )}
       </main>
 
       <footer className="border-t border-ink/15">
-        <div className="container mx-auto px-6 py-4 font-mono text-[10px] tracking-[0.2em] uppercase text-ink/50 text-center">
-          На платформе nepriziv.ru · © {new Date().getFullYear()}
+        <div className="container mx-auto px-6 py-3 font-mono text-[10px] tracking-[0.2em] uppercase text-ink/50 text-center">
+          nepriziv.ru / u / {brand.slug}
         </div>
       </footer>
     </div>
@@ -300,6 +229,7 @@ const EditorialTemplate = ({ brand }: { brand: LawyerBrand }) => {
 };
 
 // ── ШАБЛОН 3: MINIMAL — современный минимал ─────────────────────────────────
+// Голый минимал: большое имя, 1 кнопка, контакты мелочью внизу.
 
 const MinimalTemplate = ({ brand }: { brand: LawyerBrand }) => {
   const c = buildContacts(brand);
@@ -307,52 +237,57 @@ const MinimalTemplate = ({ brand }: { brand: LawyerBrand }) => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <main className="flex-1 flex items-center justify-center px-6 py-16">
-        <div className="max-w-3xl w-full">
-          {/* Avatar */}
-          <BrandedAvatar
-            src={brand.photo_url || ""}
-            name={brand.full_name || "Юрист"}
-            shape="round"
-            className="h-20 w-20 mb-10"
-          />
+      <main className="flex-1 flex items-center px-6 py-16">
+        <div className="max-w-xl w-full mx-auto">
+          {brand.photo_url ? (
+            <img
+              src={brand.photo_url}
+              alt=""
+              className="h-16 w-16 rounded-full object-cover mb-8"
+            />
+          ) : (
+            <BrandedAvatar
+              src=""
+              name={brand.full_name || "Юрист"}
+              shape="round"
+              className="h-16 w-16 mb-8"
+            />
+          )}
 
-          {/* Имя — мега-типография */}
-          <h1 className="text-5xl md:text-7xl font-bold text-black leading-[0.95] mb-4 tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-bold text-black leading-[1] mb-3 tracking-tight">
             {brand.full_name}.
           </h1>
           {brand.brand_subtitle && (
-            <p className="text-xl text-stone-500 mb-10">{brand.brand_subtitle}</p>
+            <p className="text-base text-stone-500 mb-6">{brand.brand_subtitle}</p>
           )}
 
-          {/* О себе */}
           {brand.brand_about && (
-            <p className="text-lg text-stone-700 leading-relaxed max-w-2xl mb-12">
+            <p className="text-base text-stone-700 leading-relaxed mb-10">
               {brand.brand_about}
             </p>
           )}
 
-          {/* CTA крупная */}
           <a
             href={ENTER_PATH(brand.slug)}
-            className="inline-flex items-center gap-3 px-8 py-4 rounded-full text-white font-semibold text-lg transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-white font-medium transition-opacity hover:opacity-90"
             style={{ background: accent }}
           >
-            Личный кабинет <ArrowRight className="h-5 w-5" />
+            Личный кабинет <ArrowRight className="h-4 w-4" />
           </a>
 
-          {/* Контакты — мелким снизу */}
-          <div className="mt-16 pt-8 border-t border-stone-200 flex flex-wrap gap-x-8 gap-y-3 text-sm text-stone-600">
-            {c.phone    && <button onClick={c.phone}    className="flex items-center gap-1.5 hover:text-black"><Phone className="h-3.5 w-3.5" />{brand.brand_phone}</button>}
-            {c.telegram && <button onClick={c.telegram} className="flex items-center gap-1.5 hover:text-black"><Send className="h-3.5 w-3.5" />Telegram</button>}
-            {c.whatsapp && <button onClick={c.whatsapp} className="flex items-center gap-1.5 hover:text-black"><MessageCircle className="h-3.5 w-3.5" />WhatsApp</button>}
-            {c.email    && <button onClick={c.email}    className="flex items-center gap-1.5 hover:text-black"><Mail className="h-3.5 w-3.5" />{brand.brand_email}</button>}
-          </div>
+          {(c.phone || c.telegram || c.whatsapp || c.email) && (
+            <div className="mt-10 flex flex-wrap gap-x-5 gap-y-2 text-stone-600">
+              {c.phone    && <ContactLink icon={Phone}         label={brand.brand_phone || "Звонок"} onClick={c.phone} />}
+              {c.telegram && <ContactLink icon={Send}          label="Telegram" onClick={c.telegram} />}
+              {c.whatsapp && <ContactLink icon={MessageCircle} label="WhatsApp" onClick={c.whatsapp} />}
+              {c.email    && <ContactLink icon={Mail}          label={brand.brand_email || "Email"} onClick={c.email} />}
+            </div>
+          )}
         </div>
       </main>
 
-      <footer className="px-6 py-4 text-xs text-stone-400 text-center">
-        nepriziv.ru / {brand.slug} · © {new Date().getFullYear()}
+      <footer className="px-6 py-3 text-xs text-stone-400 text-center">
+        nepriziv.ru / {brand.slug}
       </footer>
     </div>
   );
