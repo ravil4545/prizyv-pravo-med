@@ -519,41 +519,170 @@ const LawyerClientDetail = () => {
           </div>
         </div>
 
-        {/* Invite-блок / статус привязки — заметная отдельная карточка ПЕРЕД табами.
-            Два варианта:
-            • не привязан → InviteCodeCard с 8-симв. кодом для отправки клиенту;
-            • привязан → зелёный статус с именем (из profiles если доступно,
-              иначе из lawyer_clients.client_name) + inline-кнопка «Отвязать». */}
-        {!client?.client_user_id ? (
-          <div className="mb-4">
-            <InviteCodeCard
-              lawyerClientId={clientId!}
-              inviteCode={client?.invite_code}
-              clientName={client?.client_name}
-              onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
-            />
-          </div>
-        ) : (
-          <div className="mb-4 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-3">
-            <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-            <p className="text-xs text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">
-              Клиент привязан к аккаунту
-              {(linkedProfileName || (client?.client_name && !/^Клиент #/.test(client.client_name))) && (
-                <> <strong>«{linkedProfileName || client.client_name}»</strong></>
-              )}.
-              ИИ-анализ и доступ к меддокам работают автоматически.
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-300 flex-shrink-0"
-              onClick={() => setConfirmAction("unlink")}
-              title="Отвязать аккаунт — карточка останется в CRM, сгенерируется новый код приглашения"
-            >
-              <UserMinus className="h-3.5 w-3.5 mr-1.5" /> Отвязать
-            </Button>
-          </div>
-        )}
+        {/* Статус привязки — полный switch по link_state (8 значений).
+            Один источник правды о связи теперь визуально показывается одним
+            блоком: либо InviteCodeCard (когда клиента ещё нет / отвалился /
+            отклонил — все эти сценарии хотят свежий код), либо статус-плашка. */}
+        <div className="mb-4">
+          {(() => {
+            const state = client?.link_state || (client?.client_user_id ? "linked_active" : "unlinked");
+
+            // Линкед — единственный «живой» зелёный статус.
+            if (state === "linked_active") {
+              return (
+                <div className="rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-3">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">
+                    Клиент привязан к аккаунту
+                    {(linkedProfileName || (client?.client_name && !/^Клиент #/.test(client.client_name))) && (
+                      <> <strong>«{linkedProfileName || client.client_name}»</strong></>
+                    )}.
+                    Доступ к документам, ИИ-анализам и чату — открыт.
+                  </p>
+                  <Button
+                    variant="ghost" size="sm"
+                    className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-300 flex-shrink-0"
+                    onClick={() => setConfirmAction("unlink")}
+                    title="Отвязать аккаунт — карточка останется в CRM, сгенерируется новый код"
+                  >
+                    <UserMinus className="h-3.5 w-3.5 mr-1.5" /> Отвязать
+                  </Button>
+                </div>
+              );
+            }
+
+            // Pending — запрос отправлен на email, ждём accept от клиента.
+            if (state === "pending_client_approval") {
+              return (
+                <div className="rounded-lg border border-blue-300 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                      Запрос отправлен — ждём подтверждения
+                    </p>
+                  </div>
+                  <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                    Клиент увидит ваш запрос в своём кабинете
+                    {client?.target_email ? <> на адресе <strong>{client.target_email}</strong></> : null}{" "}
+                    и подтвердит подключение одной кнопкой. Доступ к документам и ИИ-анализам
+                    откроется автоматически.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={async () => {
+                        const { error } = await supabase.functions.invoke("lawyer-send-invite", {
+                          body: { lawyerClientId: clientId },
+                        });
+                        if (error) {
+                          toast({ title: "Не удалось отправить", description: error.message, variant: "destructive" });
+                        } else {
+                          toast({ title: "Письмо отправлено повторно" });
+                        }
+                      }}
+                    >
+                      Отправить ещё раз
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" className="text-muted-foreground"
+                      onClick={async () => {
+                        const { error } = await supabase.rpc("lawyer_revoke_request", { p_lawyer_client_id: clientId });
+                        if (error) {
+                          toast({ title: "Не удалось отозвать", description: error.message, variant: "destructive" });
+                        } else {
+                          toast({ title: "Запрос отозван" });
+                          navigate("/lawyer/clients", { replace: true });
+                        }
+                      }}
+                    >
+                      Отозвать запрос
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            // Declined — клиент отклонил. Можно или удалить карточку, или повторить (создать новый запрос).
+            if (state === "declined") {
+              return (
+                <div className="rounded-lg border border-rose-300 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/20 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                    <p className="text-sm font-medium text-rose-900 dark:text-rose-200">
+                      Клиент отклонил запрос
+                    </p>
+                  </div>
+                  <p className="text-xs text-rose-800 dark:text-rose-300">
+                    Карточка осталась в CRM как архивная. Если это была ошибка — обсудите с клиентом
+                    и отправьте новый запрос через «Добавить клиента» в списке CRM.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost" size="sm" className="text-destructive"
+                      onClick={() => setConfirmAction("delete")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Удалить карточку
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            // unlinked_by_client / unlinked_by_lawyer — связь была, но порвалась.
+            // Показываем причину + invite-код для повторного приглашения.
+            if (state === "unlinked_by_client" || state === "unlinked_by_lawyer") {
+              const byClient = state === "unlinked_by_client";
+              const when = client?.unlinked_at
+                ? new Date(client.unlinked_at).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })
+                : null;
+              return (
+                <div className="space-y-3">
+                  <div className="rounded-lg border bg-muted/40 p-3 flex items-start gap-3">
+                    <UserMinus className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        {byClient ? "Клиент отвязался" : "Вы отвязали клиента"}
+                        {when ? ` · ${when}` : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        История чата и заметки сохранены. Чтобы возобновить работу — отправьте
+                        клиенту новый код приглашения.
+                      </p>
+                    </div>
+                  </div>
+                  <InviteCodeCard
+                    lawyerClientId={clientId!}
+                    inviteCode={client?.invite_code}
+                    clientName={client?.client_name}
+                    onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
+                  />
+                </div>
+              );
+            }
+
+            // Archived — soft-delete. Карточка читается только как историческая.
+            if (state === "archived") {
+              return (
+                <div className="rounded-lg border bg-muted/30 p-3 flex items-center gap-3">
+                  <ClipboardList className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground flex-1">
+                    Карточка в архиве. История дела сохранена, но клиент к ней больше не привязан.
+                  </p>
+                </div>
+              );
+            }
+
+            // unlinked / code_sent — стандартный invite-flow (есть код или нужно создать).
+            return (
+              <InviteCodeCard
+                lawyerClientId={clientId!}
+                inviteCode={client?.invite_code}
+                clientName={client?.client_name}
+                onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
+              />
+            );
+          })()}
+        </div>
 
         <Tabs defaultValue="overview">
           <TabsList className="mb-4 w-full sm:w-auto">

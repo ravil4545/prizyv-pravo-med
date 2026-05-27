@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Ticket, Copy, RefreshCw, Loader2, Check, MessageSquare, Mail } from "lucide-react";
+import { Ticket, Copy, RefreshCw, Loader2, Check, MessageSquare, Mail, Send } from "lucide-react";
 
 interface InviteCodeCardProps {
   /** ID записи lawyer_clients */
@@ -42,6 +42,31 @@ const InviteCodeCard = ({
   const [regenerating, setRegenerating] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  // Отправляем приглашение клиенту прямо с сайта (через edge-функцию
+  // lawyer-send-invite + Resend). Юристу не нужно копировать код или текст —
+  // нажал «Отправить» и письмо ушло на client_email/target_email карточки.
+  const sendByEmail = async () => {
+    setSendingEmail(true);
+    const { data, error } = await supabase.functions.invoke("lawyer-send-invite", {
+      body: { lawyerClientId },
+    });
+    setSendingEmail(false);
+    if (error) {
+      toast({
+        title: "Не удалось отправить письмо",
+        description: error.message || "Проверьте, что в карточке клиента указан email",
+        variant: "destructive",
+      });
+      return;
+    }
+    const sentTo = (data as any)?.sent_to;
+    toast({
+      title: "Приглашение отправлено",
+      description: sentTo ? `Письмо ушло на ${sentTo}` : "Письмо отправлено клиенту",
+    });
+  };
 
   const inviteUrl = inviteCode
     ? `${typeof window !== "undefined" ? window.location.origin : "https://nepriziv.ru"}/dashboard?lawyer_invite=${inviteCode}`
@@ -167,37 +192,50 @@ const InviteCodeCard = ({
 
         {/* Быстрая отправка с готовым текстом */}
         {!compact && (
-          <div className="flex gap-2 flex-wrap">
+          <>
             <Button
               variant="default"
               size="sm"
-              className="flex-1 min-w-[140px] gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => openShare("wa")}
+              className="w-full gap-1.5 bg-primary hover:bg-primary/90"
+              onClick={sendByEmail}
+              disabled={sendingEmail}
+              title="Письмо уйдёт с сайта на email клиента, указанный в карточке"
             >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Отправить в WhatsApp
+              {sendingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Отправить приглашение на email клиента
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="flex-1 min-w-[140px] gap-1.5 bg-sky-500 hover:bg-sky-600"
-              onClick={() => openShare("tg")}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Telegram
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                window.location.href = `mailto:?subject=${encodeURIComponent("Код приглашения от вашего юриста")}&body=${encodeURIComponent(shareText)}`;
-              }}
-            >
-              <Mail className="h-3.5 w-3.5" />
-              Email
-            </Button>
-          </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 min-w-[140px] gap-1.5 text-emerald-700 hover:text-emerald-800 border-emerald-300"
+                onClick={() => openShare("wa")}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                WhatsApp
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 min-w-[140px] gap-1.5 text-sky-600 hover:text-sky-700 border-sky-300"
+                onClick={() => openShare("tg")}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Telegram
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  window.location.href = `mailto:?subject=${encodeURIComponent("Код приглашения от вашего юриста")}&body=${encodeURIComponent(shareText)}`;
+                }}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Своя почта
+              </Button>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

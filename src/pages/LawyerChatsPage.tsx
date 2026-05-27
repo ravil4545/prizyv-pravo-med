@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
+import { useChatPresence } from "@/contexts/ChatPresenceContext";
 
 interface ChatEntry {
   id: string;
@@ -106,14 +107,14 @@ const LawyerChatsPage = () => {
     loadChats();
   }, [user, profileLoading, isLawyer, loadChats]);
 
+  // Подписка теперь идёт через shared ChatPresenceContext — один канал
+  // фильтруется по recipient_id=auth.uid на всю сессию. На любое новое
+  // сообщение, адресованное мне, перезагружаем список диалогов.
+  const { onNewMessage } = useChatPresence();
   useEffect(() => {
     if (!user) return;
-    const ch = supabase
-      .channel(`lawyer-chats-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_chat_messages" }, loadChats)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.id, loadChats]);
+    return onNewMessage(() => loadChats());
+  }, [user?.id, loadChats, onNewMessage]);
 
   const filtered = entries.filter(
     (e) => !search || e.client_name.toLowerCase().includes(search.toLowerCase()),

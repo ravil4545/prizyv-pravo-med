@@ -9,6 +9,7 @@ import QuickActionFAB from "./components/QuickActionFAB";
 import ExitIntentDialog from "./components/ExitIntentDialog";
 import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
+import { ChatPresenceProvider } from "./contexts/ChatPresenceContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import RoleGuard from "./components/RoleGuard";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
@@ -142,6 +143,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BrandingProvider>
+          <ChatPresenceProvider>
           <BrandedPWAMeta />
           <ErrorBoundary>
             <AnalyticsTracker />
@@ -225,6 +227,7 @@ const App = () => (
             <MobileBottomNav />
             <ExitIntentDialog />
           </ErrorBoundary>
+          </ChatPresenceProvider>
           </BrandingProvider>
         </AuthProvider>
       </BrowserRouter>

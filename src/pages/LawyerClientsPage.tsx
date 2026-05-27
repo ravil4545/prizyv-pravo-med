@@ -23,6 +23,7 @@ import {
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
 import InviteCodeCard from "@/components/InviteCodeCard";
+import { useChatPresence } from "@/contexts/ChatPresenceContext";
 
 interface LawyerClient {
   id: string; lawyer_id: string; client_user_id: string | null;
@@ -53,6 +54,10 @@ const LawyerClientsPage = () => {
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [stageFilter, setStageFilter] = useState(searchParams.get("stage") || "all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  // По умолчанию архивные карточки (declined, unlinked_*, archived) скрыты —
+  // юрист видит активную работу. Тоггл «Показать архив» — без localStorage,
+  // чтобы каждое посещение CRM по умолчанию открывало рабочий список.
+  const [showArchived, setShowArchived] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">(() => {
@@ -81,17 +86,16 @@ const LawyerClientsPage = () => {
     loadClients();
   }, [user, profileLoading, isLawyer]);
 
-  // Live unread count updates
+  // Live unread count updates через shared ChatPresenceContext.
+  // Раньше тут была отдельная подписка на всю таблицу lawyer_chat_messages —
+  // теперь работаем через единый канал с фильтром recipient_id=me.
+  const { onNewMessage } = useChatPresence();
   useEffect(() => {
     if (!user) return;
-    const ch = supabase
-      .channel(`clients-unread-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_chat_messages" }, () => {
-        if (clients.length) loadUnreadCounts(clients.map((c) => c.id));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.id, clients.length]);
+    return onNewMessage(() => {
+      if (clients.length) loadUnreadCounts(clients.map((c) => c.id));
+    });
+  }, [user?.id, clients.length, onNewMessage]);
 
   const loadClients = async () => {
     const { data } = await supabase
@@ -324,6 +328,14 @@ const LawyerClientsPage = () => {
     return days >= 0 && days <= 14;
   };
 
+  // Считаем карточку «архивной», если связь была разорвана/отклонена/удалена.
+  // Эти карточки скрываются по умолчанию, но доступны через тоггл.
+  const isArchivedLike = (c: LawyerClient): boolean => {
+    const s = c.link_state || (c.client_user_id ? "linked_active" : "code_sent");
+    return s === "archived" || s === "declined"
+      || s === "unlinked_by_client" || s === "unlinked_by_lawyer";
+  };
+
   // Расширенный поиск: имя / телефон / email / диагноз / ожид.категория.
   // Юристам со 30+ клиентами «только по имени» — мало.
   const matchesSearch = (c: LawyerClient, q: string): boolean => {
@@ -339,6 +351,7 @@ const LawyerClientsPage = () => {
 
   const filtered = clients
     .filter((c) => {
+      if (!showArchived && isArchivedLike(c)) return false;
       if (!matchesSearch(c, search.toLowerCase())) return false;
       if (stageFilter !== "all" && c.crm_stage !== stageFilter) return false;
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
@@ -522,6 +535,29 @@ const LawyerClientsPage = () => {
               <SelectItem value="low">Низкий</SelectItem>
             </SelectContent>
           </Select>
+          {/* Тоггл «Показать архив» — по умолчанию архивные карточки
+              (declined / unlinked_* / archived) скрыты, юрист видит активную
+              работу. Подсчёт скрытых рядом — чтобы сразу понимать масштаб. */}
+          {(() => {
+            const hiddenCount = clients.filter(isArchivedLike).length;
+            if (hiddenCount === 0 && !showArchived) return null;
+            return (
+              <Button
+                variant={showArchived ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowArchived((v) => !v)}
+                className="h-10 gap-2 whitespace-nowrap"
+                title="Показывать карточки с отвязкой/отказом/архивом"
+              >
+                {showArchived ? "Скрыть архив" : "Показать архив"}
+                {hiddenCount > 0 && !showArchived && (
+                  <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
+                    {hiddenCount}
+                  </span>
+                )}
+              </Button>
+            );
+          })()}
         </div>
 
         {/* Client list / kanban */}
@@ -587,6 +623,7 @@ const LawyerClientsPage = () => {
           // Kanban view — игнорируем stageFilter, поскольку доска показывает все этапы
           (() => {
             const kanbanClients = clients.filter((c) => {
+              if (!showArchived && isArchivedLike(c)) return false;
               if (!matchesSearch(c, search.toLowerCase())) return false;
               if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
               return true;
