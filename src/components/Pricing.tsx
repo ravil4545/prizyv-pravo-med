@@ -1,6 +1,4 @@
-import { useNavigate } from "react-router-dom";
-import { ArrowRight, Bot, Phone } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowRight, Phone } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 
 interface Plan {
@@ -10,7 +8,7 @@ interface Plan {
   unit: string;
   desc: string;
   includes: string[];
-  cta: { label: string; action: "phone" | "dashboard" };
+  cta: { label: string };
   highlight?: boolean;
   badge?: string;
 }
@@ -28,27 +26,10 @@ const plans: Plan[] = [
       "Оценка перспектив",
       "Рекомендация формата работы",
     ],
-    cta: { label: "Записаться", action: "phone" },
+    cta: { label: "Записаться" },
   },
   {
     no: "02",
-    name: "ИИ-кабинет",
-    price: "990 ₽",
-    unit: "в месяц",
-    desc: "Самостоятельная работа с ИИ-помощником под надзором юриста.",
-    includes: [
-      "Безлимитные ИИ-консультации",
-      "Анализ медицинских документов",
-      "База статей Постановления №565",
-      "Прямой чат с юристом",
-      "Дорожная карта дела",
-    ],
-    cta: { label: "Подключить кабинет", action: "dashboard" },
-    highlight: true,
-    badge: "Популярно",
-  },
-  {
-    no: "03",
     name: "Консультация юриста",
     price: "от 9 000 ₽",
     unit: "за встречу",
@@ -60,10 +41,10 @@ const plans: Plan[] = [
       "Письменное заключение",
       "Запись разговора по запросу",
     ],
-    cta: { label: "Записаться", action: "phone" },
+    cta: { label: "Записаться" },
   },
   {
-    no: "04",
+    no: "03",
     name: "Полное сопровождение",
     price: "от 90 000 ₽",
     unit: "под ключ",
@@ -76,31 +57,18 @@ const plans: Plan[] = [
       "Личный куратор 24/7",
       "Возврат гонорара при отрицательном решении суда",
     ],
-    cta: { label: "Обсудить дело", action: "phone" },
+    cta: { label: "Обсудить дело" },
+    highlight: true,
     badge: "Под ключ",
   },
 ];
 
 const Pricing = () => {
-  const navigate = useNavigate();
   const branding = useBranding();
 
-  const handle = async (action: "phone" | "dashboard") => {
-    if (action === "phone") {
-      const digits = (branding.phone || "+79253500533").replace(/\D/g, "");
-      window.location.href = `tel:+${digits}`;
-      return;
-    }
-    // Для ИИ-кабинета: если авторизован — открываем кабинет с авто-диалогом оплаты;
-    // иначе ведём через авторизацию и продолжаем сценарий. В branded-режиме все
-    // пути учитывают префикс /u/<slug>.
-    const dashboard = `${branding.routePrefix}/dashboard?pay=1`;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      navigate(dashboard);
-    } else {
-      navigate(`${branding.routePrefix}/auth?next=${encodeURIComponent(dashboard)}`);
-    }
+  const callPhone = () => {
+    const digits = (branding.phone || "+79253500533").replace(/\D/g, "");
+    window.location.href = `tel:+${digits}`;
   };
 
   return (
@@ -114,7 +82,7 @@ const Pricing = () => {
           <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 06</span>
           <span className="h-px flex-1 bg-ink/15 max-w-[80px]" />
           <span className="font-mono text-ink/60 text-xs tracking-[0.25em] uppercase">
-            Прайс
+            Юридические услуги
           </span>
         </div>
 
@@ -129,9 +97,13 @@ const Pricing = () => {
         <p className="max-w-2xl text-base sm:text-lg text-ink-soft leading-relaxed mb-12 sm:mb-16">
           Начните с бесплатной вводной — финальная стоимость работ озвучивается после
           анализа документов. Никаких «допуслуг» по ходу.
+          <span className="block mt-3 text-sm text-ink/55">
+            Хотите попробовать ИИ-помощника? Подписка <a href="#subscription" className="text-gold hover:underline">990 ₽/мес</a> —
+            отдельно от очной работы юриста.
+          </span>
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
           {plans.map((plan) => (
             <article
               key={plan.no}
@@ -204,18 +176,14 @@ const Pricing = () => {
               </ul>
 
               <button
-                onClick={() => handle(plan.cta.action)}
+                onClick={callPhone}
                 className={`group inline-flex items-center justify-between gap-3 px-5 py-3.5 font-semibold text-sm w-full transition-colors ${plan.highlight
                     ? "bg-gold text-ink hover:bg-paper"
                     : "bg-ink text-paper hover:bg-gold hover:text-ink"
                   }`}
               >
                 <span className="flex items-center gap-2">
-                  {plan.cta.action === "phone" ? (
-                    <Phone className="h-4 w-4" />
-                  ) : (
-                    <Bot className="h-4 w-4" />
-                  )}
+                  <Phone className="h-4 w-4" />
                   {plan.cta.label}
                 </span>
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

@@ -5,10 +5,11 @@ import ConscriptionMap from "@/components/ConscriptionMap";
 import ComplexCases from "@/components/ComplexCases";
 import Services from "@/components/Services";
 import Pricing from "@/components/Pricing";
+import SubscriptionPricing from "@/components/SubscriptionPricing";
 import AIFeaturesSection from "@/components/AIFeaturesSection";
-import DashboardPromo from "@/components/DashboardPromo";
 import BlogPreview from "@/components/BlogPreview";
 import Testimonials from "@/components/Testimonials";
+import FAQ from "@/components/FAQ";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
@@ -24,11 +25,12 @@ const Index = () => {
           <AboutLawyer />
           <ConscriptionMap />
           <ComplexCases />
-          <Services />
           <Pricing />
+          <Services />
+          <SubscriptionPricing />
           <AIFeaturesSection />
-          <DashboardPromo />
           <Testimonials />
+          <FAQ />
           <BlogPreview />
           <ContactForm />
         </main>

@@ -247,13 +247,19 @@ const Footer = () => {
               консультации. Услуги оказываются на основании договора.
             </p>
           </div>
-          <div className="flex gap-5 font-mono text-[10px] tracking-[0.15em] uppercase">
-            <a href="#" className="text-paper/55 hover:text-gold transition-colors">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[10px] tracking-[0.15em] uppercase">
+            <Link to="/privacy" className="text-paper/55 hover:text-gold transition-colors">
               Конфиденциальность
-            </a>
-            <a href="#" className="text-paper/55 hover:text-gold transition-colors">
+            </Link>
+            <Link to="/terms" className="text-paper/55 hover:text-gold transition-colors">
               Условия
-            </a>
+            </Link>
+            <Link to="/offer" className="text-paper/55 hover:text-gold transition-colors">
+              Оферта
+            </Link>
+            <Link to="/requisites" className="text-paper/55 hover:text-gold transition-colors">
+              Реквизиты
+            </Link>
           </div>
         </div>
       </div>

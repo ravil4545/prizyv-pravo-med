@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare, Briefcase } from "lucide-react";
+import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare, Briefcase, ChevronDown, ArrowRight } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,14 +28,26 @@ const initials = (full: string): string => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
-const NAV_ITEMS = [
-  { to: "/", label: "Главная" },
+// Главное меню — 4 ключевых раздела. Остальное уходит в дроп-даун «Ещё»
+// и в мобильный Sheet, чтобы не размывать фокус на главные CTA.
+const PRIMARY_NAV = [
   { to: "/services", label: "Услуги" },
   { to: "/diagnoses", label: "Диагнозы" },
-  { to: "/forum", label: "Форум" },
   { to: "/blog", label: "Блог" },
+];
+
+const SECONDARY_NAV = [
+  { to: "/forum", label: "Форум" },
   { to: "/templates", label: "Шаблоны" },
   { to: "/testimonials", label: "Отзывы" },
+  { to: "/commissariats", label: "Военкоматы" },
+];
+
+// Все пункты для мобильного меню
+const ALL_NAV_ITEMS = [
+  { to: "/", label: "Главная" },
+  ...PRIMARY_NAV,
+  ...SECONDARY_NAV,
 ];
 
 const Header = () => {
@@ -131,7 +143,7 @@ const Header = () => {
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-1">
-            {NAV_ITEMS.map((item) => (
+            {PRIMARY_NAV.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -145,23 +157,65 @@ const Header = () => {
                 {item.label}
               </Link>
             ))}
+            {/* «Ещё» — второстепенные разделы в дропдауне, чтобы не размывать фокус */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  Ещё
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                {SECONDARY_NAV.map((item) => (
+                  <DropdownMenuItem key={item.to} onClick={() => navigate(item.to)}>
+                    {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {user && (
               <Link
-                to="/dashboard"
+                to={cabinetPath}
                 className={cn(
                   "px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  isActive("/dashboard")
+                  isActive(cabinetPath)
                     ? "text-primary bg-primary/10"
                     : "text-primary hover:bg-primary/8"
                 )}
               >
-                Кабинет
+                {isLawyer ? "Кабинет юриста" : "Кабинет"}
               </Link>
             )}
           </nav>
 
           {/* Right actions */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Primary CTA — «Записаться», самый заметный элемент шапки */}
+            <Button
+              onClick={handlePhoneCall}
+              size="sm"
+              className="hidden md:inline-flex h-10 px-4 gap-2 bg-gold text-ink hover:bg-gold-deep hover:text-paper font-semibold border-0 shadow-none"
+              aria-label="Записаться на бесплатный разбор"
+            >
+              <Phone className="h-4 w-4" />
+              Записаться
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+
+            {/* Compact phone CTA for mobile */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handlePhoneCall}
+              className="md:hidden h-10 w-10 text-gold hover:text-gold-deep"
+              aria-label="Записаться по телефону"
+            >
+              <Phone className="h-4 w-4" />
+            </Button>
+
             {/* Limits indicator — visible on md+ */}
             <Link
               to={user ? "/dashboard" : "/auth"}
@@ -171,16 +225,7 @@ const Header = () => {
               <LimitsBadge variant="pill" />
             </Link>
 
-            {/* Quick contact - desktop */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handlePhoneCall}
-              className="h-10 w-10 hidden md:flex hover:text-primary"
-              aria-label="Позвонить"
-            >
-              <Phone className="h-4 w-4" />
-            </Button>
+            {/* Secondary contacts — desktop, иконками */}
             <Button
               variant="ghost"
               size="icon"
@@ -256,10 +301,11 @@ const Header = () => {
               </DropdownMenu>
             ) : (
               <Button
-                variant="default"
+                variant="ghost"
                 size="sm"
                 onClick={handleAuth}
-                className="h-9 sm:h-10 px-3 sm:px-4 gap-1.5 font-semibold"
+                className="h-9 sm:h-10 px-2 sm:px-3 gap-1.5 text-foreground/70 hover:text-foreground"
+                aria-label="Войти в личный кабинет"
               >
                 <LogIn className="h-4 w-4" />
                 <span className="hidden sm:inline">Войти</span>
@@ -333,7 +379,7 @@ const Header = () => {
                       Сообщения{unreadCount > 0 && ` (${unreadCount})`}
                     </Link>
                   )}
-                  {NAV_ITEMS.map((item) => (
+                  {ALL_NAV_ITEMS.map((item) => (
                     <Link
                       key={item.to}
                       to={item.to}

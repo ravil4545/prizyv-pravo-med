@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import LeadMagnetBox, { LEAD_MAGNETS } from "@/components/LeadMagnetBox";
 import SEOHead from "@/components/SEOHead";
 import { ArrowRight, Phone, Loader2, Bot, FileSearch } from "lucide-react";
 
@@ -183,6 +184,11 @@ const DiagnosisDetailPage = () => {
               {diagnosis.description}
             </p>
           </article>
+
+          {/* Lead magnet — матрица «диагноз → статья 565», максимально по теме страницы */}
+          <section className="mb-10">
+            <LeadMagnetBox magnet={LEAD_MAGNETS.matrix_565} variant="inline" />
+          </section>
 
           {/* Action block */}
           <section className="border-y border-ink/15 py-8 my-10 grid grid-cols-1 sm:grid-cols-2 gap-6">

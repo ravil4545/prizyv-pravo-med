@@ -20,6 +20,21 @@ const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_REQUESTS_PER_WINDOW = 1; // 1 submission per 5 minutes
 
 // Contact form validation schema
+const AGE_VALUES = ["17", "18", "19", "20", "21", "22-25", "26-27", "27+"] as const;
+const STAGE_VALUES = ["povestka", "medcommission", "decision", "court", "ai_only", "other"] as const;
+
+const STAGE_LABELS: Record<string, string> = {
+  povestka: "Повестка пришла",
+  medcommission: "Готовлюсь к медкомиссии",
+  decision: "Не согласен с решением комиссии",
+  court: "Прохожу обжалование в суде",
+  ai_only: "Хочу попробовать ИИ-кабинет",
+  other: "Другое",
+};
+
+// «Горячие» стадии — требуют срочного звонка, помечаются 🔥 в админ-письме.
+const URGENT_STAGES = new Set(["povestka", "decision", "court"]);
+
 const contactFormSchema = z.object({
   name: z.string()
     .trim()
@@ -40,6 +55,9 @@ const contactFormSchema = z.object({
     .trim()
     .min(10, { message: "Сообщение должно содержать минимум 10 символов" })
     .max(2000, { message: "Сообщение должно содержать максимум 2000 символов" }),
+  age: z.enum(AGE_VALUES).optional(),
+  stage: z.enum(STAGE_VALUES).optional(),
+  source: z.string().max(64).optional(),
 });
 
 function checkRateLimit(ipAddress: string): { allowed: boolean; remainingTime?: number } {
@@ -126,6 +144,9 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const urgent = validation.data.stage ? URGENT_STAGES.has(validation.data.stage) : false;
+    const stageLabel = validation.data.stage ? STAGE_LABELS[validation.data.stage] : null;
+
     // Insert validated data into database
     const { data, error } = await supabase
       .from('contact_submissions')
@@ -134,6 +155,9 @@ serve(async (req) => {
         phone: validation.data.phone,
         email: validation.data.email || '',
         message: validation.data.message,
+        age: validation.data.age || null,
+        stage: validation.data.stage || null,
+        source: validation.data.source || 'contact_form',
         ip_address: clientIp,
         user_agent: userAgent,
       })
@@ -194,13 +218,16 @@ serve(async (req) => {
         await resend.emails.send({
           from: 'НеПризыв <onboarding@resend.dev>',
           to: ['ravil4545@gmail.com'],
-          subject: `📩 Новая заявка: ${validation.data.name}`,
+          subject: `${urgent ? '🔥 СРОЧНО — ' : '📩 '}Заявка: ${validation.data.name}${stageLabel ? ' · ' + stageLabel : ''}`,
           html: `
-            <h2>Новая заявка с сайта</h2>
+            <h2>${urgent ? '🔥 СРОЧНАЯ заявка с сайта' : 'Новая заявка с сайта'}</h2>
             <table style="border-collapse:collapse;">
               <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${validation.data.name}</td></tr>
-              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${validation.data.phone}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;"><a href="tel:${validation.data.phone}">${validation.data.phone}</a></td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${validation.data.email || '—'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Возраст:</td><td style="padding:4px 12px;">${validation.data.age || '—'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Стадия:</td><td style="padding:4px 12px;${urgent ? 'color:#c0392b;font-weight:bold;' : ''}">${stageLabel || '—'}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Источник:</td><td style="padding:4px 12px;">${validation.data.source || 'contact_form'}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Сообщение:</td><td style="padding:4px 12px;">${validation.data.message}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Дата:</td><td style="padding:4px 12px;">${now}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">IP:</td><td style="padding:4px 12px;">${clientIp}</td></tr>

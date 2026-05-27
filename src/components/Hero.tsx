@@ -1,41 +1,46 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Phone, MessageCircle, Send, Bot, ChevronDown, Sparkles, ArrowRight } from "lucide-react";
+import { Phone, MessageCircle, Send, Bot, Sparkles, ArrowRight, ShieldCheck, Clock, Lock } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 import BrandedAvatar from "@/components/BrandedAvatar";
+import { trackEvent } from "@/lib/analytics";
 
 const Hero = () => {
-  const [aiOpen, setAiOpen] = useState(false);
   const navigate = useNavigate();
   const branding = useBranding();
 
-  // Разбиваем ФИО на «фамилию» и «имя+отчество» для editorial-вёрстки
   const nameParts = branding.displayName.trim().split(/\s+/);
-  const surname = nameParts[0] || "";
-  const givenNames = nameParts.slice(1).join(" ") || branding.displayName;
   const initialsShort = nameParts.length >= 2
     ? `${nameParts[1][0]}. ${nameParts[0]}`
     : branding.displayName;
 
   const phoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const dashboardHome = `${branding.routePrefix}/dashboard`;
+  const trialPath = `${branding.routePrefix}/auth?next=${encodeURIComponent(`${dashboardHome}?pay=trial`)}`;
 
   const handlePhoneCall = () => {
+    trackEvent("hero_cta_phone");
     window.location.href = `tel:+${phoneDigits}`;
   };
 
   const handleWhatsApp = () => {
+    trackEvent("hero_cta_whatsapp");
     const msg = encodeURIComponent(
-      `Здравствуйте, ${givenNames}! Мне нужна консультация по призыву...`
+      `Здравствуйте! Мне нужна консультация по призыву...`
     );
     const wa = branding.whatsapp || "79253500533";
     window.open(`https://wa.me/${wa}?text=${msg}`, "_blank");
   };
 
   const handleTelegram = () => {
+    trackEvent("hero_cta_telegram");
     const tg = branding.telegram || "nepriziv2";
     const url = tg.startsWith("http") ? tg : `https://t.me/${tg}`;
     window.open(url, "_blank");
+  };
+
+  const handleTrial = () => {
+    trackEvent("hero_cta_trial");
+    navigate(trialPath);
   };
 
   return (
@@ -72,103 +77,124 @@ const Hero = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* Left: editorial content */}
           <div className="lg:col-span-7">
-            {/* Section number */}
-            <div className="flex items-center gap-3 mb-6">
+            {/* Eyebrow — section number + lawyer's name */}
+            <div className="flex items-center gap-3 mb-5">
               <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 01</span>
               <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
-              <span className="font-mono text-gold/70 text-xs tracking-[0.25em] uppercase">
-                Ваш юрист
+              <span className="font-mono text-gold/80 text-[10px] sm:text-xs tracking-[0.25em] uppercase truncate">
+                {branding.displayName} · {branding.subtitle.toLowerCase()}
               </span>
             </div>
 
-            {/* Editorial headline */}
-            <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95] mb-4 sm:mb-6">
-              <span className="block italic font-normal text-gold text-2xl sm:text-3xl md:text-4xl mb-2 tracking-normal">
-                {surname}
-              </span>
-              <span className="block">{nameParts[1] || ""}</span>
-              <span className="block font-light italic text-paper/70 text-3xl sm:text-4xl md:text-5xl mt-2">
-                — {branding.subtitle.toLowerCase()}
+            {/* Selling headline — outcome-first */}
+            <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.02] mb-5 sm:mb-6">
+              Военный билет по здоровью —
+              <span className="block italic font-light text-gold mt-1">
+                законно, без серых схем.
               </span>
             </h1>
 
-            {/* Quote-anchor */}
-            <blockquote className="relative my-8 sm:my-10 pl-5 sm:pl-6 max-w-xl border-l-2 border-gold/60">
-              <p className="font-serif italic text-base sm:text-lg md:text-xl text-paper/85 leading-relaxed">
-                «Призывная комиссия — это не приговор. Это процедура,
-                в которой у вас в десять раз больше прав, чем вам пытаются показать.»
-              </p>
-              <footer className="mt-3 font-mono text-[10px] sm:text-xs tracking-[0.2em] uppercase text-gold/70">
-                — {initialsShort}
-              </footer>
-            </blockquote>
+            {/* Selling subtitle — concrete numbers + guarantee */}
+            <p className="text-base sm:text-lg md:text-xl text-paper/85 leading-relaxed max-w-xl mb-6 sm:mb-8">
+              <span className="font-semibold text-paper">500+ выигранных дел</span> за 10 лет. Защищаю призывников
+              по всей РФ — от первой повестки до военного билета.
+              <span className="block mt-2 text-paper/70 text-sm sm:text-base">
+                Возврат гонорара при отрицательном решении суда — фиксируется в договоре.
+              </span>
+            </p>
 
-            {/* Primary CTAs — minimal, sharp */}
-            <div className="flex flex-col gap-3 max-w-md mb-8">
-              <button
-                onClick={handlePhoneCall}
-                className="group flex items-center justify-between px-6 py-4 bg-gold text-ink font-semibold text-base hover:bg-gold-deep hover:text-paper transition-all duration-300"
-              >
-                <span className="flex items-center gap-3">
-                  <Phone className="h-5 w-5" />
-                  Записаться на консультацию
-                </span>
-                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-              </button>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleTelegram}
-                  className="flex items-center justify-center gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
-                >
-                  <Send className="h-4 w-4" />
-                  Telegram
-                </button>
-                <button
-                  onClick={handleWhatsApp}
-                  className="flex items-center justify-center gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  WhatsApp
-                </button>
-              </div>
+            {/* Trust-bar — moved above the fold, before CTAs */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-6 mb-8 pb-8 border-b border-paper/15">
+              {[
+                { num: "10+", label: "лет защиты" },
+                { num: "500+", label: "дел доведено" },
+                { num: "88", label: "статей №565" },
+              ].map((t) => (
+                <div key={t.label}>
+                  <div className="font-serif text-2xl sm:text-3xl md:text-4xl text-gold leading-none">
+                    {t.num}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-paper/65 mt-1.5 leading-snug">
+                    {t.label}
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {/* Secondary AI option — understated */}
-            <div className="border-t border-paper/15 pt-6 max-w-md">
+            {/* Two equal CTAs — same visual weight */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mb-5">
               <button
-                onClick={() => setAiOpen(!aiOpen)}
-                className="group flex items-center gap-3 text-sm text-paper/70 hover:text-gold transition-colors"
-                aria-expanded={aiOpen}
+                onClick={handlePhoneCall}
+                className="group flex items-center justify-between px-5 sm:px-6 py-4 bg-gold text-ink font-semibold text-sm sm:text-base hover:bg-gold-deep hover:text-paper transition-all duration-300"
               >
-                <Sparkles className="h-4 w-4 text-gold" />
-                <span className="font-mono tracking-wider uppercase text-xs">
-                  Или начните с ИИ-помощника — 1 вопрос бесплатно
+                <span className="flex items-center gap-2.5">
+                  <Phone className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-left leading-tight">
+                    Бесплатный разбор
+                    <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-80 mt-0.5">
+                      за 15 минут
+                    </span>
+                  </span>
                 </span>
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform duration-300 ${aiOpen ? "rotate-180" : ""}`}
-                />
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1 flex-shrink-0" />
               </button>
 
-              {aiOpen && (
-                <div className="mt-4 p-5 border border-paper/15 bg-paper/5 backdrop-blur-sm">
-                  <p className="text-xs text-paper/75 mb-4 leading-relaxed">
-                    Инструмент предварительной оценки под надзором юриста.
-                    Не заменяет очной консультации, но помогает разобраться в документах
-                    и оценить шансы.
-                  </p>
-                  <button
-                    onClick={() => navigate(dashboardHome)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-paper/10 hover:bg-gold hover:text-ink text-paper text-sm font-medium transition-colors"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Bot className="h-4 w-4" />
-                      Открыть ИИ-кабинет
+              <button
+                onClick={handleTrial}
+                className="group flex items-center justify-between px-5 sm:px-6 py-4 border-2 border-gold text-paper font-semibold text-sm sm:text-base hover:bg-gold hover:text-ink transition-all duration-300"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Sparkles className="h-5 w-5 flex-shrink-0 text-gold group-hover:text-ink" />
+                  <span className="text-left leading-tight">
+                    ИИ-кабинет
+                    <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-80 mt-0.5">
+                      7 дней бесплатно
                     </span>
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                  </span>
+                </span>
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1 flex-shrink-0" />
+              </button>
+            </div>
+
+            {/* Microcopy — objection handlers */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] sm:text-xs text-paper/60 mb-6">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-gold" />
+                Без обязательств
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-gold" />
+                Конфиденциально
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-gold" />
+                Ответ в течение часа
+              </span>
+            </div>
+
+            {/* Secondary contact channels — chips, not CTAs */}
+            <div className="flex flex-wrap gap-2 max-w-xl">
+              <button
+                onClick={handleTelegram}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 border border-paper/25 text-paper/85 text-xs sm:text-sm font-medium hover:border-gold hover:text-gold transition-colors"
+              >
+                <Send className="h-3.5 w-3.5" />
+                Telegram
+              </button>
+              <button
+                onClick={handleWhatsApp}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 border border-paper/25 text-paper/85 text-xs sm:text-sm font-medium hover:border-gold hover:text-gold transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                WhatsApp
+              </button>
+              <button
+                onClick={() => navigate(dashboardHome)}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 border border-paper/25 text-paper/85 text-xs sm:text-sm font-medium hover:border-gold hover:text-gold transition-colors"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                1 вопрос ИИ — бесплатно
+              </button>
             </div>
           </div>
 
@@ -196,40 +222,22 @@ const Hero = () => {
                 </div>
               </div>
 
-              {/* "Seal" — bordeaux stamp circle */}
-              <div className="absolute -bottom-7 -right-4 sm:-right-7 w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-seal/80 bg-paper backdrop-blur-sm flex items-center justify-center rotate-[-8deg] shadow-medium">
-                <div className="text-center">
-                  <div className="font-mono text-[8px] sm:text-[9px] tracking-[0.2em] text-seal uppercase">
+              {/* "Seal" — bordeaux stamp circle (увеличен и улучшена читаемость) */}
+              <div className="absolute -bottom-8 -right-4 sm:-right-8 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-seal/80 bg-paper backdrop-blur-sm flex items-center justify-center rotate-[-8deg] shadow-medium">
+                <div className="text-center px-2">
+                  <div className="font-mono text-[9px] sm:text-[10px] tracking-[0.2em] text-seal uppercase font-semibold">
                     Подтверждено
                   </div>
-                  <div className="font-serif italic text-seal text-xs sm:text-sm mt-0.5">
+                  <div className="font-serif italic text-seal text-base sm:text-lg mt-1 leading-none font-semibold">
                     500+ дел
+                  </div>
+                  <div className="font-mono text-[8px] sm:text-[9px] tracking-[0.15em] text-seal/80 uppercase mt-1">
+                    в архиве
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Bottom strip — trust trio */}
-        <div className="mt-12 sm:mt-16 pt-6 border-t border-paper/15 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
-          {[
-            { num: "10+", label: "лет защиты призывников" },
-            { num: "500+", label: "дел доведено до результата" },
-            { num: "88", label: "статей Расписания болезней" },
-          ].map((t, i) => (
-            <div key={t.label} className="flex items-baseline gap-4">
-              <span className="font-mono text-gold/60 text-xs">0{i + 1}</span>
-              <div>
-                <div className="font-serif text-3xl sm:text-4xl text-gold leading-none">
-                  {t.num}
-                </div>
-                <div className="text-xs sm:text-sm text-paper/70 mt-1 leading-snug">
-                  {t.label}
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </section>

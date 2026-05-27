@@ -3,14 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { lazy, Suspense, Component, ReactNode } from "react";
+import { lazy, Suspense, Component, ReactNode, useEffect } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
+import ExitIntentDialog from "./components/ExitIntentDialog";
 import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import RoleGuard from "./components/RoleGuard";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
+import { captureUTM, initScrollDepth } from "./lib/analytics";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -83,6 +85,10 @@ const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirecto
 const CommissariatDetailPage = lazy(() => import("./pages/CommissariatDetailPage"));
 const LawyersDirectoryPage = lazy(() => import("./pages/LawyersDirectoryPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const OfferPage = lazy(() => import("./pages/OfferPage"));
+const RequisitesPage = lazy(() => import("./pages/RequisitesPage"));
 const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
 const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
 const LawyerClientDetail = lazy(() => import("./pages/LawyerClientDetail"));
@@ -105,6 +111,14 @@ const PageLoader = () => (
 
 const AnalyticsTracker = () => {
   useAnalyticsTracking();
+
+  // First-touch UTM capture + scroll-depth tracking — раз на сессию.
+  useEffect(() => {
+    captureUTM(window.location.search);
+    const cleanup = initScrollDepth();
+    return cleanup;
+  }, []);
+
   return null;
 };
 
@@ -174,6 +188,11 @@ const App = () => (
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
                 <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
                 <Route path="/lawyers" element={<LawyersDirectoryPage />} />
+                {/* Compliance & legal pages — обязательно по 152-ФЗ и для приёма платежей */}
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/offer" element={<OfferPage />} />
+                <Route path="/requisites" element={<RequisitesPage />} />
                 <Route path="/admin/forum" element={<AdminForumPage />} />
                 <Route path="/admin/blog" element={<AdminBlogPage />} />
                 <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
@@ -199,6 +218,7 @@ const App = () => (
             <QuickActionFAB />
             <Suspense fallback={null}><RagChat /></Suspense>
             <MobileBottomNav />
+            <ExitIntentDialog />
           </ErrorBoundary>
           </BrandingProvider>
         </AuthProvider>

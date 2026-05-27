@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import BlogComments from "@/components/BlogComments";
+import LeadMagnetBox, { LEAD_MAGNETS } from "@/components/LeadMagnetBox";
 import BlogPostImage from "@/components/BlogPostImage";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -322,6 +323,11 @@ const BlogDetailPage = () => {
                 +7 925 350-05-33 <ArrowRight className="h-3 w-3" />
               </span>
             </a>
+          </section>
+
+          {/* Lead magnet — забираем email перед комментариями, пока читатель «в теме» */}
+          <section className="mt-12 sm:mt-14">
+            <LeadMagnetBox magnet={LEAD_MAGNETS.checklist_medcomission} variant="inline" />
           </section>
 
           {/* Comments */}

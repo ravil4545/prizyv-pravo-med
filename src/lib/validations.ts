@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+// Возраст призывника — варианты для квалификации лида
+export const conscriptAgeOptions = ["17", "18", "19", "20", "21", "22-25", "26-27", "27+"] as const;
+export type ConscriptAge = (typeof conscriptAgeOptions)[number];
+
+// Стадия призывного процесса — определяет срочность и сценарий работы
+export const conscriptStageOptions = [
+  "povestka",       // повестка пришла
+  "medcommission",  // готовлюсь к медкомиссии
+  "decision",       // не согласен с решением комиссии
+  "court",          // прохожу обжалование в суде
+  "ai_only",        // хочу попробовать ИИ-кабинет
+  "other",          // другое
+] as const;
+export type ConscriptStage = (typeof conscriptStageOptions)[number];
+
 // Contact form validation
 export const contactFormSchema = z.object({
   name: z.string()
@@ -7,24 +22,36 @@ export const contactFormSchema = z.object({
     .min(2, { message: "Имя должно содержать минимум 2 символа" })
     .max(100, { message: "Имя не должно превышать 100 символов" })
     .regex(/^[а-яА-ЯёЁa-zA-Z\s-]+$/, { message: "Имя может содержать только буквы, пробелы и дефисы" }),
-  
+
   phone: z.string()
     .trim()
     .min(10, { message: "Введите корректный номер телефона" })
     .max(18, { message: "Номер телефона слишком длинный" })
     .regex(/^[\d\s+()-]+$/, { message: "Некорректный формат телефона" }),
-  
+
   email: z.string()
     .trim()
     .email({ message: "Введите корректный email" })
     .max(255, { message: "Email не должен превышать 255 символов" })
     .optional()
     .or(z.literal("")),
-  
+
+  age: z.enum(conscriptAgeOptions, {
+    errorMap: () => ({ message: "Выберите возраст призывника" }),
+  }),
+
+  stage: z.enum(conscriptStageOptions, {
+    errorMap: () => ({ message: "Выберите стадию процесса" }),
+  }),
+
   message: z.string()
     .trim()
     .min(10, { message: "Сообщение должно содержать минимум 10 символов" })
-    .max(2000, { message: "Сообщение не должно превышать 2000 символов" })
+    .max(2000, { message: "Сообщение не должно превышать 2000 символов" }),
+
+  consent: z.literal(true, {
+    errorMap: () => ({ message: "Нужно согласие на обработку персональных данных" }),
+  }),
 });
 
 // Auth validation
