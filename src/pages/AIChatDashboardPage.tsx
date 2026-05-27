@@ -243,6 +243,15 @@ const AIChatDashboardPage = () => {
 
       console.log("[Chat] POST", `${SUPABASE_URL}/functions/v1/chat`, "auth:", session?.user?.id ? "user" : "anon");
 
+      // Timeout 45 сек на сам запрос (Supabase Edge функций обычно 60 сек,
+      // оставляем запас). AbortController остановит и fetch, и stream-чтение
+      // ниже, если модель тупит дольше лимита.
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn("[Chat] Timeout 45 сек — прерываю запрос");
+        abortController.abort();
+      }, 45_000);
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
         method: "POST",
         headers: {
@@ -254,6 +263,7 @@ const AIChatDashboardPage = () => {
           messages: [...messages, userMessage],
           ...(contextToSend ? { medicalContext: contextToSend } : {}),
         }),
+        signal: abortController.signal,
       });
 
       console.log("[Chat] response", response.status, "model:", response.headers.get("x-ai-model") || "(нет header)");
@@ -285,7 +295,10 @@ const AIChatDashboardPage = () => {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          clearTimeout(timeoutId);
+          break;
+        }
 
         // Буфер для случая, когда SSE-сообщение разрезано между чанками.
         buffer += decoder.decode(value, { stream: true });
@@ -357,18 +370,29 @@ const AIChatDashboardPage = () => {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      toast({
-        title: "Ошибка",
-        description: error instanceof Error ? error.message : "Не удалось отправить сообщение",
-        variant: "destructive",
-      });
-      // Снимаем placeholder-пузырь ассистента, но СОХРАНЯЕМ
-      // сообщение пользователя — раньше код удалял его, и текст пропадал.
+
+      const isAbort = error instanceof Error && (error.name === "AbortError" || error.message.includes("aborted"));
+      const errorTitle = isAbort ? "Таймаут" : "Ошибка";
+      const errorBody = isAbort
+        ? "ИИ не успел ответить за 45 секунд. Все бесплатные модели могут быть перегружены. Попробуйте через минуту."
+        : error instanceof Error
+          ? error.message
+          : "Не удалось отправить сообщение";
+
+      toast({ title: errorTitle, description: errorBody, variant: "destructive" });
+
+      // Вместо удаления — показываем сообщение об ошибке прямо в чате,
+      // чтобы пользователь видел причину, а не пустоту/тишину.
       setMessages((prev) => {
-        if (prev.length && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content) {
-          return prev.slice(0, -1);
+        const next = [...prev];
+        const last = next[next.length - 1];
+        const errMsg = `⚠ ${errorTitle}: ${errorBody}`;
+        if (last && last.role === "assistant") {
+          next[next.length - 1] = { role: "assistant", content: errMsg };
+        } else {
+          next.push({ role: "assistant", content: errMsg });
         }
-        return prev;
+        return next;
       });
     } finally {
       setSending(false);
