@@ -230,12 +230,15 @@ ${medicalContext}`;
     // Если модель не отдала контент за это время — пробуем следующую.
     // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
     // существующий клиент работает без изменений.
-    // Только самые быстрые free-модели. Тяжёлые модели (deepseek-r1)
-    // и старая nemotron убраны — они стабильно превышают клиентский таймаут.
+    // Актуальный free-список OpenRouter (проверен через /api/v1/models).
+    // gemini-2.0-flash-exp и qwen-2.5-72b удалены — возвращали 404.
+    // Если все 4 не отвечают → ключ OPENROUTER_API_KEY скорее всего
+    // упёрся в дневной free-лимит.
     const MODEL_CHAIN = [
-      "google/gemini-2.0-flash-exp:free",
+      "google/gemma-4-31b-it:free",
+      "deepseek/deepseek-v4-flash:free",
       "meta-llama/llama-3.3-70b-instruct:free",
-      "qwen/qwen-2.5-72b-instruct:free",
+      "moonshotai/kimi-k2.6:free",
     ];
 
     // 15 сек × 3 модели = 45 сек суммарно — укладываемся в клиентский timeout 60.
@@ -306,10 +309,15 @@ ${medicalContext}`;
 
     if (!content) {
       console.error("[Chat] All models failed. Last:", lastStatus, lastErrorText);
+      // 429 — дневной лимит free-tier OpenRouter (≈200 запросов/день).
+      // Сбрасывается раз в сутки, не "через минуту".
+      const errorMsg = lastStatus === 429
+        ? "Дневной лимит бесплатных ИИ-запросов исчерпан. Лимит обновится через 24 часа. Для безлимитного доступа оформите подписку — кнопка в личном кабинете."
+        : lastStatus === 401 || lastStatus === 403
+          ? "Сервис ИИ требует обновить API-ключ. Сообщите администратору."
+          : `Все ИИ-модели сейчас недоступны (ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
       return new Response(
-        JSON.stringify({
-          error: `Все ИИ-модели сейчас недоступны (последняя ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`,
-        }),
+        JSON.stringify({ error: errorMsg }),
         {
           status: lastStatus === 429 ? 429 : 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
