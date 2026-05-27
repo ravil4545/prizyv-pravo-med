@@ -5,8 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   FileText, FileUp, Image as ImageIcon, Camera, Check, X, Plus,
-  Loader2, Trash2,
+  Loader2, Trash2, Brain, Sparkles,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fileToPages, pagesToPdfBlob, buildPreviewThumbnail, type MergedPageImage } from "@/lib/documentMerger";
 
@@ -23,9 +24,24 @@ export interface DocumentUploadResult {
   firstPageBase64?: string;
 }
 
+/** Что родитель возвращает из onUpload — позволяет показать в слоте
+ *  анимацию «ИИ-анализ» и потом итог по категории, не блокируя переход к
+ *  следующему слоту. */
+export interface UploadAck {
+  /** Промис, который завершится когда AI-анализ документа закончится.
+   *  Пока он не зарезолвлен — в слоте видна анимация Brain + «ИИ анализирует». */
+  analysisPromise?: Promise<{
+    category?: string | null;
+    explanation?: string | null;
+  } | void>;
+}
+
 interface DocumentUploadWizardProps {
-  /** Callback вызывается после того, как юзер собрал документ (склейка PDF готова). */
-  onUpload: (result: DocumentUploadResult) => Promise<void>;
+  /** Callback вызывается после того, как юзер собрал документ (склейка PDF готова).
+   *  Должен ВЫПОЛНИТЬ upload в Storage + insert в БД синхронно (await),
+   *  и опционально вернуть { analysisPromise } — wizard покажет анимацию
+   *  анализа внутри слота и переключится на следующий, не дожидаясь. */
+  onUpload: (result: DocumentUploadResult) => Promise<UploadAck | void>;
   /** Стартовое число слотов. По умолчанию 3 (как в требовании). */
   initialSlots?: number;
   /** Подсказка-описание над виджетом */
@@ -40,7 +56,14 @@ type SlotStatus =
   | { kind: "empty" }                                  // ничего не выбрано
   | { kind: "selecting"; files: File[]; thumbs: string[]; title: string } // юзер набирает страницы
   | { kind: "uploading"; progress: string }            // склейка / загрузка
-  | { kind: "done"; title: string; pages: number };    // загружен
+  | {
+      kind: "done";
+      title: string;
+      pages: number;
+      analyzing: boolean;                              // ИИ ещё работает над документом
+      category?: string | null;                        // итоговая категория годности (после анализа)
+      explanation?: string | null;                     // короткое пояснение (после анализа)
+    };
 
 interface Slot {
   id: string;
@@ -88,8 +111,6 @@ const DocumentUploadWizard = ({
     if (firstNotDone < 0) setActiveIdx(slots.length - 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots]);
-
-  const allDone = slots.length > 0 && slots.every((s) => s.status.kind === "done");
 
   const updateSlot = (idx: number, updater: (s: Slot) => Slot) => {
     setSlots((prev) => prev.map((s, i) => (i === idx ? updater(s) : s)));
@@ -187,8 +208,10 @@ const DocumentUploadWizard = ({
           : s,
       );
 
-      // Передаём родителю — он отвечает за upload в Storage и insert в БД
-      await onUpload({
+      // Передаём родителю — он отвечает за upload в Storage и insert в БД,
+      // и может вернуть analysisPromise (тогда покажем анимацию ИИ-анализа
+      // прямо в слоте, не блокируя переход к следующему документу).
+      const ack = await onUpload({
         blob,
         title: title.trim() || `Документ_${new Date().toISOString().slice(0, 10)}`,
         pages: allPages.length,
@@ -196,10 +219,46 @@ const DocumentUploadWizard = ({
         firstPageBase64: allPages[0]?.base64,
       });
 
+      const finalTitle = title.trim() || "Документ";
+      const hasAnalysis = !!ack?.analysisPromise;
+
       updateSlot(slotIdx, (s) => ({
         ...s,
-        status: { kind: "done", title: title.trim() || "Документ", pages: allPages.length },
+        status: {
+          kind: "done",
+          title: finalTitle,
+          pages: allPages.length,
+          analyzing: hasAnalysis,
+        },
       }));
+
+      // В фоне ждём результат ИИ-анализа и подставляем его в карточку слота —
+      // юзер видит финальную категорию без перехода на другие экраны.
+      // Активирующий useEffect переключит фокус на следующий слот раньше.
+      if (ack?.analysisPromise) {
+        ack.analysisPromise
+          .then((res) => {
+            updateSlot(slotIdx, (s) =>
+              s.status.kind === "done"
+                ? {
+                    ...s,
+                    status: {
+                      ...s.status,
+                      analyzing: false,
+                      category: res?.category ?? null,
+                      explanation: res?.explanation ?? null,
+                    },
+                  }
+                : s,
+            );
+          })
+          .catch(() => {
+            // Анализ упал — просто скрываем спиннер, документ всё равно загружен
+            updateSlot(slotIdx, (s) =>
+              s.status.kind === "done" ? { ...s, status: { ...s.status, analyzing: false } } : s,
+            );
+          });
+      }
     } catch (e) {
       console.error("Document upload failed:", e);
       toast({
@@ -370,16 +429,51 @@ const DocumentUploadWizard = ({
 
         {status.kind === "done" && (
           <div className="flex-1 flex flex-col items-center justify-center w-full">
+            {/* Иконка документа: emerald = загружен; на ней либо галочка
+                (анализ закончен), либо вертушка Brain (ИИ ещё работает). */}
             <div className="relative">
               <FileText className="h-14 w-14 text-emerald-600" />
-              <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full h-6 w-6 flex items-center justify-center border-2 border-white">
-                <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+              <div
+                className={cn(
+                  "absolute -bottom-1 -right-1 rounded-full h-6 w-6 flex items-center justify-center border-2 border-white",
+                  status.analyzing ? "bg-violet-500" : "bg-emerald-500",
+                )}
+              >
+                {status.analyzing ? (
+                  <Brain className="h-3.5 w-3.5 text-white animate-pulse" strokeWidth={2.5} />
+                ) : (
+                  <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+                )}
               </div>
             </div>
             <p className="text-xs font-medium mt-2 truncate w-full px-2" title={status.title}>
               {status.title}
             </p>
             <p className="text-[10px] text-muted-foreground">Загружен · {status.pages} стр.</p>
+
+            {/* Анимация анализа — пока ИИ работает, занимает место итога */}
+            {status.analyzing && (
+              <div className="mt-2 rounded-lg bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 px-2 py-1.5 w-full flex items-center justify-center gap-1.5 border border-violet-200/60 dark:border-violet-900/40">
+                <Sparkles className="h-3 w-3 text-violet-500 animate-pulse flex-shrink-0" />
+                <span className="text-[10px] font-medium bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
+                  ИИ анализирует…
+                </span>
+              </div>
+            )}
+
+            {/* Результат анализа — категория и короткое пояснение */}
+            {!status.analyzing && status.category && (
+              <div className="mt-2 w-full flex flex-col items-center gap-1">
+                <Badge className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 border-0">
+                  Категория: {status.category}
+                </Badge>
+                {status.explanation && (
+                  <p className="text-[10px] text-muted-foreground leading-tight line-clamp-2 px-1" title={status.explanation}>
+                    {status.explanation}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -403,9 +497,9 @@ const DocumentUploadWizard = ({
           {slots.map((slot, idx) => renderSlot(slot, idx))}
         </div>
 
-        {/* Кнопка добавить ещё один документ — появляется только когда все
-            существующие слоты заполнены (done). Расширяет сетку вниз. */}
-        {allDone && !disabled && (
+        {/* Кнопка добавить ещё один документ — видна всегда после ряда слотов,
+            как и просил пользователь. Расширяет сетку вниз. */}
+        {!disabled && (
           <div className="flex justify-center pt-1">
             <Button
               variant="outline"

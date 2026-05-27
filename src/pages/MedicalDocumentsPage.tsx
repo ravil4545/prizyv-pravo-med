@@ -48,7 +48,7 @@ import {
 import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import UploadProgress from "@/components/UploadProgress";
-import DocumentUploadWizard, { type DocumentUploadResult } from "@/components/DocumentUploadWizard";
+import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1015,8 +1015,10 @@ export default function MedicalDocumentsPage() {
 
   // Загрузка из DocumentUploadWizard: PDF уже склеен на клиенте, остаётся
   // только положить его в Storage, создать запись и запустить AI-анализ.
-  // Лимиты и demo-учёт работают так же, как в uploadFiles.
-  const handleWizardUpload = async (result: DocumentUploadResult) => {
+  // Лимиты и demo-учёт работают так же, как в uploadFiles. Возвращаем UploadAck
+  // с analysisPromise — wizard покажет анимацию «ИИ анализирует» прямо
+  // в слоте этого документа и сразу активирует следующий слот.
+  const handleWizardUpload = async (result: DocumentUploadResult): Promise<UploadAck> => {
     const currentUser = await ensureAuthForUpload();
     if (!currentUser) throw new Error("Войдите, чтобы загружать документы");
 
@@ -1068,12 +1070,34 @@ export default function MedicalDocumentsPage() {
       description: `«${result.title}» · ${result.pages} стр. Запускаем AI-анализ…`,
     });
 
-    // Запускаем AI на первой странице (как в существующем combineIntoOne-пути)
-    if (insertedDoc && result.firstPageBase64) {
-      analyzeDocument(insertedDoc.id, result.firstPageBase64);
-    }
-
     loadDocuments();
+
+    // AI-анализ: запускаем в фоне и оборачиваем в Promise, который wizard
+    // ждёт ВНУТРИ слота этого документа (анимация Brain) и при завершении
+    // подставляет категорию + пояснение прямо в карточку.
+    if (!insertedDoc || !result.firstPageBase64) {
+      return {};
+    }
+    const analysisPromise = (async () => {
+      try {
+        await analyzeDocument(insertedDoc.id, result.firstPageBase64);
+        // analyzeDocument сам пишет ai_fitness_category / ai_explanation в БД
+        // через edge function — забираем итог оттуда.
+        const { data } = await supabase
+          .from("medical_documents_v2")
+          .select("ai_fitness_category, ai_explanation")
+          .eq("id", insertedDoc.id)
+          .maybeSingle();
+        return {
+          category: data?.ai_fitness_category ?? null,
+          explanation: data?.ai_explanation ?? null,
+        };
+      } catch {
+        return { category: null, explanation: null };
+      }
+    })();
+
+    return { analysisPromise };
   };
 
   const handleAnalysisError = (data: any) => {
@@ -1676,7 +1700,10 @@ export default function MedicalDocumentsPage() {
           {/* Drag & Drop Zone */}
           <Card className="mb-8">
             <CardContent className="p-6">
-              {uploading || analyzingId ? (
+              {uploadMode === "handwritten" && (uploading || analyzingId) ? (
+                // UploadProgress только для рукописного флоу — у wizard свой
+                // прогресс и анимация ИИ-анализа внутри карточки документа,
+                // мастер НЕ должен скрываться при analyzingId/uploading.
                 <UploadProgress
                   status={
                     uploading
