@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
+import InviteCodeCard from "@/components/InviteCodeCard";
 
 interface LawyerClient {
   id: string; lawyer_id: string; client_user_id: string | null;
@@ -52,6 +53,12 @@ const LawyerClientsPage = () => {
   });
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  // Модалка с кодом приглашения, показываемая сразу после создания клиента —
+  // юрист видит код, кнопки «Скопировать» / «WhatsApp» / «Telegram» в момент,
+  // когда это нужно (не надо лезть в карточку и искать).
+  const [createdInvite, setCreatedInvite] = useState<{
+    lawyerClientId: string; code: string | null; clientName: string;
+  } | null>(null);
 
   const [form, setForm] = useState({
     client_name: "", client_phone: "", client_email: "",
@@ -201,12 +208,26 @@ const LawyerClientsPage = () => {
 
     setSaving(false);
     if (error) { toast({ title: "Ошибка сохранения", description: error.message, variant: "destructive" }); return; }
-    setClients((prev) => [data as LawyerClient, ...prev]);
+    const inserted = data as LawyerClient & { invite_code?: string | null };
+    setClients((prev) => [inserted, ...prev]);
     setAddOpen(false);
+    const savedName = form.client_name.trim();
     setForm({ client_name: "", client_phone: "", client_email: "", client_birth_year: "",
       crm_stage: "initial_contact", diagnosis: "", expected_category: "", notes: "", priority: "normal",
       conscription_date: "", client_email_link: "" });
-    toast({ title: "Клиент добавлен" });
+
+    // Если клиент пришёл БЕЗ привязки к существующему аккаунту — сразу
+    // открываем модалку с invite-кодом (юрист в один клик копирует/
+    // отправляет в WhatsApp/Telegram). Иначе — обычный toast.
+    if (!inserted.client_user_id) {
+      setCreatedInvite({
+        lawyerClientId: inserted.id,
+        code: inserted.invite_code ?? null,
+        clientName: savedName,
+      });
+    } else {
+      toast({ title: "Клиент добавлен" });
+    }
   };
 
   // Дело «горит», если до даты призыва осталось ≤ 14 дней и дело ещё не выиграно.
@@ -425,6 +446,16 @@ const LawyerClientsPage = () => {
                           {c.priority === "urgent" && <Badge variant="destructive" className="text-xs">Срочно</Badge>}
                           {c.priority === "high" && <Badge variant="secondary" className="text-xs">Высокий</Badge>}
                           {c.case_won && <Badge className="text-xs bg-green-100 text-green-700">✓ ВБ получен</Badge>}
+                          {!c.client_user_id && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] gap-1 border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
+                              title="Клиент ещё не ввёл код приглашения — кликните, чтобы открыть код"
+                            >
+                              <Ticket className="h-3 w-3" /> Код не использован
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
                           {c.client_phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.client_phone}</span>}
@@ -516,6 +547,15 @@ const LawyerClientsPage = () => {
                                     {c.priority === "urgent" && <Badge variant="destructive" className="text-[10px] px-1 py-0">Срочно</Badge>}
                                     {c.priority === "high" && <Badge variant="secondary" className="text-[10px] px-1 py-0">Высокий</Badge>}
                                     {c.case_won && <Badge className="text-[10px] px-1 py-0 bg-green-100 text-green-700">ВБ</Badge>}
+                                    {!c.client_user_id && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1 py-0 gap-0.5 border-amber-400 text-amber-700 dark:text-amber-300"
+                                        title="Клиент ещё не ввёл код приглашения"
+                                      >
+                                        <Ticket className="h-2.5 w-2.5" /> Код
+                                      </Badge>
+                                    )}
                                   </div>
                                   {c.client_phone && (
                                     <p className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -564,6 +604,51 @@ const LawyerClientsPage = () => {
         )}
       </main>
       <Footer />
+
+      {/* Модалка с invite-кодом — показываем сразу после создания клиента,
+          чтобы юрист в один клик отправил код в WhatsApp/Telegram/email. */}
+      <Dialog
+        open={!!createdInvite}
+        onOpenChange={(open) => { if (!open) setCreatedInvite(null); }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Клиент добавлен — отправьте ему код</DialogTitle>
+          </DialogHeader>
+          {createdInvite && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Карточка клиента <strong>{createdInvite.clientName}</strong> создана.
+                Отправьте ему код приглашения — после ввода он автоматически привяжется
+                и откроет вам доступ к своим медицинским документам.
+              </p>
+              <InviteCodeCard
+                lawyerClientId={createdInvite.lawyerClientId}
+                inviteCode={createdInvite.code}
+                clientName={createdInvite.clientName}
+                onCodeRegenerated={(newCode) =>
+                  setCreatedInvite((prev) => (prev ? { ...prev, code: newCode } : prev))
+                }
+              />
+              <div className="flex gap-2 justify-end pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setCreatedInvite(null)}>
+                  Закрыть
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const id = createdInvite.lawyerClientId;
+                    setCreatedInvite(null);
+                    navigate(`/lawyer/clients/${id}`);
+                  }}
+                >
+                  Открыть карточку
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -24,7 +24,7 @@ import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
-  ShieldCheck, Lock, FileSignature, Ticket, Copy, RefreshCw,
+  ShieldCheck, Lock, FileSignature,
 } from "lucide-react";
 import TemplatePickerDialog from "@/components/TemplatePickerDialog";
 import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
@@ -32,6 +32,7 @@ import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
 import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
+import InviteCodeCard from "@/components/InviteCodeCard";
 
 const stripMarkdown = (s: string) =>
   s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
@@ -109,45 +110,10 @@ const LawyerClientDetail = () => {
   const [clientAddress, setClientAddress] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [regeneratingCode, setRegeneratingCode] = useState(false);
 
-  // Регенерируем invite_code (если юрист хочет показать «свежий» код или
-  // боится, что старый утёк). RPC сам проверяет ownership и client_user_id IS NULL.
-  const regenerateCode = async () => {
-    if (!clientId) return;
-    setRegeneratingCode(true);
-    const { data, error } = await supabase.rpc("regenerate_lawyer_invite", { p_lawyer_client_id: clientId });
-    setRegeneratingCode(false);
-    if (error) {
-      toast({ title: "Не удалось обновить код", description: error.message, variant: "destructive" });
-      return;
-    }
-    setClient((prev: any) => ({ ...prev, invite_code: data }));
-    toast({ title: "Новый код сгенерирован" });
-  };
-
-  const copyInviteCode = async () => {
-    const code = client?.invite_code;
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      toast({ title: "Код скопирован" });
-    } catch {
-      /* clipboard может быть недоступен */
-    }
-  };
-
-  const copyInviteLink = async () => {
-    const code = client?.invite_code;
-    if (!code) return;
-    const link = `${window.location.origin}/dashboard?lawyer_invite=${code}`;
-    try {
-      await navigator.clipboard.writeText(link);
-      toast({ title: "Ссылка скопирована" });
-    } catch {
-      /* noop */
-    }
-  };
+  // Логика invite-кода (копирование, регенерация, шаринг в WhatsApp/Telegram/email)
+  // переехала в reusable-компонент InviteCodeCard — здесь только колбэк для
+  // синхронизации стейта при обновлении кода.
 
   useEffect(() => {
     if (!user || profileLoading) return;
@@ -449,6 +415,27 @@ const LawyerClientDetail = () => {
           </div>
         </div>
 
+        {/* Invite-блок — заметная отдельная карточка ПЕРЕД табами.
+            Показываем только когда клиент ещё не привязан (нет client_user_id).
+            После привязки — короткий зелёный бейдж-статус. */}
+        {!client?.client_user_id ? (
+          <div className="mb-4">
+            <InviteCodeCard
+              lawyerClientId={clientId!}
+              inviteCode={client?.invite_code}
+              clientName={client?.client_name}
+              onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
+            />
+          </div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+            <p className="text-xs text-emerald-800 dark:text-emerald-300">
+              Клиент привязан к аккаунту на сайте. ИИ-анализ и доступ к меддокам работают автоматически.
+            </p>
+          </div>
+        )}
+
         <Tabs defaultValue="overview">
           <TabsList className="mb-4 w-full sm:w-auto">
             <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Обзор</TabsTrigger>
@@ -532,49 +519,8 @@ const LawyerClientDetail = () => {
                   <Textarea rows={4} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
                 </div>
 
-                {/* Invite-код — простой способ привязать клиента БЕЗ передачи UUID.
-                    Показываем только если клиент ещё не привязан. */}
-                {!client?.client_user_id && client?.invite_code && (
-                  <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Ticket className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-medium">Код приглашения для клиента</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Отправьте клиенту код или ссылку. Клиент введёт его в своём кабинете и
-                      автоматически: (1) привяжется к этой карточке, (2) откроет доступ к меддокам.
-                    </p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xl font-bold tracking-widest bg-background px-3 py-1.5 rounded border select-all">
-                        {client.invite_code}
-                      </span>
-                      <Button variant="outline" size="sm" onClick={copyInviteCode}>
-                        <Copy className="h-3.5 w-3.5 mr-1" /> Код
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={copyInviteLink}>
-                        <Copy className="h-3.5 w-3.5 mr-1" /> Ссылка
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={regenerateCode} disabled={regeneratingCode}>
-                        {regeneratingCode ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                        )}
-                        Обновить
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Если клиент уже привязан — показываем статус */}
-                {client?.client_user_id && (
-                  <div className="sm:col-span-2 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                    <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                      Клиент привязан к аккаунту на сайте. ИИ-анализ и доступ к меддокам работают автоматически.
-                    </p>
-                  </div>
-                )}
+                {/* Invite-блок вынесен НАВЕРХ страницы — над табами, чтобы юрист
+                    сразу видел код. См. рендер ниже над <Tabs>. */}
               </CardContent>
             </Card>
           </TabsContent>
