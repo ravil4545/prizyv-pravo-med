@@ -6,7 +6,9 @@
       "PowerShell(Get-Content *)",
       "PowerShell(Start-Sleep *)",
       "PowerShell(Get-CimInstance *)",
-      "PowerShell(Get-Service *)"
+      "PowerShell(Get-Service *)",
+      "Bash(git push)",
+      "Bash(git push origin main)"
     ]
   }
 }

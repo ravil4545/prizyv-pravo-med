@@ -29,9 +29,11 @@ const messageSchema = z.object({
   content: z.string().min(1).max(10000),
 });
 
+// Лимит контекста увеличен: расширенный buildAIContext включает профиль,
+// документы, опросник и события дела. Старый 50k мог не вмещать опросник.
 const chatRequestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(50),
-  medicalContext: z.string().max(50000).optional(),
+  medicalContext: z.string().max(120000).optional(),
 });
 
 serve(async (req) => {

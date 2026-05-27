@@ -296,6 +296,29 @@ const AIChatDashboardPage = () => {
         }
       }
 
+      // Если стрим завершился, но контент пустой — это тихий сбой
+      // (rate-limit, сетевая ошибка, обрыв SSE). Подменяем пустой пузырь
+      // на явное сообщение об ошибке, чтобы пользователь не видел тишины.
+      if (!assistantContent.trim()) {
+        const fallback = "⚠ ИИ не ответил. Возможно, превышен лимит запросов к бесплатной модели. Попробуйте через 30–60 секунд или переформулируйте вопрос.";
+        setMessages((prev) => {
+          const next = [...prev];
+          // Заменяем последний (пустой) assistant-пузырь
+          if (next.length && next[next.length - 1].role === "assistant") {
+            next[next.length - 1] = { role: "assistant", content: fallback };
+          } else {
+            next.push({ role: "assistant", content: fallback });
+          }
+          return next;
+        });
+        toast({
+          title: "ИИ не ответил",
+          description: "Пустой ответ от модели. Попробуйте ещё раз.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const assistantMessage: Message = { role: "assistant", content: assistantContent };
       if (!isDemoMode) await saveMessage(assistantMessage);
       if (isDemoMode) {
@@ -310,7 +333,14 @@ const AIChatDashboardPage = () => {
         description: error instanceof Error ? error.message : "Не удалось отправить сообщение",
         variant: "destructive",
       });
-      setMessages((prev) => prev.slice(0, -1));
+      // Снимаем placeholder-пузырь ассистента, но СОХРАНЯЕМ
+      // сообщение пользователя — раньше код удалял его, и текст пропадал.
+      setMessages((prev) => {
+        if (prev.length && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
     } finally {
       setSending(false);
     }

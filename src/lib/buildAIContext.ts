@@ -1,7 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths, format } from "date-fns";
 
-const MAX_CONTEXT_CHARS = 50000;
+// 100k оставляет запас 20k до серверного лимита 120k в chat edge-функции.
+// Опросник один может занимать до 6k, профиль ~500, документы — основная масса.
+const MAX_CONTEXT_CHARS = 100000;
 
 /**
  * Собирает полный контекст для ИИ-чата:
