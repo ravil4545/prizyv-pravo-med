@@ -276,7 +276,12 @@ const AIChatDashboardPage = () => {
       let assistantContent = "";
       let buffer = "";
 
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      // ВАЖНО: НЕ добавляем placeholder отдельным setMessages — React 18
+      // батчит обновления, и первый чанк стрима мог прийти раньше, чем
+      // placeholder применится к state. Тогда обновление по индексу
+      // newMessages[length-1] писалось в user message → ответ ИИ временно
+      // отображался на месте вопроса. Вместо этого добавляем/обновляем
+      // assistant-пузырь атомарно по роли.
 
       while (true) {
         const { done, value } = await reader.read();
@@ -302,9 +307,16 @@ const AIChatDashboardPage = () => {
             if (content) {
               assistantContent += content;
               setMessages((prev) => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1].content = assistantContent;
-                return newMessages;
+                const next = [...prev];
+                const last = next[next.length - 1];
+                // Если последний — assistant: апдейтим его. Иначе — добавляем новый.
+                // Это безопасно при любом порядке batched-обновлений React.
+                if (last && last.role === "assistant") {
+                  next[next.length - 1] = { role: "assistant", content: assistantContent };
+                } else {
+                  next.push({ role: "assistant", content: assistantContent });
+                }
+                return next;
               });
             }
           } catch {
