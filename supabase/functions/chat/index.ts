@@ -85,10 +85,12 @@ serve(async (req) => {
       });
     }
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+    // Lovable AI Gateway — единый провайдер для всех edge-функций
+    // (analyze-medical-document, parse-summons, generate-appeal — все на нём).
+    // Lovable оплачивает usage, лимиты гораздо щедрее чем у OpenRouter free.
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     let systemPrompt = `Вы — виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
@@ -230,132 +232,72 @@ ${medicalContext}`;
     // Если модель не отдала контент за это время — пробуем следующую.
     // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
     // существующий клиент работает без изменений.
-    // Мульти-провайдерная цепочка. OpenRouter free-tier нестабилен:
-    // модели возвращают 429 (rate-limit) и 503 (перегруз) одновременно
-    // — нельзя полагаться только на него.
-    // Groq имеет отдельный free-tier с гораздо большими лимитами
-    // (~14 400 req/сутки) и заметно быстрее на текстовых моделях.
-    //
-    // Каждая запись определяет провайдера и имя модели у этого провайдера.
-    type ProviderName = "groq" | "openrouter";
-    interface ModelEntry {
-      provider: ProviderName;
-      model: string;
-    }
-    const MODEL_CHAIN: ModelEntry[] = [
-      // Groq — основной, быстрый и стабильный
-      { provider: "groq", model: "llama-3.3-70b-versatile" },
-      { provider: "groq", model: "llama-3.1-8b-instant" },
-      { provider: "groq", model: "mixtral-8x7b-32768" },
-      // OpenRouter free — резерв
-      { provider: "openrouter", model: "google/gemma-4-31b-it:free" },
-      { provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" },
-      { provider: "openrouter", model: "deepseek/deepseek-v4-flash:free" },
-    ];
-
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-
-    // 15 сек × 3 модели = 45 сек суммарно — укладываемся в клиентский timeout 60.
-    const PER_MODEL_TIMEOUT_MS = 15_000;
+    // Единый провайдер — Lovable AI Gateway. Тот же, что в
+    // analyze-medical-document, parse-summons, generate-appeal.
+    // gemini-2.5-flash достаточно быстрая и хорошо знает русский.
+    const PRIMARY_MODEL = "google/gemini-2.5-flash";
+    const TIMEOUT_MS = 50_000; // запас под клиентский 60 сек
 
     let content = "";
     let usedModel = "";
     let lastErrorText = "";
     let lastStatus = 0;
 
-    for (const entry of MODEL_CHAIN) {
-      // Пропускаем Groq если ключ не сконфигурирован
-      if (entry.provider === "groq" && !GROQ_API_KEY) {
-        console.log("[Chat] Skip Groq:", entry.model, "(no GROQ_API_KEY)");
-        continue;
-      }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
-      const tag = `${entry.provider}:${entry.model}`;
-      console.log("[Chat] Trying", tag, "messages:", messages.length);
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), PER_MODEL_TIMEOUT_MS);
+    console.log("[Chat] Calling Lovable Gateway, model:", PRIMARY_MODEL, "messages:", messages.length);
 
-      const url =
-        entry.provider === "groq"
-          ? "https://api.groq.com/openai/v1/chat/completions"
-          : "https://openrouter.ai/api/v1/chat/completions";
+    try {
+      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: PRIMARY_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, ...messages],
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      console.log("[Chat] Lovable Gateway →", r.status);
 
-      const apiKey = entry.provider === "groq" ? GROQ_API_KEY! : OPENROUTER_API_KEY;
-
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      };
-      if (entry.provider === "openrouter") {
-        headers["HTTP-Referer"] = "https://nepriziv.ru";
-        headers["X-Title"] = "nepriziv.ru Legal Chat";
-      }
-
-      try {
-        const r = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: entry.model,
-            messages: [{ role: "system", content: systemPrompt }, ...messages],
-            // НЕ stream — забираем целиком за один раз с таймаутом.
-          }),
-          signal: ctrl.signal,
-        });
-
-        clearTimeout(t);
-        console.log("[Chat]", tag, "→", r.status);
-
-        if (r.status === 402) {
-          return new Response(JSON.stringify({ error: `Требуется пополнение счета ${entry.provider}.` }), {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        if (!r.ok) {
-          lastStatus = r.status;
-          lastErrorText = await r.text();
-          console.error("[Chat]", tag, "failed:", r.status, lastErrorText.slice(0, 200));
-          continue;
-        }
-
+      if (!r.ok) {
+        lastStatus = r.status;
+        lastErrorText = await r.text();
+        console.error("[Chat] Lovable Gateway failed:", r.status, lastErrorText.slice(0, 400));
+      } else {
         const data = await r.json();
         const c: string = data?.choices?.[0]?.message?.content || "";
-        if (!c || !c.trim()) {
-          console.warn("[Chat]", tag, "вернул пустой content, идём дальше");
+        if (c && c.trim()) {
+          content = c;
+          usedModel = `lovable/${PRIMARY_MODEL}`;
+        } else {
           lastErrorText = "empty content";
-          continue;
         }
-
-        content = c;
-        usedModel = `${entry.provider}/${entry.model}`;
-        break;
-      } catch (err) {
-        clearTimeout(t);
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Chat]", tag, "error:", msg);
-        lastErrorText = msg;
-        // AbortError при таймауте — переходим к следующей модели
       }
+    } catch (err) {
+      clearTimeout(t);
+      lastErrorText = err instanceof Error ? err.message : String(err);
+      console.error("[Chat] Lovable Gateway error:", lastErrorText);
     }
 
     if (!content) {
-      console.error("[Chat] All models failed. Last:", lastStatus, lastErrorText);
-      // 429 — дневной лимит free-tier OpenRouter (≈200 запросов/день).
-      // Сбрасывается раз в сутки, не "через минуту".
-      const errorMsg = lastStatus === 429
-        ? "Дневной лимит бесплатных ИИ-запросов исчерпан. Лимит обновится через 24 часа. Для безлимитного доступа оформите подписку — кнопка в личном кабинете."
-        : lastStatus === 401 || lastStatus === 403
-          ? "Сервис ИИ требует обновить API-ключ. Сообщите администратору."
-          : `Все ИИ-модели сейчас недоступны (ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
-      return new Response(
-        JSON.stringify({ error: errorMsg }),
-        {
-          status: lastStatus === 429 ? 429 : 503,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      console.error("[Chat] Failed. Last:", lastStatus, lastErrorText);
+      const errorMsg =
+        lastStatus === 429
+          ? "Превышен лимит запросов к ИИ. Попробуйте через 1–2 минуты."
+          : lastStatus === 401 || lastStatus === 403
+            ? "Сервис ИИ требует обновить API-ключ. Сообщите администратору."
+            : lastStatus === 402
+              ? "Требуется пополнение баланса AI Gateway. Сообщите администратору."
+              : `Сервис ИИ временно недоступен (ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
+      return new Response(JSON.stringify({ error: errorMsg }), {
+        status: lastStatus === 429 ? 429 : 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("[Chat] Got content from", usedModel, "len:", content.length);
