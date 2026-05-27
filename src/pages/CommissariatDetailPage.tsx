@@ -47,14 +47,14 @@ const CommissariatDetailPage = () => {
       setLoading(true);
       setNotFound(false);
 
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("commissariat_ratings")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (cancelled) return;
 
-      const all = (data as Rating[]) || [];
+      const all = (data as unknown as Rating[]) || [];
       const matched = all.filter((r) => makeCommissariatSlug(r.commissariat_name, r.city) === slug);
 
       if (matched.length === 0) {

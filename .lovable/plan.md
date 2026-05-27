@@ -1,49 +1,43 @@
-## Перезапись README.md
+Устранение 26 ошибок TypeScript, возникших после обновления Supabase-типов. Файл `src/integrations/supabase/types.ts` — авто-сгенерированный и read-only, поэтому правки вносятся только в компоненты/страницы.
 
-Заменю текущий README.md на подробную инструкцию на русском для локальной работы в Cursor с сохранением синхронизации с Lovable.
+### 1. Fix column name mismatches in `medical_documents_v2`
+**File:** `src/components/DossierExportButton.tsx`
+- `file_name` → `title` (in `.select()` and usage)
+- `upload_date` → `uploaded_at` (in `.select()`, `.order()`, and usage)
 
-### Структура нового README
+### 2. Fix `ReactMarkdown` className prop (v9 API)
+**File:** `src/components/RagChat.tsx`
+- Remove `className` from `<ReactMarkdown>`; wrap it in a `<div className="prose prose-sm ...">` instead.
 
-1. **О проекте** — краткое описание (nepriziv.ru, помощь призывникам, AI-анализ медицинских документов).
-2. **Стек технологий** — React 18, Vite 5, TypeScript, Tailwind, shadcn/ui, Supabase (Auth, Storage, Edge Functions, Postgres).
-3. **Требования** — Node.js 18+ или Bun, Git, аккаунт Supabase (для CLI), Cursor.
-4. **Подключение к GitHub** — пошагово через Lovable Connectors (для тех, кто ещё не подключил).
-5. **Локальный запуск**:
-   - `git clone <repo>`
-   - `bun install` (или `npm install`)
-   - создание `.env` с тремя переменными:
-     ```
-     VITE_SUPABASE_PROJECT_ID="kqbetheonxiclwgyatnm"
-     VITE_SUPABASE_URL="https://kqbetheonxiclwgyatnm.supabase.co"
-     VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJI..."
-     ```
-   - `bun run dev` → http://localhost:8080
-6. **Структура проекта** — карта основных папок (`src/pages`, `src/components`, `src/hooks`, `src/integrations/supabase`, `supabase/functions`, `supabase/migrations`).
-7. **Backend (Supabase)**:
-   - project ref: `kqbetheonxiclwgyatnm`
-   - список Edge Functions: `chat`, `analyze-medical-document`, `analyze-diagnosis`, `generate-document`, `enhance-document`, `find-government-structures`, `import-articles`, `submit-contact`, `notify-payment-click`, `admin-users`
-   - секреты, которые уже настроены на стороне Supabase (LOVABLE_API_KEY, RESEND_API_KEY и т.д.) — менять не надо.
-8. **Supabase CLI (опционально)**:
-   - `npm i -g supabase`
-   - `supabase login`
-   - `supabase link --project-ref kqbetheonxiclwgyatnm`
-   - `supabase functions deploy <name>` — для ручного деплоя из Cursor
-   - `supabase db push` — для применения миграций
-9. **Синхронизация Lovable ↔ Cursor ↔ GitHub**:
-   - правка в Cursor → `git push` → автоматически появляется в Lovable
-   - правка в Lovable → автоматический коммит в GitHub → `git pull` в Cursor
-   - **важно:** frontend-изменения в Lovable требуют клика "Update" в диалоге Publish, backend (edge functions, миграции) деплоятся сразу
-10. **Работа с базой данных** — миграции лежат в `supabase/migrations/`, новые создавать через `supabase migration new <name>`, применять `supabase db push`.
-11. **Деплой** — фронт публикуется кнопкой Publish в Lovable; backend деплоится автоматически.
-12. **Полезные ссылки** — Lovable project, Supabase dashboard, GitHub docs Lovable, custom domain.
-13. **Настройка email-подтверждения** — сохраню существующий блок про Confirm signup template.
+### 3. Fix `LawyerProfile` interface vs Supabase Row mismatch
+**File:** `src/hooks/useLawyerProfile.ts`
+- Make `id?: string` optional in the `LawyerProfile` interface (Supabase `lawyer_profiles` Row does not expose `id`).
 
-### Технические детали
+### 4. Fix `window._showAppError` typing
+**File:** `src/main.tsx`
+- Change type assertion from `Record<string, unknown>` to `Record<string, (...args: string[]) => void>` so the call expression is callable.
 
-- Файл будет полностью на русском (текущий README — на английском).
-- Использую кодовые блоки с указанием языка (`sh`, `env`, `ts`).
-- Сохраню секцию про настройку email-подтверждения из текущего README.
-- Не буду включать секретные ключи кроме publishable anon key (он публичный по дизайну).
-- Размер ~5–7 KB.
+### 5. Fix `.insert()` type in AdminBlogPage
+**File:** `src/pages/AdminBlogPage.tsx`
+- Cast `postData` to `any` on the `.insert(postData as any)` call, since it's built dynamically with conditional `published_at`.
 
-После approve — переключусь в Build mode и перезапишу `README.md`.
+### 6. Add `style` prop to `BrandedAvatar`
+**File:** `src/components/BrandedAvatar.tsx`
+- Add `style?: React.CSSProperties` to `BrandedAvatarProps` interface and spread it on the root `<div>`.
+
+### 7–9. Fix missing table errors via `(supabase as any)` casts
+**Files:**
+- `src/pages/CommissariatDetailPage.tsx` — `commissariat_ratings` (2 errors)
+- `src/pages/CommissariatDirectoryPage.tsx` — `commissariat_ratings` (3 errors)
+- `src/components/LawyerClientDocsUploader.tsx` — `lawyer_client_med_docs` (1 error)
+- `src/pages/ForumPage.tsx` — `forum_post_likes` (6 errors)
+- `src/pages/SuccessCasesPage.tsx` — `success_cases` (4 errors)
+
+For each: cast the supabase client to `any` for these specific queries, e.g.:
+```ts
+const { data } = await (supabase as any).from("table_name").select("*");
+```
+Then cast `data` to the local interface type. This avoids modifying the read-only auto-generated types file.
+
+---
+**Expected outcome:** `bunx tsc --noEmit` returns zero errors.

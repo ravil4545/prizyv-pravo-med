@@ -53,24 +53,24 @@ const ForumPage = () => {
 
   const loadLikes = async () => {
     const postIds = posts.map(p => p.id);
-    const { data: likeCounts } = await supabase
+    const { data: likeCounts } = await (supabase as any)
       .from("forum_post_likes")
       .select("post_id")
       .in("post_id", postIds);
 
     const counts: Record<string, number> = {};
-    for (const row of likeCounts || []) {
+    for (const row of (likeCounts as { post_id: string }[]) || []) {
       counts[row.post_id] = (counts[row.post_id] || 0) + 1;
     }
     setLikes(counts);
 
     if (user) {
-      const { data: myLikes } = await supabase
+      const { data: myLikes } = await (supabase as any)
         .from("forum_post_likes")
         .select("post_id")
         .in("post_id", postIds)
         .eq("user_id", user.id);
-      setLikedPosts(new Set((myLikes || []).map(r => r.post_id)));
+      setLikedPosts(new Set(((myLikes as { post_id: string }[]) || []).map(r => r.post_id)));
     }
   };
 
@@ -82,11 +82,11 @@ const ForumPage = () => {
     }
     const isLiked = likedPosts.has(postId);
     if (isLiked) {
-      await supabase.from("forum_post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+      await (supabase as any).from("forum_post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
       setLikedPosts(prev => { const s = new Set(prev); s.delete(postId); return s; });
       setLikes(prev => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 1) - 1) }));
     } else {
-      await supabase.from("forum_post_likes").insert({ post_id: postId, user_id: user.id });
+      await (supabase as any).from("forum_post_likes").insert({ post_id: postId, user_id: user.id });
       setLikedPosts(prev => new Set([...prev, postId]));
       setLikes(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
     }

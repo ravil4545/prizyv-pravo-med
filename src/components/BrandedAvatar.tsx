@@ -8,6 +8,7 @@ interface BrandedAvatarProps {
   className?: string;
   /** "square" — без round (default), "round" — круглая аватарка */
   shape?: "square" | "round";
+  style?: React.CSSProperties;
 }
 
 const initialsOf = (full: string): string => {
@@ -108,13 +109,13 @@ const PlaceholderSVG = ({ name }: { name: string }) => {
   );
 };
 
-const BrandedAvatar = ({ src, name, className = "", shape = "square" }: BrandedAvatarProps) => {
+const BrandedAvatar = ({ src, name, className = "", shape = "square", style }: BrandedAvatarProps) => {
   const [errored, setErrored] = useState(false);
   const showPlaceholder = !src || errored;
   const radius = shape === "round" ? "rounded-full" : "";
 
   return (
-    <div className={`relative overflow-hidden bg-paper ${radius} ${className}`}>
+    <div className={`relative overflow-hidden bg-paper ${radius} ${className}`} style={style}>
       {showPlaceholder ? (
         <PlaceholderSVG name={name} />
       ) : (

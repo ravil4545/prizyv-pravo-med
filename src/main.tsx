@@ -17,7 +17,7 @@ window.addEventListener("unhandledrejection", (event) => {
     window.location.reload();
   } else {
     // Second failure — show error (window._showAppError defined in index.html)
-    (window as unknown as Record<string, unknown>)._showAppError?.(
+    (window as unknown as Record<string, (msg: string) => void>)._showAppError?.(
       "Ошибка загрузки модулей. Проверьте интернет и попробуйте снова."
     );
   }
@@ -28,5 +28,5 @@ try {
   createRoot(document.getElementById("root")!).render(<App />);
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err);
-  (window as unknown as Record<string, unknown>)._showAppError?.(msg);
+  (window as unknown as Record<string, (msg: string) => void>)._showAppError?.(msg);
 }

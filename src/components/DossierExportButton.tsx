@@ -20,9 +20,9 @@ export default function DossierExportButton({ userId, profile }: DossierExportBu
       // Load documents
       const { data: docs } = await supabase
         .from("medical_documents_v2")
-        .select("id, file_name, file_url, upload_date, ai_fitness_category, ai_explanation, ai_recommendations")
+        .select("id, title, file_url, uploaded_at, ai_fitness_category, ai_explanation, ai_recommendations")
         .eq("user_id", userId)
-        .order("upload_date", { ascending: false });
+        .order("uploaded_at", { ascending: false });
 
       if (!docs || docs.length === 0) {
         toast({ title: "Нет документов", description: "Загрузите медицинские документы для экспорта досье", variant: "destructive" });
@@ -64,12 +64,12 @@ export default function DossierExportButton({ userId, profile }: DossierExportBu
           y = 20;
         }
         doc.setFont("helvetica", "bold");
-        doc.text(`• ${d.file_name || "Без названия"}`, 14, y);
+        doc.text(`• ${d.title || "Без названия"}`, 14, y);
         y += 6;
         doc.setFont("helvetica", "normal");
 
-        if (d.upload_date) {
-          doc.text(`  Дата: ${new Date(d.upload_date).toLocaleDateString("ru-RU")}`, 14, y);
+        if (d.uploaded_at) {
+          doc.text(`  Дата: ${new Date(d.uploaded_at).toLocaleDateString("ru-RU")}`, 14, y);
           y += 5;
         }
         if (d.ai_fitness_category) {
