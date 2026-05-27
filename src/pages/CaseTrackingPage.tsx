@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Calendar, CheckCircle2, XCircle, Clock, Edit2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Calendar, CheckCircle2, XCircle, Clock, Edit2, ScanLine, FileSignature } from "lucide-react";
 import { PageLoader } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import SummonsUploadDialog from "@/components/SummonsUploadDialog";
+import AppealGeneratorDialog from "@/components/AppealGeneratorDialog";
 
 interface CaseEvent {
   id: string;
@@ -63,6 +65,8 @@ export default function CaseTrackingPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CaseEvent | null>(null);
   const [saving, setSaving] = useState(false);
+  const [summonsDialogOpen, setSummonsDialogOpen] = useState(false);
+  const [appealForEvent, setAppealForEvent] = useState<CaseEvent | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -159,15 +163,28 @@ export default function CaseTrackingPage() {
             <ArrowLeft className="h-4 w-4 mr-2" /> Назад в кабинет
           </Button>
 
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-start justify-between mb-8 gap-3 flex-wrap">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold">Трекинг призывного дела</h1>
+              <p className="section-number mb-1">Дело</p>
+              <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight">Трекинг призывного дела</h1>
               <p className="text-muted-foreground text-sm mt-1">История событий и обращений по вашему делу</p>
             </div>
-            <Button onClick={openAdd} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Добавить событие
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setSummonsDialogOpen(true)}
+                className="gap-2 border-gold/40 hover:bg-gold/5"
+              >
+                <ScanLine className="h-4 w-4 text-gold-deep" />
+                <span className="hidden sm:inline">Распознать повестку</span>
+                <span className="sm:hidden">Повестка</span>
+              </Button>
+              <Button onClick={openAdd} className="gap-2 bg-ink hover:bg-ink/90 text-paper">
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Добавить событие</span>
+                <span className="sm:hidden">Событие</span>
+              </Button>
+            </div>
           </div>
 
           {events.length === 0 ? (
@@ -219,6 +236,17 @@ export default function CaseTrackingPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
+                              {ev.outcome === "negative" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1.5 text-xs border-gold/40 hover:bg-gold/5"
+                                  onClick={() => setAppealForEvent(ev)}
+                                >
+                                  <FileSignature className="h-3.5 w-3.5 text-gold-deep" />
+                                  <span className="hidden sm:inline">Жалоба</span>
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(ev)}>
                                 <Edit2 className="h-3.5 w-3.5" />
                               </Button>
@@ -286,6 +314,18 @@ export default function CaseTrackingPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SummonsUploadDialog
+        open={summonsDialogOpen}
+        onOpenChange={setSummonsDialogOpen}
+        onCreated={() => user && loadEvents(user.id)}
+      />
+
+      <AppealGeneratorDialog
+        event={appealForEvent}
+        open={!!appealForEvent}
+        onOpenChange={(o) => !o && setAppealForEvent(null)}
+      />
     </div>
   );
 }

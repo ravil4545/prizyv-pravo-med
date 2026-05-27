@@ -3,8 +3,6 @@ import { useSubscription } from "@/hooks/useSubscription";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { format, differenceInMonths } from "date-fns";
-import { ru } from "date-fns/locale";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,9 +15,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { enhanceTypography } from "@/lib/typography";
+import { enhanceTypography, linkifyDiseaseArticles } from "@/lib/typography";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
+import { buildAIContext } from "@/lib/buildAIContext";
 
 interface Message {
   role: "user" | "assistant";
@@ -83,116 +82,12 @@ const AIChatDashboardPage = () => {
   const loadMedicalContext = async () => {
     setMedicalContextLoading(true);
     try {
-      console.log("[MedicalContext] Loading medical data...");
-      // Load documents, article links, and article names in parallel
-      const [docsRes, linksRes, articlesRes] = await Promise.all([
-        supabase
-          .from("medical_documents_v2")
-          .select("id, title, document_date, document_type_id, document_subtype_id, document_types(name), document_subtypes(name)")
-          .order("document_date", { ascending: false }),
-        supabase
-          .from("document_article_links")
-          .select("document_id, article_id, ai_category_chance, ai_fitness_category, ai_explanation, ai_recommendations, disease_articles_565(article_number, title)"),
-        supabase
-          .from("disease_articles_565")
-          .select("id, article_number, title")
-          .eq("is_active", true),
-      ]);
-
-      if (docsRes.error || linksRes.error || articlesRes.error) {
-        console.error("[MedicalContext] Error loading:", docsRes.error, linksRes.error, articlesRes.error);
-        return;
-      }
-
-      const docs = docsRes.data || [];
-      const links = linksRes.data || [];
-      console.log("[MedicalContext] Loaded", docs.length, "docs,", links.length, "links");
-
-      if (docs.length === 0) {
-        setMedicalContext("");
-        medicalContextRef.current = "";
-        return;
-      }
-
-      const now = new Date();
-      const linksByDoc = new Map<string, typeof links>();
-      for (const link of links) {
-        const arr = linksByDoc.get(link.document_id) || [];
-        arr.push(link);
-        linksByDoc.set(link.document_id, arr);
-      }
-
-      let context = "=== МЕДИЦИНСКИЕ ДОКУМЕНТЫ ПОЛЬЗОВАТЕЛЯ ===\n\n";
-
-      // Track best chances per article
-      const articleBestChance = new Map<string, { chance: number; articleNum: string; title: string }>();
-
-      for (const doc of docs) {
-        const typeName = (doc as any).document_types?.name || "Не указан";
-        const subtypeName = (doc as any).document_subtypes?.name;
-        const docTitle = doc.title || "Без названия";
-
-        let dateLine = "Дата не указана";
-        let ageMonths = 0;
-        if (doc.document_date) {
-          const docDate = new Date(doc.document_date);
-          ageMonths = differenceInMonths(now, docDate);
-          const formattedDate = format(docDate, "dd.MM.yyyy");
-          dateLine = ageMonths > 0 ? `${formattedDate} (давность: ${ageMonths} мес.)` : formattedDate;
-          if (ageMonths > 6) {
-            dateLine += " ⚠️ УСТАРЕЛ";
-          }
-        }
-
-        context += `Документ: ${docTitle}\n`;
-        context += `Тип: ${typeName}${subtypeName ? ` / ${subtypeName}` : ""}\n`;
-        context += `Дата: ${dateLine}\n`;
-
-        const docLinks = linksByDoc.get(doc.id) || [];
-        for (const link of docLinks) {
-          const article = (link as any).disease_articles_565;
-          if (!article) continue;
-          const chance = link.ai_category_chance || 0;
-          context += `  Статья ${article.article_number} (${article.title}) — шанс кат. В: ${chance}%\n`;
-          if (link.ai_explanation) {
-            context += `    Обоснование: ${link.ai_explanation}\n`;
-          }
-          if (link.ai_recommendations && link.ai_recommendations.length > 0) {
-            context += `    Рекомендации: ${link.ai_recommendations.join("; ")}\n`;
-          }
-
-          // Track best chance per article
-          const existing = articleBestChance.get(link.article_id);
-          if (!existing || chance > existing.chance) {
-            articleBestChance.set(link.article_id, { chance, articleNum: article.article_number, title: article.title });
-          }
-        }
-
-        context += "\n";
-      }
-
-      // Summary
-      context += `Всего документов: ${docs.length}\n`;
-
-      const sortedArticles = [...articleBestChance.values()]
-        .sort((a, b) => b.chance - a.chance)
-        .slice(0, 5);
-
-      if (sortedArticles.length > 0) {
-        context += `Статьи с наибольшим шансом кат. В: ${sortedArticles.map(a => `Ст.${a.articleNum} (${a.chance}%)`).join(", ")}\n`;
-      }
-
-      const oldDocs = docs.filter(d => d.document_date && differenceInMonths(now, new Date(d.document_date)) > 6);
-      if (oldDocs.length > 0) {
-        context += `\n⚠️ ${oldDocs.length} из ${docs.length} документов старше 6 месяцев — рекомендуется обновить обследования.\n`;
-      }
-
-      const finalContext = context.substring(0, 50000);
-      setMedicalContext(finalContext);
-      medicalContextRef.current = finalContext;
-      console.log("[MedicalContext] Context built:", finalContext.length, "chars");
+      const ctx = await buildAIContext();
+      setMedicalContext(ctx);
+      medicalContextRef.current = ctx;
+      console.log("[AIContext] Loaded:", ctx.length, "chars");
     } catch (error) {
-      console.error("[MedicalContext] Error building context:", error);
+      console.error("[AIContext] Error building context:", error);
     } finally {
       setMedicalContextLoading(false);
     }
@@ -582,11 +477,11 @@ const AIChatDashboardPage = () => {
                 Консультация по вопросам призыва и воинского учёта
               </p>
               {medicalContextLoading ? (
-                <p className="text-xs text-muted-foreground animate-pulse">⏳ Загрузка медицинских данных...</p>
+                <p className="text-xs text-muted-foreground animate-pulse">⏳ Загрузка данных вашего дела...</p>
               ) : medicalContext ? (
-                <p className="text-xs text-green-600 dark:text-green-400">✅ Медицинские данные загружены — ИИ видит ваши документы</p>
+                <p className="text-xs text-success">✅ ИИ видит ваш профиль, документы, опросник и события дела</p>
               ) : (
-                <p className="text-xs text-muted-foreground">📋 Загрузите документы, чтобы ИИ мог учитывать вашу ситуацию</p>
+                <p className="text-xs text-muted-foreground">📋 Заполните профиль и загрузите документы — ИИ даст персональную консультацию</p>
               )}
             </CardHeader>
             <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0 overflow-hidden">
@@ -641,9 +536,32 @@ const AIChatDashboardPage = () => {
                           style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                         >
                           {message.role === "assistant" ? (
-                            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {enhanceTypography(bubble.trim())}
+                            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-gold-deep [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  a: ({ href, children }) => {
+                                    // Внутренние ссылки на статьи Расписания болезней — react-router
+                                    if (href?.startsWith("/")) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => navigate(href)}
+                                          className="text-gold-deep font-semibold hover:underline inline"
+                                        >
+                                          {children}
+                                        </button>
+                                      );
+                                    }
+                                    return (
+                                      <a href={href} target="_blank" rel="noopener noreferrer">
+                                        {children}
+                                      </a>
+                                    );
+                                  },
+                                }}
+                              >
+                                {linkifyDiseaseArticles(enhanceTypography(bubble.trim()))}
                               </ReactMarkdown>
                             </div>
                           ) : (

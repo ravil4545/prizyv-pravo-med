@@ -100,6 +100,8 @@ const LawyerBrandingPage = lazy(() => import("./pages/LawyerBrandingPage"));
 const LawyerLandingPage = lazy(() => import("./pages/LawyerLandingPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
+const FamilyAccessPage = lazy(() => import("./pages/FamilyAccessPage"));
+const FamilyAcceptPage = lazy(() => import("./pages/FamilyAcceptPage"));
 // Lazy-load RagChat — keeps react-markdown out of the main bundle
 const RagChat = lazy(() => import("./components/RagChat"));
 
@@ -212,6 +214,9 @@ const App = () => (
                 {/* /client/* — переписки клиента с юристами; доступны только клиентам */}
                 <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
                 <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
+                {/* /family — семейный доступ (только клиенты) и приём приглашений */}
+                <Route path="/family" element={<RoleGuard role="client"><FamilyAccessPage /></RoleGuard>} />
+                <Route path="/family/accept/:token" element={<FamilyAcceptPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

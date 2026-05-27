@@ -31,6 +31,21 @@ export function enhanceTypography(text: string): string {
 }
 
 /**
+ * Преобразует ссылки на статьи Расписания болезней № 565 из формата [Ст. NN]
+ * (который ИИ возвращает в ответе) в markdown-ссылки на /medical-history.
+ * UI рендерит их как кликабельные.
+ *
+ * Поддерживает: [Ст. 24], [Ст. 26.б], [Ст. 66.а], [Ст. 5.1] и т.п.
+ */
+export function linkifyDiseaseArticles(text: string): string {
+  if (!text) return text;
+  return text.replace(
+    /\[Ст\.\s*(\d+(?:\.[а-яёa-z0-9]+)?)\]/gi,
+    (_, num) => `[Ст. ${num}](/medical-history?article=${encodeURIComponent(num)})`,
+  );
+}
+
+/**
  * Преобразует обычный текст в Markdown, автоматически определяя структуру
  */
 export function textToMarkdown(text: string): string {

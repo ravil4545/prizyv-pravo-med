@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { User, GraduationCap, Briefcase, Shield, FileText, Activity, FileSignature } from "lucide-react";
+import { User, GraduationCap, Briefcase, Shield, FileText, Activity } from "lucide-react";
 import { FormSkeleton } from "@/components/LoadingSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import PersonalDataForm from "@/components/profile/PersonalDataForm";
@@ -12,7 +12,6 @@ import EducationForm from "@/components/profile/EducationForm";
 import WorkForm from "@/components/profile/WorkForm";
 import MilitaryForm from "@/components/profile/MilitaryForm";
 import DiagnosesForm from "@/components/profile/DiagnosesForm";
-import DocumentsGenerator from "@/components/profile/DocumentsGenerator";
 import MedicalTestsForm from "@/components/profile/MedicalTestsForm";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -110,7 +109,6 @@ const ProfilePage = () => {
     { value: "military", label: "Военкомат", longLabel: "Военкомат", icon: Shield },
     { value: "diagnoses", label: "Диагнозы", longLabel: "Диагнозы", icon: FileText },
     { value: "medical-tests", label: "Анализы", longLabel: "Анализы", icon: Activity },
-    { value: "documents", label: "Шаблоны", longLabel: "Шаблоны", icon: FileSignature },
   ];
 
   return (
@@ -145,7 +143,7 @@ const ProfilePage = () => {
           </div>
 
           {/* Desktop: grid tabs */}
-          <TabsList className="hidden lg:grid w-full grid-cols-7 mb-8 h-auto gap-1 p-1">
+          <TabsList className="hidden lg:grid w-full grid-cols-6 mb-8 h-auto gap-1 p-1">
             {tabs.map(({ value, longLabel, icon: Icon }) => (
               <TabsTrigger key={value} value={value} className="gap-1.5 py-2.5 text-sm">
                 <Icon className="h-4 w-4" />
@@ -176,10 +174,6 @@ const ProfilePage = () => {
 
           <TabsContent value="medical-tests">
             <MedicalTestsForm userId={user?.id} />
-          </TabsContent>
-
-          <TabsContent value="documents">
-            <DocumentsGenerator profile={profile} userId={user?.id} />
           </TabsContent>
         </Tabs>
 

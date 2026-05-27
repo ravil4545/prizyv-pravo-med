@@ -3,9 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, User, LogOut, Settings, BookOpen, Star, BarChart3, FileHeart, UserPlus, ChevronRight, Sparkles, ClipboardList, Calendar, Trophy, Building2, Briefcase, Users, Scale, Search } from "lucide-react";
+import {
+  FileText,
+  MessageSquare,
+  LogOut,
+  Settings,
+  BookOpen,
+  Star,
+  BarChart3,
+  FileHeart,
+  ChevronRight,
+  ClipboardList,
+  Calendar,
+  Trophy,
+  Building2,
+  Briefcase,
+  Users,
+  Search,
+  User,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import CaseRoadmap from "@/components/CaseRoadmap";
@@ -13,18 +31,17 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
 import { GridSkeleton } from "@/components/LoadingSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import ShareWithLawyer from "@/components/ShareWithLawyer";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
-import LawyerPartnerDialog from "@/components/LawyerPartnerDialog";
+import AICaseSummary from "@/components/dashboard/AICaseSummary";
+import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
 
 interface DashboardCard {
   title: string;
   description: string;
   icon: React.ElementType;
   path: string;
-  gradient?: string;
   featured?: boolean;
   tag?: string;
 }
@@ -35,14 +52,13 @@ const DashboardPage = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [partnerDialogOpen, setPartnerDialogOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useUnreadMessages();
-  const { isLawyer, profile: lawyerProfile, loading: lawyerLoading } = useLawyerProfile();
+  const { isLawyer, loading: lawyerLoading } = useLawyerProfile();
 
-  // Lawyers have their own cabinet — redirect immediately
+  // Юристы попадают в свой кабинет
   useEffect(() => {
     if (!lawyerLoading && isLawyer) navigate("/lawyer", { replace: true });
   }, [isLawyer, lawyerLoading]);
@@ -71,7 +87,6 @@ const DashboardPage = () => {
         .eq("user_id", session.user.id);
       setIsAdmin(roles?.some(r => r.role === "admin") || false);
 
-      // Show onboarding for new users who haven't completed it
       if (!isOnboardingDone() && !profileData?.full_name) {
         setShowOnboarding(true);
       }
@@ -106,66 +121,57 @@ const DashboardPage = () => {
     );
   }
 
-  const mainCards: DashboardCard[] = [
+  // Основные рабочие сценарии — 3 ключевые точки входа.
+  // ИИ-консультант объединяет чат + анализ документов + историю болезней.
+  const primaryCards: DashboardCard[] = [
     {
-      title: "ИИ помощник",
-      description: "Персональный юридический и медицинский консультант по вопросам призыва",
+      title: "ИИ-консультант",
+      description: "Чат, анализ документов и оценка по Расписанию болезней",
       icon: MessageSquare,
       path: "/dashboard/ai-chat",
       featured: true,
-      tag: "Популярное",
-      gradient: "from-primary to-accent",
+      tag: "AI",
     },
     {
-      title: "ИИ анализ документов",
-      description: "Загрузите медицинские документы для автоматического AI-анализа",
+      title: "Моё досье",
+      description: "Документы, опросник, диагнозы — всё, что видит ИИ и юрист",
       icon: FileHeart,
       path: "/dashboard/medical-documents",
-      tag: "AI",
-      gradient: "from-accent to-primary",
     },
     {
-      title: "ИИ история болезни",
-      description: "88 статей Расписания болезней с AI-оценкой категории годности",
+      title: "Дело",
+      description: "Этапы, комиссии, обжалования, суды — таймлайн вашего дела",
+      icon: Calendar,
+      path: "/dashboard/case-tracking",
+    },
+  ];
+
+  // Reference-инструменты — нужны реже, отдельная группа.
+  const toolsCards: DashboardCard[] = [
+    {
+      title: "Расписание болезней",
+      description: "88 статей с AI-оценкой шансов категории годности",
       icon: BookOpen,
       path: "/medical-history",
-      tag: "Новое",
-      gradient: "from-primary to-primary-dark",
     },
     {
-      title: "Шаблоны заявлений",
-      description: "Готовые документы: постановка на учёт, отсрочки и другое",
-      icon: FileText,
-      path: "/dashboard/templates",
-    },
-    {
-      title: "Медицинский опросник",
-      description: "Заполните опросник для AI-анализа вашей ситуации",
+      title: "Опросник для ИИ",
+      description: "Заполните жалобы, которые не вошли в справки",
       icon: ClipboardList,
       path: "/medical-questionnaire",
     },
     {
-      title: "Трекинг дела",
-      description: "Фиксируйте этапы призывного дела: комиссии, обжалования, суды",
-      icon: Calendar,
-      path: "/dashboard/case-tracking",
-      tag: "Новое",
+      title: "Шаблоны заявлений",
+      description: "Постановка на учёт, отсрочки, обжалования",
+      icon: FileText,
+      path: "/dashboard/templates",
     },
   ];
-
-  if (!isDemoMode) {
-    mainCards.push({
-      title: "Профиль",
-      description: "Управление личными данными и настройками аккаунта",
-      icon: User,
-      path: "/profile",
-    });
-  }
 
   const communityCards: DashboardCard[] = [
     {
       title: "Юристы платформы",
-      description: "Подобрать юриста и написать в защищённом чате — без обмена контактами",
+      description: "Подобрать юриста и написать в защищённом чате",
       icon: Briefcase,
       path: "/lawyers",
       tag: "Сделка на сайте",
@@ -178,18 +184,18 @@ const DashboardPage = () => {
     },
     {
       title: "Справочник военкоматов",
-      description: "Рейтинги и отзывы о военкоматах от призывников",
+      description: "Рейтинги и отзывы о военкоматах",
       icon: Building2,
       path: "/commissariats",
     },
   ];
 
   const adminCards: DashboardCard[] = [
-    { title: "Аналитика сайта", description: "Статистика посещений", icon: BarChart3, path: "/admin/analytics" },
-    { title: "Управление форумом", description: "Модерация тем", icon: Settings, path: "/admin/forum" },
-    { title: "Управление блогом", description: "Статьи блога", icon: BookOpen, path: "/admin/blog" },
-    { title: "Управление отзывами", description: "Модерация отзывов", icon: Star, path: "/admin/testimonials" },
-    { title: "Пользователи", description: "Управление доступом", icon: User, path: "/admin/users" },
+    { title: "Аналитика", description: "Статистика", icon: BarChart3, path: "/admin/analytics" },
+    { title: "Форум", description: "Модерация", icon: Settings, path: "/admin/forum" },
+    { title: "Блог", description: "Статьи", icon: BookOpen, path: "/admin/blog" },
+    { title: "Отзывы", description: "Модерация", icon: Star, path: "/admin/testimonials" },
+    { title: "Пользователи", description: "Доступы", icon: User, path: "/admin/users" },
   ];
 
   return (
@@ -197,86 +203,67 @@ const DashboardPage = () => {
       <Header />
       <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
         <div className="max-w-5xl mx-auto">
-          {/* Header */}
+          {/* ── Шапка — серифный editorial-стиль ───────────────────────── */}
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                Личный кабинет
-              </h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                {isDemoMode ? "Демо-режим — ограниченный доступ" : (profile?.full_name || user?.email)}
-              </p>
+            <div className="flex items-center gap-3">
+              {!isDemoMode && (
+                <button
+                  onClick={() => navigate("/profile")}
+                  aria-label="Профиль"
+                  className="h-11 w-11 rounded-full bg-gold/15 hover:bg-gold/25 transition-colors flex items-center justify-center flex-shrink-0"
+                >
+                  <span className="text-gold-deep font-serif font-semibold text-lg">
+                    {(profile?.full_name?.[0] || user?.email?.[0] || "?").toUpperCase()}
+                  </span>
+                </button>
+              )}
+              <div>
+                <p className="section-number mb-0.5">Личный кабинет</p>
+                <h1 className="font-serif text-2xl md:text-3xl font-semibold text-foreground tracking-tight">
+                  {isDemoMode ? "Демо-режим" : profile?.full_name?.split(" ")[0] || "Здравствуйте"}
+                </h1>
+                {!isDemoMode && (
+                  <p className="text-xs text-muted-foreground truncate max-w-[260px]">{user?.email}</p>
+                )}
+              </div>
             </div>
             {!isDemoMode && (
-              <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground">
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">Выйти</span>
               </Button>
             )}
           </div>
 
-          {/* Case roadmap (only for registered users — anonymous have no progress yet) */}
+          {/* ── Инбокс уведомлений ─────────────────────────────────────── */}
+          {!isDemoMode && (
+            <div className="mb-5">
+              <NotificationsInbox />
+            </div>
+          )}
+
+          {/* ── AI-сводка по делу — главный блок ───────────────────────── */}
+          {!isDemoMode && (
+            <div className="mb-5">
+              <AICaseSummary />
+            </div>
+          )}
+
+          {/* ── Роадмап (компактнее, после сводки) ─────────────────────── */}
           {!isDemoMode && (
             <div className="mb-6">
               <CaseRoadmap />
             </div>
           )}
 
-          {/* Subscription Status */}
+          {/* ── Подписка ───────────────────────────────────────────────── */}
           <div className="mb-6">
             <SubscriptionStatusCard />
           </div>
 
-          {/* Chat Banner — lawyer version */}
-          {!isDemoMode && isLawyer && (
-            <div
-              onClick={() => navigate("/lawyer/clients")}
-              className={cn(
-                "mb-6 cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
-                "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
-                unreadCount > 0
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-border/60 bg-muted/20 hover:bg-muted/40"
-              )}
-            >
-              <div className={cn(
-                "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
-                unreadCount > 0
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
-              )}>
-                <Users className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
-                    Чат с клиентами
-                  </p>
-                  {unreadCount > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0 h-4">
-                      {unreadCount} новых
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {unreadCount > 0
-                    ? "Клиент написал вам — нажмите, чтобы ответить"
-                    : "Переписка с вашими клиентами"}
-                </p>
-              </div>
-              <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
-            </div>
-          )}
-
-          {/* Юристы — две карты рядом: подобрать нового + текущие чаты */}
+          {/* ── Юристы (без дубля «Кабинет юриста» из футера) ──────────── */}
           {!isDemoMode && !isLawyer && (
             <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Найти юриста */}
               <div
                 onClick={() => navigate("/lawyers")}
                 className="cursor-pointer rounded-xl border border-gold/40 bg-gradient-to-br from-gold/5 to-paper-deep/20 px-4 py-3.5 flex items-center gap-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-gold group"
@@ -287,130 +274,128 @@ const DashboardPage = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-foreground">Найти юриста</p>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    Каталог юристов · защищённый чат до договора
+                    Каталог · защищённый чат до договора
                   </p>
                 </div>
                 <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/50 group-hover:text-gold-deep transition-colors" />
               </div>
 
-              {/* Мои чаты с юристами */}
               <div
                 onClick={() => navigate("/client/messages")}
                 className={cn(
                   "cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
                   "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
                   unreadCount > 0
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-border/60 bg-muted/20 hover:bg-muted/40"
+                    ? "border-seal/40 bg-seal/5"
+                    : "border-border/60 bg-muted/20 hover:bg-muted/40",
                 )}
               >
                 <div className={cn(
                   "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
                   unreadCount > 0
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
+                    ? "bg-seal text-paper shadow-sm"
+                    : "bg-muted text-muted-foreground group-hover:bg-gold/15 group-hover:text-gold-deep transition-colors",
                 )}>
                   <Briefcase className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
+                    <span className="absolute -top-0.5 -right-0.5 bg-seal text-paper text-[9px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-1 animate-pulse">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-primary" : "text-foreground")}>
-                      Мои чаты с юристами
-                    </p>
-                    {unreadCount > 0 && (
-                      <span className="inline-flex items-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0 h-4">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </div>
+                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-seal" : "text-foreground")}>
+                    Мои чаты с юристами
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
                     {unreadCount > 0
                       ? "Юрист написал — нажмите, чтобы ответить"
-                      : "История переписки с вашими юристами"}
+                      : "История переписки"}
                   </p>
                 </div>
-                <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary")} />
+                <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-seal" : "text-muted-foreground/50 group-hover:text-gold-deep")} />
               </div>
             </div>
           )}
 
-          {/* Main Feature Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mainCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <Card
-                  key={card.path}
-                  className={`group cursor-pointer transition-all duration-300 hover:shadow-medium hover:-translate-y-0.5 overflow-hidden relative ${
-                    card.featured ? "sm:col-span-2 lg:col-span-1 border-primary/20" : "border-border/50"
-                  }`}
-                  onClick={() => navigate(card.path)}
-                >
-                  {/* Gradient accent bar */}
-                  {card.gradient && (
-                    <div className={`h-1 w-full bg-gradient-to-r ${card.gradient}`} />
-                  )}
-                  
-                  <CardContent className="p-4 md:p-5">
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${
-                        card.gradient 
-                          ? `bg-gradient-to-br ${card.gradient} shadow-sm` 
-                          : "bg-primary/8 group-hover:bg-primary/12"
-                      }`}>
-                        <Icon className={`h-5 w-5 ${card.gradient ? "text-white" : "text-primary"}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-foreground text-sm md:text-base truncate">
-                            {card.title}
-                          </h3>
-                          {card.tag && (
-                            <Badge tag={card.tag} />
+          {/* ── 3 главных сценария ─────────────────────────────────────── */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="section-number">Что делать</span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {primaryCards.map((card) => {
+                const Icon = card.icon;
+                const isFeatured = card.featured;
+                return (
+                  <Card
+                    key={card.path}
+                    onClick={() => navigate(card.path)}
+                    className={cn(
+                      "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
+                      isFeatured
+                        ? "border-gold/50 bg-gradient-to-br from-gold/10 via-paper to-paper-deep/30 hover:shadow-accent"
+                        : "border-border/60 bg-card hover:shadow-medium",
+                    )}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div
+                          className={cn(
+                            "h-11 w-11 rounded-xl flex items-center justify-center transition-colors",
+                            isFeatured
+                              ? "bg-gold-deep text-paper shadow-sm"
+                              : "bg-muted text-foreground group-hover:bg-gold/15 group-hover:text-gold-deep",
                           )}
+                        >
+                          <Icon className="h-5 w-5" />
                         </div>
-                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
-                          {card.description}
-                        </p>
+                        {card.tag && (
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-gold-deep bg-gold/10 px-1.5 py-0.5 rounded">
+                            {card.tag}
+                          </span>
+                        )}
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                      <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {card.description}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Community Section */}
-          <div className="mt-8">
-            <h2 className="text-lg font-bold mb-3 text-foreground flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-amber-500" />
-              Сообщество
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {communityCards.map((card) => {
+          {/* ── Инструменты ────────────────────────────────────────────── */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="section-number">Инструменты</span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {toolsCards.map((card) => {
                 const Icon = card.icon;
                 return (
                   <Card
                     key={card.path}
-                    className="group cursor-pointer transition-all duration-300 hover:shadow-medium hover:-translate-y-0.5 border-border/50"
                     onClick={() => navigate(card.path)}
+                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border/50"
                   >
-                    <CardContent className="p-4 md:p-5">
+                    <CardContent className="p-4">
                       <div className="flex items-start gap-3">
-                        <div className="p-2.5 rounded-xl shrink-0 bg-primary/8 group-hover:bg-primary/12 transition-colors">
-                          <Icon className="h-5 w-5 text-primary" />
+                        <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 group-hover:bg-gold/15 transition-colors">
+                          <Icon className="h-4 w-4 text-foreground group-hover:text-gold-deep transition-colors" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground text-sm md:text-base">{card.title}</h3>
-                          <p className="text-xs md:text-sm text-muted-foreground mt-0.5 line-clamp-2">{card.description}</p>
+                          <h3 className="font-semibold text-sm text-foreground">{card.title}</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {card.description}
+                          </p>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
                       </div>
                     </CardContent>
                   </Card>
@@ -419,26 +404,81 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* Admin Section */}
+          {/* ── Сообщество ─────────────────────────────────────────────── */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="section-number">Сообщество</span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {communityCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <Card
+                    key={card.path}
+                    onClick={() => navigate(card.path)}
+                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border/50"
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 group-hover:bg-gold/15 transition-colors">
+                          <Icon className="h-4 w-4 text-foreground group-hover:text-gold-deep transition-colors" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm text-foreground">{card.title}</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {card.description}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Семейный доступ — мини-CTA ─────────────────────────────── */}
+          {!isDemoMode && (
+            <div className="mb-8">
+              <Card
+                onClick={() => navigate("/family")}
+                className="cursor-pointer border-border/50 hover:border-gold/40 transition-colors group"
+              >
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-gold/15 transition-colors">
+                    <Users className="h-4 w-4 text-foreground group-hover:text-gold-deep transition-colors" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-foreground">Семейный доступ</p>
+                    <p className="text-xs text-muted-foreground">
+                      Пригласить родителей видеть ваше дело (только просмотр)
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* ── Админ-секция ───────────────────────────────────────────── */}
           {isAdmin && (
-            <div className="mt-8">
-              <h2 className="text-lg font-bold mb-3 text-foreground flex items-center gap-2">
-                <Settings className="h-5 w-5 text-destructive" />
-                Администрирование
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="mt-8 pt-6 border-t border-border/50">
+              <div className="flex items-center gap-2 mb-3">
+                <Settings className="h-4 w-4 text-seal" />
+                <span className="section-number text-seal">Администрирование</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 {adminCards.map((card) => {
                   const Icon = card.icon;
                   return (
                     <Card
                       key={card.path}
-                      className="cursor-pointer hover:shadow-soft transition-all hover:-translate-y-0.5 border-destructive/10"
                       onClick={() => navigate(card.path)}
+                      className="cursor-pointer hover:shadow-soft transition-all border-seal/20 bg-seal/[0.02]"
                     >
                       <CardContent className="p-3 text-center">
-                        <div className="p-2 bg-destructive/8 rounded-lg w-fit mx-auto mb-2">
-                          <Icon className="h-4 w-4 text-destructive" />
-                        </div>
+                        <Icon className="h-4 w-4 text-seal mx-auto mb-1.5" />
                         <p className="text-xs font-medium text-foreground truncate">{card.title}</p>
                       </CardContent>
                     </Card>
@@ -449,56 +489,6 @@ const DashboardPage = () => {
           )}
         </div>
       </main>
-
-      {/* ── Lawyer Cabinet Footer Button ─────────────────────────────────── */}
-      {!isDemoMode && user && (
-        <div className="container mx-auto px-4 pb-4 max-w-5xl">
-          <div
-            onClick={() => {
-              if (isLawyer) {
-                navigate("/lawyer/clients");
-              } else {
-                // Незалогиненный юрист — открываем диалог выбора канала связи
-                setPartnerDialogOpen(true);
-              }
-            }}
-            className={cn(
-              "cursor-pointer rounded-xl border px-5 py-4 flex items-center gap-4",
-              "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
-              isLawyer
-                ? "border-primary/30 bg-gradient-to-r from-primary/5 to-accent/5 hover:from-primary/10 hover:to-accent/10"
-                : "border-border/50 bg-muted/20 hover:bg-muted/40"
-            )}
-          >
-            <div className={cn(
-              "h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors",
-              isLawyer
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-            )}>
-              <Scale className="h-6 w-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={cn("font-semibold text-sm md:text-base", isLawyer ? "text-primary" : "text-foreground")}>
-                Кабинет юриста
-              </p>
-              <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-                {isLawyer
-                  ? `Тариф ${lawyerProfile?.subscription_tier === "pro" ? "Pro" : "Basic"} · перейти в кабинет`
-                  : "Зарегистрироваться как юрист-партнёр nepriziv.ru"}
-              </p>
-            </div>
-            <ChevronRight className={cn(
-              "h-5 w-5 flex-shrink-0 transition-colors",
-              isLawyer ? "text-primary" : "text-muted-foreground/50 group-hover:text-primary"
-            )} />
-          </div>
-        </div>
-      )}
-
-      <div className="container mx-auto px-4 pb-8 max-w-5xl">
-        {!isLawyer && <ShareWithLawyer />}
-      </div>
       <Footer />
       {user && (
         <OnboardingWizard
@@ -507,22 +497,8 @@ const DashboardPage = () => {
           userId={user.id}
         />
       )}
-      <LawyerPartnerDialog open={partnerDialogOpen} onOpenChange={setPartnerDialogOpen} />
     </div>
   );
 };
-
-function Badge({ tag }: { tag: string }) {
-  const colors: Record<string, string> = {
-    "Популярное": "bg-accent/10 text-accent",
-    "AI": "bg-primary/10 text-primary",
-    "Новое": "bg-emerald-500/10 text-emerald-600",
-  };
-  return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${colors[tag] || "bg-muted text-muted-foreground"}`}>
-      {tag}
-    </span>
-  );
-}
 
 export default DashboardPage;
