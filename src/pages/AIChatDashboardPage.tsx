@@ -19,6 +19,7 @@ import { enhanceTypography, linkifyDiseaseArticles } from "@/lib/typography";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import { buildAIContext } from "@/lib/buildAIContext";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseConfig";
 
 interface Message {
   role: "user" | "assistant";
@@ -237,27 +238,25 @@ const AIChatDashboardPage = () => {
       // буферизирует ответ и не даёт настоящий SSE-стрим — keepalive-строки
       // вида ": OPENROUTER PROCESSING" приходят как обычный текст и
       // ошибочно показывались как ответ ИИ. fetch с ReadableStream — надёжнее.
-      // URL и anon-key достаём из самого supabase-клиента (auto-generated,
-      // менять src/integrations/supabase/client.ts нельзя).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sb = supabase as any;
-      const SUPABASE_URL: string = sb.supabaseUrl || sb.rest?.url?.replace(/\/rest\/v1\/?$/, "") || "";
-      const ANON_KEY: string = sb.supabaseKey || sb.rest?.headers?.apikey || "";
       const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token || ANON_KEY;
+      const accessToken = session?.access_token || SUPABASE_ANON_KEY;
+
+      console.log("[Chat] POST", `${SUPABASE_URL}/functions/v1/chat`, "auth:", session?.user?.id ? "user" : "anon");
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${accessToken}`,
-          "apikey": ANON_KEY,
+          "apikey": SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           messages: [...messages, userMessage],
           ...(contextToSend ? { medicalContext: contextToSend } : {}),
         }),
       });
+
+      console.log("[Chat] response", response.status, "model:", response.headers.get("x-ai-model") || "(нет header)");
 
       if (!response.ok) {
         // Edge-функция вернула JSON-ошибку (4xx/5xx). Читаем её и показываем.
