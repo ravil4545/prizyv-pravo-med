@@ -119,6 +119,11 @@ const LawyerClientDetail = () => {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "unlink" | "delete">(null);
   const [actionBusy, setActionBusy] = useState(false);
+  // Диагностика привязки: если client_user_id заполнен — проверяем существует
+  // ли реально профиль в БД. Покрывает случаи «сирот» (аккаунт удалён, ссылка
+  // осталась) и случайных/исторических привязок, которые юрист не помнит.
+  // null = не проверяли ещё, "found" = есть профиль, "missing" = сирота.
+  const [linkProbe, setLinkProbe] = useState<{ status: "found" | "missing"; fullName: string | null } | null>(null);
 
   // Логика invite-кода (копирование, регенерация, шаринг в WhatsApp/Telegram/email)
   // переехала в reusable-компонент InviteCodeCard — здесь только колбэк для
@@ -146,6 +151,7 @@ const LawyerClientDetail = () => {
     }));
     setHasDocAccess(false);
     setMedDocs([]);
+    setLinkProbe(null);
     toast({
       title: "Аккаунт клиента отвязан",
       description: "Карточка осталась в CRM. Чтобы пригласить снова — отправьте новый код.",
@@ -193,7 +199,34 @@ const LawyerClientDetail = () => {
     });
     setLoading(false);
     loadNotes();
-    if (data.client_user_id) loadMedDocs(data.client_user_id);
+    if (data.client_user_id) {
+      loadMedDocs(data.client_user_id);
+      probeLinkedProfile(data.client_user_id);
+    } else {
+      setLinkProbe(null);
+    }
+  };
+
+  // Диагностика привязки. Если client_user_id ссылается на профиль которого
+  // больше нет — UI должен подсветить это юристу, а не делать вид что всё ОК.
+  // RLS на profiles обычно разрешает SELECT по своему id, но юрист видит чужой —
+  // тут поможет либо отдельная политика, либо RPC. Самое простое — попробовать
+  // SELECT через maybeSingle и считать «нет данных» = «возможно сирота».
+  // Имя возьмём из связанной brand-таблицы lawyer_profiles (там она может быть),
+  // либо оставим null — главное понять, существует ли вообще ссылка.
+  const probeLinkedProfile = async (clientUserId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("id", clientUserId)
+      .maybeSingle();
+    if (data) {
+      setLinkProbe({ status: "found", fullName: (data as any).full_name || null });
+    } else {
+      // Видимо профиль удалён или RLS его не отдаёт. В обоих случаях юристу
+      // стоит знать, что текущая «привязка» сомнительная.
+      setLinkProbe({ status: "missing", fullName: null });
+    }
   };
 
   const loadMedDocs = async (clientUserId: string) => {
@@ -495,9 +528,12 @@ const LawyerClientDetail = () => {
           </div>
         </div>
 
-        {/* Invite-блок — заметная отдельная карточка ПЕРЕД табами.
-            Показываем только когда клиент ещё не привязан (нет client_user_id).
-            После привязки — короткий зелёный бейдж-статус. */}
+        {/* Invite-блок / статус привязки — заметная отдельная карточка ПЕРЕД табами.
+            Три варианта:
+            • не привязан → InviteCodeCard с 8-симв. кодом для отправки клиенту;
+            • привязан и профиль найден → зелёный статус + кнопка «Отвязать»;
+            • привязан, но профиля нет (сирота / историческая привязка) → жёлтое
+              предупреждение + явная кнопка «Отвязать» для очистки. */}
         {!client?.client_user_id ? (
           <div className="mb-4">
             <InviteCodeCard
@@ -507,12 +543,44 @@ const LawyerClientDetail = () => {
               onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
             />
           </div>
+        ) : linkProbe?.status === "missing" ? (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20 p-3 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                Сомнительная привязка
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                Карточка отмечена как привязанная, но <strong>аккаунта клиента на сайте не найдено</strong>.
+                Скорее всего, это историческая привязка из старого UI или аккаунт клиента удалён.
+                Отвяжите — это сгенерирует свежий код приглашения, который можно отправить клиенту.
+              </p>
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-white flex-shrink-0"
+              onClick={() => setConfirmAction("unlink")}
+            >
+              <UserMinus className="h-3.5 w-3.5 mr-1.5" /> Отвязать
+            </Button>
+          </div>
         ) : (
-          <div className="mb-4 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-2">
+          <div className="mb-4 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-3">
             <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-            <p className="text-xs text-emerald-800 dark:text-emerald-300">
-              Клиент привязан к аккаунту на сайте. ИИ-анализ и доступ к меддокам работают автоматически.
+            <p className="text-xs text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">
+              Клиент привязан к аккаунту{linkProbe?.fullName ? <> <strong>«{linkProbe.fullName}»</strong></> : null}.
+              ИИ-анализ и доступ к меддокам работают автоматически.
             </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-300 flex-shrink-0"
+              onClick={() => setConfirmAction("unlink")}
+              title="Отвязать аккаунт — карточка останется в CRM, сгенерируется новый код приглашения"
+            >
+              <UserMinus className="h-3.5 w-3.5 mr-1.5" /> Отвязать
+            </Button>
           </div>
         )}
 
