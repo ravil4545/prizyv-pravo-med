@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { X, Send, ArrowRight, FileDown, MessageCircle } from "lucide-react";
+import { X, Send, ArrowRight, FileDown, MessageCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
@@ -8,6 +8,13 @@ import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 
 const STORAGE_KEY = "exit_intent_shown_v1";
+
+// PDF, который отдаём при подписке через exit-intent.
+// Файл лежит в public/leadmagnets/ и генерируется scripts/generate_leadmagnets.py.
+const EXIT_INTENT_PDF = {
+  url: "/leadmagnets/checklist-medcomission.pdf",
+  title: "Чек-лист подготовки к медкомиссии",
+};
 
 // Маршруты, где попап не показываем — иначе перебиваем критичные сценарии (форма, оплата).
 const BLOCKED_PATHS = [
@@ -167,15 +174,35 @@ const ExitIntentDialog = () => {
           {submitted ? (
             <>
               <h3 id="exit-intent-title" className="font-serif text-3xl sm:text-4xl leading-tight mb-3">
-                Чек-лист отправлен.
+                Готово.
               </h3>
               <p className="text-sm text-paper/75 leading-relaxed mb-5">
-                Проверьте сообщения — в течение пары минут пришлю материал. А пока — самый быстрый способ:
+                Скачайте PDF прямо сейчас — копия пришла на ваш email на случай, если
+                захотите вернуться к материалу позже.
+              </p>
+
+              {/* Основная кнопка — прямое скачивание PDF */}
+              <a
+                href={EXIT_INTENT_PDF.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="group flex items-center justify-between gap-3 w-full px-5 py-4 bg-gold text-ink font-semibold text-sm mb-4 hover:bg-paper transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Download className="h-4 w-4" />
+                  Скачать PDF — {EXIT_INTENT_PDF.title}
+                </span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </a>
+
+              <p className="text-xs text-paper/55 uppercase tracking-wider font-mono mb-3">
+                Или связаться напрямую:
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={handleTelegram}
-                  className="group flex items-center justify-between gap-2 px-4 py-3 border-2 border-gold text-paper text-sm font-semibold hover:bg-gold hover:text-ink transition-colors"
+                  className="group flex items-center justify-between gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
                 >
                   <span className="flex items-center gap-2">
                     <Send className="h-4 w-4" />
@@ -185,7 +212,7 @@ const ExitIntentDialog = () => {
                 </button>
                 <button
                   onClick={handleWhatsApp}
-                  className="group flex items-center justify-between gap-2 px-4 py-3 border-2 border-gold text-paper text-sm font-semibold hover:bg-gold hover:text-ink transition-colors"
+                  className="group flex items-center justify-between gap-2 px-4 py-3 border border-paper/30 text-paper text-sm font-medium hover:border-gold hover:text-gold transition-colors"
                 >
                   <span className="flex items-center gap-2">
                     <MessageCircle className="h-4 w-4" />
@@ -206,8 +233,8 @@ const ExitIntentDialog = () => {
               <div className="flex items-center gap-3 mb-5 p-3 bg-gold/10 border border-gold/30">
                 <FileDown className="h-5 w-5 text-gold flex-shrink-0" />
                 <p className="text-sm text-paper/90 leading-snug">
-                  «5 ошибок призывника, которые стоят года жизни в армии» — PDF на 7 страниц,
-                  без воды.
+                  «{EXIT_INTENT_PDF.title}» — PDF с 9 пунктами подготовки и типичными ошибками,
+                  которые я вижу в своей практике.
                 </p>
               </div>
 

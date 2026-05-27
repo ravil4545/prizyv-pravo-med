@@ -87,7 +87,7 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
               Готово.
             </p>
             <p className={`text-sm ${subColor} mt-2 leading-relaxed`}>
-              Скопия отправлена на <span className="font-semibold">{email}</span>.
+              Копия отправлена на <span className="font-semibold">{email}</span>.
               {magnet.fileUrl && " Файл можно открыть прямо сейчас:"}
             </p>
           </div>
