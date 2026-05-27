@@ -219,50 +219,84 @@ serve(async (req) => {
 ${medicalContext}`;
     }
 
-    console.log("[Chat] Calling OpenRouter with model nvidia/nemotron-3-super-120b-a12b:free, messages:", messages.length);
+    // Fallback-цепочка моделей. Если основная (free) пропала с OpenRouter
+    // или ratelimit'нула — автоматически идём по списку. Порядок:
+    // 1. Llama 3.3 70B — большое окно, стабильная free
+    // 2. Gemini 2.0 Flash — быстрая free, хороший русский
+    // 3. Qwen 2.5 72B — резерв
+    // 4. Старая nemotron как последний fallback (вдруг вернётся)
+    const MODEL_CHAIN = [
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "google/gemini-2.0-flash-exp:free",
+      "qwen/qwen-2.5-72b-instruct:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+    ];
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Legal Chat",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
-        stream: true,
-      }),
-    });
+    let response: Response | null = null;
+    let lastErrorText = "";
+    let lastStatus = 0;
+    let usedModel = "";
 
-    console.log("[Chat] OpenRouter response status:", response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Chat] AI gateway error:", response.status, errorText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Превышен лимит запросов. Пожалуйста, попробуйте позже." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    for (const model of MODEL_CHAIN) {
+      console.log("[Chat] Trying model:", model, "messages:", messages.length);
+      try {
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://nepriziv.ru",
+            "X-Title": "nepriziv.ru Legal Chat",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "system", content: systemPrompt }, ...messages],
+            stream: true,
+          }),
         });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Требуется пополнение счета." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
 
-      return new Response(JSON.stringify({ error: `Ошибка сервиса AI: ${response.status}` }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        console.log("[Chat]", model, "→", r.status);
+
+        if (r.ok) {
+          response = r;
+          usedModel = model;
+          break;
+        }
+
+        // 402 — глобальная проблема с биллингом, нет смысла перебирать
+        if (r.status === 402) {
+          return new Response(JSON.stringify({ error: "Требуется пополнение счета OpenRouter." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // 429/404/5xx — пробуем следующую модель
+        lastStatus = r.status;
+        lastErrorText = await r.text();
+        console.error("[Chat]", model, "failed:", r.status, lastErrorText.slice(0, 200));
+      } catch (err) {
+        console.error("[Chat]", model, "network error:", err);
+        lastErrorText = err instanceof Error ? err.message : String(err);
+      }
     }
 
+    if (!response) {
+      console.error("[Chat] All models failed. Last:", lastStatus, lastErrorText);
+      return new Response(
+        JSON.stringify({
+          error: `Все ИИ-модели сейчас недоступны (последняя ошибка: ${lastStatus || "network"}). Попробуйте через 1–2 минуты.`,
+        }),
+        {
+          status: lastStatus === 429 ? 429 : 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log("[Chat] Streaming from", usedModel);
     return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream", "X-AI-Model": usedModel },
     });
   } catch (error) {
     const corsHeaders = getCorsHeaders(req);
