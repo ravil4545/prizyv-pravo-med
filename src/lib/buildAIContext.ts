@@ -23,10 +23,18 @@ export async function buildAIContext(): Promise<string> {
     const userId = session.user.id;
     const now = new Date();
 
-    const [profileRes, docsRes, linksRes, eventsRes] = await Promise.all([
+    // Делаем каждый запрос изолированно (allSettled), чтобы ошибка в одной
+    // таблице не валила весь контекст. profile / case_events могут отсутствовать
+    // в некоторых средах — это не должно блокировать чат с ИИ.
+    const [profileSet, docsSet, linksSet, eventsSet] = await Promise.allSettled([
+      // Важно: имена полей должны точно совпадать со схемой profiles.
+      // Реальные поля (см. migrations): full_name, birth_date, region,
+      // military_commissariat, education_institution, work_place.
       supabase
         .from("profiles")
-        .select("full_name, birth_date, gender, region, military_office_name, education_level, work_status")
+        .select(
+          "full_name, birth_date, region, city, military_commissariat, education_institution, education_specialty, work_place, work_position",
+        )
         .eq("id", userId)
         .maybeSingle(),
       supabase
@@ -49,30 +57,37 @@ export async function buildAIContext(): Promise<string> {
         .limit(10),
     ]);
 
-    const profile = profileRes.data;
-    const docs = docsRes.data || [];
-    const links = linksRes.data || [];
-    const events = eventsRes.data || [];
+    // Динамические данные из БД — типизация any упрощает доступ к полям,
+    // и любая ошибка одного запроса не валит весь контекст.
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const unwrap = (s: PromiseSettledResult<{ data?: any; error?: unknown }>): any =>
+      s.status === "fulfilled" && !s.value.error ? (s.value.data ?? null) : null;
+
+    const profile: any = unwrap(profileSet);
+    const docs: any[] = unwrap(docsSet) || [];
+    const links: any[] = unwrap(linksSet) || [];
+    const events: any[] = unwrap(eventsSet) || [];
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     let context = "";
 
     // ── 1. Профиль ─────────────────────────────────────────────────────
     if (profile) {
+      const p = profile as Record<string, string | null | undefined>;
       context += "=== ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ===\n";
-      if (profile.full_name) context += `ФИО: ${profile.full_name}\n`;
-      if (profile.birth_date) {
+      if (p.full_name) context += `ФИО: ${p.full_name}\n`;
+      if (p.birth_date) {
         const age = Math.floor(
-          (now.getTime() - new Date(profile.birth_date).getTime()) /
-            (1000 * 60 * 60 * 24 * 365.25),
+          (now.getTime() - new Date(p.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25),
         );
-        context += `Дата рождения: ${profile.birth_date} (возраст ${age} лет)\n`;
+        context += `Дата рождения: ${p.birth_date} (возраст ${age} лет)\n`;
       }
-      if (profile.gender) context += `Пол: ${profile.gender}\n`;
-      if (profile.region) context += `Регион: ${profile.region}\n`;
-      if (profile.military_office_name)
-        context += `Военкомат: ${profile.military_office_name}\n`;
-      if (profile.education_level) context += `Образование: ${profile.education_level}\n`;
-      if (profile.work_status) context += `Работа/учёба: ${profile.work_status}\n`;
+      if (p.city || p.region) context += `Регион: ${[p.city, p.region].filter(Boolean).join(", ")}\n`;
+      if (p.military_commissariat) context += `Военкомат: ${p.military_commissariat}\n`;
+      if (p.education_institution)
+        context += `Образование: ${p.education_institution}${p.education_specialty ? ` (${p.education_specialty})` : ""}\n`;
+      if (p.work_place)
+        context += `Работа: ${p.work_place}${p.work_position ? `, ${p.work_position}` : ""}\n`;
       context += "\n";
     }
 

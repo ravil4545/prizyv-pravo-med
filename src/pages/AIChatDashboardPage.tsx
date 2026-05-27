@@ -232,66 +232,84 @@ const AIChatDashboardPage = () => {
     try {
       const contextToSend = medicalContextRef.current;
       console.log("[Chat] Sending message with medicalContext:", contextToSend ? contextToSend.length + " chars" : "NONE");
-      const response = await supabase.functions.invoke("chat", {
-        body: { 
+
+      // Прямой fetch вместо supabase.functions.invoke: invoke в браузере
+      // буферизирует ответ и не даёт настоящий SSE-стрим — keepalive-строки
+      // вида ": OPENROUTER PROCESSING" приходят как обычный текст и
+      // ошибочно показывались как ответ ИИ. fetch с ReadableStream — надёжнее.
+      // URL и anon-key достаём из самого supabase-клиента (auto-generated,
+      // менять src/integrations/supabase/client.ts нельзя).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
+      const SUPABASE_URL: string = sb.supabaseUrl || sb.rest?.url?.replace(/\/rest\/v1\/?$/, "") || "";
+      const ANON_KEY: string = sb.supabaseKey || sb.rest?.headers?.apikey || "";
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || ANON_KEY;
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+          "apikey": ANON_KEY,
+        },
+        body: JSON.stringify({
           messages: [...messages, userMessage],
           ...(contextToSend ? { medicalContext: contextToSend } : {}),
-        },
+        }),
       });
 
-      if (response.error) throw response.error;
+      if (!response.ok) {
+        // Edge-функция вернула JSON-ошибку (4xx/5xx). Читаем её и показываем.
+        let errText = `HTTP ${response.status}`;
+        try {
+          const errJson = await response.json();
+          errText = errJson.error || errText;
+        } catch {
+          // ignore
+        }
+        throw new Error(errText);
+      }
 
-      // supabase.functions.invoke returns data as ReadableStream for SSE responses
-      const streamData = response.data;
-      const reader = (streamData?.body ?? streamData)?.getReader?.();
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Стрим недоступен");
       const decoder = new TextDecoder();
       let assistantContent = "";
-
-      if (!reader) {
-        // Fallback: if data is not a stream, try to read it as text
-        const text = typeof streamData === 'string' ? streamData : await streamData?.text?.() || '';
-        // Try to extract content from non-streaming response
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed.error) throw new Error(parsed.error);
-          assistantContent = parsed.choices?.[0]?.message?.content || text;
-        } catch {
-          assistantContent = text || "Не удалось получить ответ";
-        }
-        const assistantMessage: Message = { role: "assistant", content: assistantContent };
-        setMessages((prev) => [...prev, assistantMessage]);
-        if (!isDemoMode) await saveMessage(assistantMessage);
-        return;
-      }
+      let buffer = "";
 
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        // Буфер для случая, когда SSE-сообщение разрезано между чанками.
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Последняя строка может быть неполной — оставляем в буфере до следующего чтения.
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
+          // SSE-комментарии (начинаются с ":") — keepalive, игнорируем.
+          // Пример: ": OPENROUTER PROCESSING"
+          if (!line || line.startsWith(":")) continue;
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                assistantContent += content;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1].content = assistantContent;
-                  return newMessages;
-                });
-              }
-            } catch (e) {
-              // Ignore parse errors for incomplete chunks
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              assistantContent += content;
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1].content = assistantContent;
+                return newMessages;
+              });
             }
+          } catch {
+            // Неполный JSON-чанк — пропускаем
           }
         }
       }
