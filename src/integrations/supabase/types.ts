@@ -22,7 +22,9 @@ export type Database = {
           created_at: string | null
           device_type: string | null
           duration_seconds: number | null
+          event_ref: string | null
           event_type: string
+          event_value: number | null
           id: string
           ip_address: unknown
           os: string | null
@@ -32,6 +34,11 @@ export type Database = {
           session_id: string
           user_agent: string | null
           user_id: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
         }
         Insert: {
           browser?: string | null
@@ -40,7 +47,9 @@ export type Database = {
           created_at?: string | null
           device_type?: string | null
           duration_seconds?: number | null
+          event_ref?: string | null
           event_type: string
+          event_value?: number | null
           id?: string
           ip_address?: unknown
           os?: string | null
@@ -50,6 +59,11 @@ export type Database = {
           session_id: string
           user_agent?: string | null
           user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Update: {
           browser?: string | null
@@ -58,7 +72,9 @@ export type Database = {
           created_at?: string | null
           device_type?: string | null
           duration_seconds?: number | null
+          event_ref?: string | null
           event_type?: string
+          event_value?: number | null
           id?: string
           ip_address?: unknown
           os?: string | null
@@ -68,6 +84,11 @@ export type Database = {
           session_id?: string
           user_agent?: string | null
           user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Relationships: []
       }
@@ -238,6 +259,42 @@ export type Database = {
         }
         Relationships: []
       }
+      case_events: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          event_date: string
+          event_type: string
+          id: string
+          outcome: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          event_date: string
+          event_type: string
+          id?: string
+          outcome?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          event_date?: string
+          event_type?: string
+          id?: string
+          outcome?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       case_notes: {
         Row: {
           author_id: string
@@ -391,6 +448,7 @@ export type Database = {
       }
       contact_submissions: {
         Row: {
+          age: string | null
           created_at: string | null
           email: string
           id: string
@@ -398,10 +456,13 @@ export type Database = {
           message: string
           name: string
           phone: string
+          source: string | null
+          stage: string | null
           status: string | null
           user_agent: string | null
         }
         Insert: {
+          age?: string | null
           created_at?: string | null
           email: string
           id?: string
@@ -409,10 +470,13 @@ export type Database = {
           message: string
           name: string
           phone: string
+          source?: string | null
+          stage?: string | null
           status?: string | null
           user_agent?: string | null
         }
         Update: {
+          age?: string | null
           created_at?: string | null
           email?: string
           id?: string
@@ -420,6 +484,8 @@ export type Database = {
           message?: string
           name?: string
           phone?: string
+          source?: string | null
+          stage?: string | null
           status?: string | null
           user_agent?: string | null
         }
@@ -667,6 +733,51 @@ export type Database = {
         }
         Relationships: []
       }
+      family_access: {
+        Row: {
+          accepted_at: string | null
+          expires_at: string
+          id: string
+          invite_token: string
+          invited_at: string
+          invitee_email: string
+          owner_user_id: string
+          relationship: string | null
+          revoked_at: string | null
+          scopes: Json
+          status: string
+          viewer_user_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          expires_at?: string
+          id?: string
+          invite_token: string
+          invited_at?: string
+          invitee_email: string
+          owner_user_id: string
+          relationship?: string | null
+          revoked_at?: string | null
+          scopes?: Json
+          status?: string
+          viewer_user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          expires_at?: string
+          id?: string
+          invite_token?: string
+          invited_at?: string
+          invitee_email?: string
+          owner_user_id?: string
+          relationship?: string | null
+          revoked_at?: string | null
+          scopes?: Json
+          status?: string
+          viewer_user_id?: string | null
+        }
+        Relationships: []
+      }
       forum_comments: {
         Row: {
           content: string
@@ -785,6 +896,62 @@ export type Database = {
           },
         ]
       }
+      lawyer_client_med_docs: {
+        Row: {
+          ai_category_chance: number | null
+          ai_explanation: string | null
+          ai_fitness_category: string | null
+          ai_recommendations: Json | null
+          created_at: string
+          document_date: string | null
+          file_url: string
+          id: string
+          lawyer_client_id: string
+          lawyer_id: string
+          raw_text: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: Json | null
+          created_at?: string
+          document_date?: string | null
+          file_url: string
+          id?: string
+          lawyer_client_id: string
+          lawyer_id: string
+          raw_text?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ai_category_chance?: number | null
+          ai_explanation?: string | null
+          ai_fitness_category?: string | null
+          ai_recommendations?: Json | null
+          created_at?: string
+          document_date?: string | null
+          file_url?: string
+          id?: string
+          lawyer_client_id?: string
+          lawyer_id?: string
+          raw_text?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_client_med_docs_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lawyer_clients: {
         Row: {
           case_won: boolean | null
@@ -845,52 +1012,70 @@ export type Database = {
       lawyer_profiles: {
         Row: {
           accent_color: string | null
+          bio: string | null
           brand_about: string | null
           brand_email: string | null
           brand_phone: string | null
           brand_subtitle: string | null
           brand_telegram: string | null
+          brand_template: string | null
           brand_whatsapp: string | null
           clients_limit: number | null
           created_at: string | null
           full_name: string
           is_active: boolean | null
+          license_number: string | null
+          photo_url: string | null
           slug: string | null
+          specialization: string | null
           subscription_tier: string | null
+          subscription_until: string | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
           accent_color?: string | null
+          bio?: string | null
           brand_about?: string | null
           brand_email?: string | null
           brand_phone?: string | null
           brand_subtitle?: string | null
           brand_telegram?: string | null
+          brand_template?: string | null
           brand_whatsapp?: string | null
           clients_limit?: number | null
           created_at?: string | null
           full_name: string
           is_active?: boolean | null
+          license_number?: string | null
+          photo_url?: string | null
           slug?: string | null
+          specialization?: string | null
           subscription_tier?: string | null
+          subscription_until?: string | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
           accent_color?: string | null
+          bio?: string | null
           brand_about?: string | null
           brand_email?: string | null
           brand_phone?: string | null
           brand_subtitle?: string | null
           brand_telegram?: string | null
+          brand_template?: string | null
           brand_whatsapp?: string | null
           clients_limit?: number | null
           created_at?: string | null
           full_name?: string
           is_active?: boolean | null
+          license_number?: string | null
+          photo_url?: string | null
           slug?: string | null
+          specialization?: string | null
           subscription_tier?: string | null
+          subscription_until?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -1261,31 +1446,55 @@ export type Database = {
       }
       testimonials: {
         Row: {
+          age: number | null
           approved_at: string | null
+          article_565: string | null
           author_name: string
+          category: string | null
+          city: string | null
           content: string
           created_at: string | null
+          display_order: number | null
+          featured: boolean | null
           id: string
+          photo_url: string | null
           rating: number | null
           status: string | null
+          video_url: string | null
         }
         Insert: {
+          age?: number | null
           approved_at?: string | null
+          article_565?: string | null
           author_name: string
+          category?: string | null
+          city?: string | null
           content: string
           created_at?: string | null
+          display_order?: number | null
+          featured?: boolean | null
           id?: string
+          photo_url?: string | null
           rating?: number | null
           status?: string | null
+          video_url?: string | null
         }
         Update: {
+          age?: number | null
           approved_at?: string | null
+          article_565?: string | null
           author_name?: string
+          category?: string | null
+          city?: string | null
           content?: string
           created_at?: string | null
+          display_order?: number | null
+          featured?: boolean | null
           id?: string
+          photo_url?: string | null
           rating?: number | null
           status?: string | null
+          video_url?: string | null
         }
         Relationships: []
       }
@@ -1464,6 +1673,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_family_invite: { Args: { p_token: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
