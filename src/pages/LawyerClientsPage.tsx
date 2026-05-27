@@ -30,6 +30,14 @@ interface LawyerClient {
   client_birth_year: number | null; crm_stage: string; diagnosis: string | null;
   expected_category: string | null; notes: string | null; priority: string;
   conscription_date: string | null; case_won: boolean; created_at: string; updated_at: string;
+  // Новая модель связи (миграция 20260527005000):
+  link_state?: string | null;
+  invite_code?: string | null;
+  target_email?: string | null;
+  requested_at?: string | null;
+  linked_at?: string | null;
+  unlinked_at?: string | null;
+  unlinked_by?: string | null;
 }
 
 const LawyerClientsPage = () => {
@@ -175,40 +183,56 @@ const LawyerClientsPage = () => {
     }
     setSaving(true);
 
-    let client_user_id: string | null = null;
-    if (form.client_email_link) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", form.client_email_link)
-        .maybeSingle();
-      // If not found by id, try matching email via auth (not possible from client SDK)
-      // We'll just store the provided value as-is for now
-      client_user_id = profiles?.id || null;
+    // Шаг 1. Создаём карточку через RPC lawyer_request_client. RPC сам решит:
+    //   • email известен сайту → запрос-приглашение клиенту (pending_client_approval),
+    //     клиент примет его одной кнопкой в своём кабинете;
+    //   • иначе → invite_code (code_sent), юрист отправит код вручную.
+    const { data: rpcData, error: rpcError } = await supabase.rpc("lawyer_request_client", {
+      p_client_name: form.client_name.trim(),
+      p_target_email: form.client_email?.trim() || null,
+      p_client_phone: form.client_phone?.trim() || null,
+    });
+    if (rpcError) {
+      setSaving(false);
+      toast({ title: "Не удалось создать клиента", description: rpcError.message, variant: "destructive" });
+      return;
+    }
+    const rpc = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (!rpc?.lawyer_client_id) {
+      setSaving(false);
+      toast({ title: "Не удалось создать клиента", variant: "destructive" });
+      return;
     }
 
-    const { data, error } = await supabase
+    // Шаг 2. Доп.поля (диагноз/категория/заметки/...) сохраняем UPDATE'ом —
+    // RPC принимает только базовые поля, остальное штатным RLS-апдейтом
+    // от юриста-владельца.
+    const extra = {
+      client_birth_year: form.client_birth_year ? parseInt(form.client_birth_year) : null,
+      crm_stage: form.crm_stage,
+      diagnosis: form.diagnosis || null,
+      expected_category: form.expected_category || null,
+      notes: form.notes || null,
+      priority: form.priority,
+      conscription_date: form.conscription_date || null,
+    };
+    const { data: updated, error: updErr } = await supabase
       .from("lawyer_clients")
-      .insert({
-        lawyer_id: user!.id,
-        client_user_id,
-        client_name: form.client_name.trim(),
-        client_phone: form.client_phone || null,
-        client_email: form.client_email || null,
-        client_birth_year: form.client_birth_year ? parseInt(form.client_birth_year) : null,
-        crm_stage: form.crm_stage,
-        diagnosis: form.diagnosis || null,
-        expected_category: form.expected_category || null,
-        notes: form.notes || null,
-        priority: form.priority,
-        conscription_date: form.conscription_date || null,
-      })
+      .update(extra)
+      .eq("id", rpc.lawyer_client_id)
       .select()
       .single();
 
     setSaving(false);
-    if (error) { toast({ title: "Ошибка сохранения", description: error.message, variant: "destructive" }); return; }
-    const inserted = data as LawyerClient & { invite_code?: string | null };
+    if (updErr) {
+      // Карточка создана, но extra-поля не подтянулись — не фатально, юрист
+      // дозаполнит в карточке клиента. Просто предупреждаем.
+      toast({ title: "Клиент создан, но не все поля сохранились", description: updErr.message });
+    }
+
+    const inserted = (updated || { id: rpc.lawyer_client_id }) as LawyerClient & {
+      invite_code?: string | null; link_state?: string | null;
+    };
     setClients((prev) => [inserted, ...prev]);
     setAddOpen(false);
     const savedName = form.client_name.trim();
@@ -216,17 +240,79 @@ const LawyerClientsPage = () => {
       crm_stage: "initial_contact", diagnosis: "", expected_category: "", notes: "", priority: "normal",
       conscription_date: "", client_email_link: "" });
 
-    // Если клиент пришёл БЕЗ привязки к существующему аккаунту — сразу
-    // открываем модалку с invite-кодом (юрист в один клик копирует/
-    // отправляет в WhatsApp/Telegram). Иначе — обычный toast.
-    if (!inserted.client_user_id) {
-      setCreatedInvite({
-        lawyerClientId: inserted.id,
-        code: inserted.invite_code ?? null,
-        clientName: savedName,
+    if (rpc.found_account) {
+      // Аккаунт клиента найден — запрос отправлен, ждём accept.
+      toast({
+        title: "Запрос отправлен клиенту",
+        description: `${savedName} увидит запрос в своём кабинете на nepriziv.ru и подтвердит его одной кнопкой.`,
       });
     } else {
-      toast({ title: "Клиент добавлен" });
+      // Аккаунта нет — даём юристу код для отправки клиенту вручную.
+      setCreatedInvite({
+        lawyerClientId: rpc.lawyer_client_id,
+        code: rpc.invite_code ?? null,
+        clientName: savedName,
+      });
+    }
+  };
+
+  // Бейдж состояния связи. Один helper для списка и канбана — чтобы было
+  // легко добавить новые состояния (если в БД появится ещё одно значение
+  // link_state, достаточно поправить эту функцию).
+  // Возвращает null, если бейдж не нужен (linked_active по умолчанию).
+  const renderLinkBadge = (c: LawyerClient, compact = false) => {
+    const cls = compact ? "text-[10px] px-1 py-0 gap-0.5" : "text-[10px] gap-1";
+    // Fallback на client_user_id, если link_state ещё не заполнен (старые записи)
+    const state = c.link_state || (c.client_user_id ? "linked_active" : "code_sent");
+    switch (state) {
+      case "pending_client_approval":
+        return (
+          <Badge variant="outline" className={`${cls} border-blue-400 text-blue-700 dark:text-blue-300`}
+            title="Запрос отправлен — ждём подтверждения от клиента в его кабинете">
+            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+            {compact ? "Ждём" : "Ожидает подтверждения"}
+          </Badge>
+        );
+      case "code_sent":
+        return (
+          <Badge variant="outline" className={`${cls} border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50`}
+            onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
+            title="Клиент ещё не ввёл код приглашения — кликните, чтобы открыть код">
+            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+            {compact ? "Код" : "Код не использован"}
+          </Badge>
+        );
+      case "declined":
+        return (
+          <Badge variant="outline" className={`${cls} border-rose-400 text-rose-700 dark:text-rose-300`}
+            title="Клиент отклонил запрос на подключение">
+            {compact ? "✕" : "Отклонил запрос"}
+          </Badge>
+        );
+      case "unlinked_by_client":
+        return (
+          <Badge variant="outline" className={`${cls} text-muted-foreground`}
+            title="Клиент сам отвязался — историю дела вы видите, новые документы — нет">
+            Клиент ушёл
+          </Badge>
+        );
+      case "unlinked_by_lawyer":
+        return (
+          <Badge variant="outline" className={`${cls} text-muted-foreground`}
+            title="Вы отвязали клиента — можно пригласить снова через новый код">
+            Отвязан
+          </Badge>
+        );
+      case "archived":
+        return (
+          <Badge variant="outline" className={`${cls} text-muted-foreground/60`}
+            title="Карточка в архиве — не отображается в активных делах">
+            Архив
+          </Badge>
+        );
+      case "linked_active":
+      default:
+        return null;
     }
   };
 
@@ -335,8 +421,20 @@ const LawyerClientsPage = () => {
                       <Input type="number" value={form.client_birth_year} onChange={(e) => setForm((f) => ({ ...f, client_birth_year: e.target.value }))} placeholder="2005" />
                     </div>
                   </div>
-                  <div><Label>Email</Label>
-                    <Input value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="client@email.com" />
+                  <div>
+                    <Label>Email клиента</Label>
+                    <Input
+                      type="email"
+                      value={form.client_email}
+                      onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
+                      placeholder="client@email.com"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                      Если email уже зарегистрирован на nepriziv.ru — клиент увидит ваш запрос
+                      в своём кабинете и подтвердит его одной кнопкой. Если email неизвестен или
+                      не указан — будет сгенерирован 8-символьный код приглашения для отправки
+                      клиенту любым способом.
+                    </p>
                   </div>
                   <div><Label>Этап CRM</Label>
                     <Select value={form.crm_stage} onValueChange={(v) => setForm((f) => ({ ...f, crm_stage: v }))}>
@@ -371,15 +469,22 @@ const LawyerClientsPage = () => {
                   <div><Label>Заметки</Label>
                     <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Дополнительная информация..." rows={3} />
                   </div>
-                  <div className="rounded-lg border border-dashed bg-muted/30 p-3">
+                  <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-2">
                     <p className="text-xs font-medium flex items-center gap-1.5">
-                      <Ticket className="h-3.5 w-3.5 text-primary" /> Привязка через код-приглашение
+                      <Ticket className="h-3.5 w-3.5 text-primary" /> Что произойдёт после создания
                     </p>
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      После создания карточки появится 8-символьный код. Отправьте его клиенту —
-                      клиент введёт код в своём кабинете и автоматически привяжется + откроет доступ к
-                      документам. UUID искать больше не нужно.
-                    </p>
+                    <ul className="text-[11px] text-muted-foreground space-y-1 leading-relaxed list-disc list-inside">
+                      <li>
+                        <strong>email указан и есть в системе</strong> → клиенту прилетит запрос на
+                        подключение. Он принимает его одной кнопкой в кабинете — автоматически
+                        открывается доступ к меддокам, ИИ-анализам и чату.
+                      </li>
+                      <li>
+                        <strong>email не указан или не зарегистрирован</strong> → появится
+                        8-символьный код приглашения. Отправьте клиенту любым способом — он введёт
+                        код в кабинете и привяжется.
+                      </li>
+                    </ul>
                   </div>
                   <Button onClick={handleAdd} disabled={saving} className="w-full">
                     {saving ? "Сохраняем..." : "Добавить клиента"}
@@ -446,16 +551,7 @@ const LawyerClientsPage = () => {
                           {c.priority === "urgent" && <Badge variant="destructive" className="text-xs">Срочно</Badge>}
                           {c.priority === "high" && <Badge variant="secondary" className="text-xs">Высокий</Badge>}
                           {c.case_won && <Badge className="text-xs bg-green-100 text-green-700">✓ ВБ получен</Badge>}
-                          {!c.client_user_id && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] gap-1 border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50"
-                              onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
-                              title="Клиент ещё не ввёл код приглашения — кликните, чтобы открыть код"
-                            >
-                              <Ticket className="h-3 w-3" /> Код не использован
-                            </Badge>
-                          )}
+                          {renderLinkBadge(c)}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
                           {c.client_phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.client_phone}</span>}
@@ -547,15 +643,7 @@ const LawyerClientsPage = () => {
                                     {c.priority === "urgent" && <Badge variant="destructive" className="text-[10px] px-1 py-0">Срочно</Badge>}
                                     {c.priority === "high" && <Badge variant="secondary" className="text-[10px] px-1 py-0">Высокий</Badge>}
                                     {c.case_won && <Badge className="text-[10px] px-1 py-0 bg-green-100 text-green-700">ВБ</Badge>}
-                                    {!c.client_user_id && (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[10px] px-1 py-0 gap-0.5 border-amber-400 text-amber-700 dark:text-amber-300"
-                                        title="Клиент ещё не ввёл код приглашения"
-                                      >
-                                        <Ticket className="h-2.5 w-2.5" /> Код
-                                      </Badge>
-                                    )}
+                                    {renderLinkBadge(c, true)}
                                   </div>
                                   {c.client_phone && (
                                     <p className="text-[11px] text-muted-foreground flex items-center gap-1">

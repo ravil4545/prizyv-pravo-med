@@ -37,14 +37,16 @@ const AuthPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
+        // Раньше здесь был autoAttachToBrand — молчаливый insert «Клиент #...»
+        // в CRM юриста, что приводило к «Сомнительной привязке» и засорению.
+        // Теперь привязка — только явный шаг: юрист отправляет запрос или код,
+        // клиент подтверждает кнопкой в кабинете.
         navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });

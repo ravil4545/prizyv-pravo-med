@@ -26,3 +26,6 @@ dist-ssr
 # Supabase CLI local state
 .supabase-cli/
 supabase/.temp/
+
+# Разовый бандл для ручного применения через SQL Editor — не коммитим
+apply-pending-migrations.sql

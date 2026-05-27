@@ -1,70 +1,19 @@
-import { supabase } from "@/integrations/supabase/client";
+// DEPRECATED: молчаливая авто-привязка клиента к юристу-владельцу бренда
+// при первом заходе по /u/<slug> приводила к двум багам:
+//   • карточки «Клиент #abc..." в CRM юриста по каждому случайному визиту;
+//   • ложные «Сомнительная привязка» (профиля ещё нет в БД из-за лага триггера);
+//   • засорение CRM, нечитаемые имена.
+//
+// Теперь привязка — только явный двусторонний flow:
+//   1) Юрист в своём кабинете жмёт «Добавить клиента», указывает email →
+//      RPC lawyer_request_client создаёт запрос-приглашение;
+//   2) Клиент в своём кабинете видит блок «Запросы от юристов» с кнопкой
+//      «Принять» (или вводит 8-символьный код, если email не был указан).
+//
+// Функция оставлена как noop, чтобы не ломать импорты в Auth/Login/Register
+// до полной их зачистки. НЕ ВЫЗЫВАЙТЕ её в новом коде.
 
-/**
- * Автопривязка только что зарегистрированного клиента к юристу-владельцу
- * текущего бренда. Вызывается из auth-страниц после успешного входа/регистрации,
- * если активен white-label контекст (юзер пришёл по ссылке /u/<slug>).
- *
- * Создаёт запись в lawyer_clients с обезличенным client_name (контакты
- * клиента не утекают, пока он не откроет доступ к документам).
- *
- * Идемпотентно: если запись уже есть — не дублирует.
- */
-export async function autoAttachToBrand(clientUserId: string, lawyerUserId: string): Promise<void> {
-  if (!clientUserId || !lawyerUserId) return;
-  if (clientUserId === lawyerUserId) return; // юрист сам открыл свою ссылку — не привязываем
-
-  try {
-    const { data: existing } = await supabase
-      .from("lawyer_clients")
-      .select("id")
-      .eq("lawyer_id", lawyerUserId)
-      .eq("client_user_id", clientUserId)
-      .maybeSingle();
-
-    if (existing) return;
-
-    // Пытаемся достать живое имя клиента (а не безликий "Клиент #abc..."):
-    //   1) profiles.full_name (если триггер create_profile уже сработал);
-    //   2) auth user_metadata.full_name (из oauth/SSO/регистрации);
-    //   3) email — лучше, чем UUID-стаб;
-    //   4) фолбэк — "Клиент #<8 симв.>".
-    let displayName: string | null = null;
-
-    try {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", clientUserId)
-        .maybeSingle();
-      displayName = (prof as any)?.full_name || null;
-    } catch { /* RLS / отсутствие профиля — не критично */ }
-
-    if (!displayName) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id === clientUserId) {
-          const meta = (user.user_metadata || {}) as Record<string, unknown>;
-          displayName = (meta.full_name as string)
-            || (meta.name as string)
-            || user.email
-            || null;
-        }
-      } catch { /* нет сессии — фолбэк */ }
-    }
-
-    const clientName = displayName?.trim() || `Клиент #${clientUserId.substring(0, 8)}`;
-
-    await supabase.from("lawyer_clients").insert({
-      lawyer_id: lawyerUserId,
-      client_user_id: clientUserId,
-      client_name: clientName,
-      crm_stage: "initial_contact",
-      priority: "high",
-    });
-  } catch (error) {
-    // Тихая ошибка — авто-привязка не критична для самого факта регистрации.
-    // Юрист увидит клиента в CRM при следующем заходе по ссылке.
-    console.error("autoAttachToBrand failed:", error);
-  }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function autoAttachToBrand(_clientUserId: string, _lawyerUserId: string): Promise<void> {
+  console.warn("autoAttachToBrand вызвана, но она deprecated — привязка идёт через явный invite-flow");
 }

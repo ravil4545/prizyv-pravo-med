@@ -51,20 +51,20 @@ const RegisterPage = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
+        // autoAttachToBrand больше не вызывается — привязка только через
+        // явный invite-flow (юрист отправляет запрос/код, клиент подтверждает).
         navigate(nextPath);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        if (brandLawyerId) autoAttachToBrand(session.user.id, brandLawyerId);
         navigate(nextPath);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, nextPath, brandLawyerId]);
+  }, [navigate, nextPath]);
 
   // Countdown timer for resend OTP
   useEffect(() => {
