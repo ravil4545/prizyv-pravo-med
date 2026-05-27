@@ -1,6 +1,10 @@
 import { jsPDF } from "jspdf";
-import {
-  Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel,
+// `docx` подгружается ленив(динамическим импортом) внутри generateTemplateDocx,
+// чтобы отсутствие пакета не валило весь модуль (страница шаблонов всё равно
+// должна открываться, даже если `bun install` ещё не запускался).
+// Типы импортируем только для type-only — это уйдёт при сборке.
+import type {
+  Paragraph as ParagraphT,
 } from "docx";
 
 export interface TemplateField {
@@ -424,10 +428,22 @@ export async function generateTemplateDocx(
   template: Template,
   fields: Record<string, string>,
 ): Promise<Blob> {
+  // Ленивая загрузка docx — если пакет не установлен, бросаем понятное сообщение
+  // вместо «module not found» где-то в недрах bundle.
+  let docxModule: typeof import("docx");
+  try {
+    docxModule = await import("docx");
+  } catch (e) {
+    throw new Error(
+      "Пакет `docx` не установлен. Запустите `bun install` (или `npm install`) в проекте, чтобы скачивание DOCX заработало.",
+    );
+  }
+  const { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } = docxModule;
+
   const text = template.body(fields);
   const { header, body } = splitHeaderAndBody(text);
 
-  const headerParagraphs: Paragraph[] = header
+  const headerParagraphs: ParagraphT[] = header
     ? header.split("\n").map(
         (line) =>
           new Paragraph({
@@ -448,7 +464,7 @@ export async function generateTemplateDocx(
   // Тело: первая строка — заголовок (выделяем bold + center), остальное — обычный текст
   const bodyLines = (body || text).split("\n");
 
-  const bodyParagraphs: Paragraph[] = [];
+  const bodyParagraphs: ParagraphT[] = [];
   let titleHandled = false;
 
   for (const line of bodyLines) {

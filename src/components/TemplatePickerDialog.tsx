@@ -107,7 +107,12 @@ const TemplatePickerDialog = ({
       toast({ title: "DOCX скачан" });
     } catch (e) {
       console.error("DOCX generation failed", e);
-      toast({ title: "Ошибка генерации DOCX", variant: "destructive" });
+      const msg = e instanceof Error ? e.message : "Неизвестная ошибка";
+      toast({
+        title: "Не удалось сгенерировать DOCX",
+        description: msg,
+        variant: "destructive",
+      });
     }
   };
 
