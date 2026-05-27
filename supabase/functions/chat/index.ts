@@ -219,26 +219,34 @@ serve(async (req) => {
 ${medicalContext}`;
     }
 
-    // Fallback-цепочка моделей. Если основная (free) пропала с OpenRouter
-    // или ratelimit'нула — автоматически идём по списку. Порядок:
-    // 1. Llama 3.3 70B — большое окно, стабильная free
-    // 2. Gemini 2.0 Flash — быстрая free, хороший русский
-    // 3. Qwen 2.5 72B — резерв
-    // 4. Старая nemotron как последний fallback (вдруг вернётся)
+    // Fallback-цепочка моделей. Делаем NON-STREAM запросы:
+    // streaming-режим OpenRouter иногда возвращает 200 + только keepalive
+    // ": OPENROUTER PROCESSING" в течение долгого времени (модель в очереди).
+    // Тогда наш стрим висит, клиент таймаутится без полезных данных, и мы
+    // не можем переключиться на другую модель.
+    // Non-stream: ждём полный ответ с серверным timeout 25 сек на модель.
+    // Если модель не отдала контент за это время — пробуем следующую.
+    // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
+    // существующий клиент работает без изменений.
     const MODEL_CHAIN = [
       "meta-llama/llama-3.3-70b-instruct:free",
       "google/gemini-2.0-flash-exp:free",
       "qwen/qwen-2.5-72b-instruct:free",
+      "deepseek/deepseek-r1:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
     ];
 
-    let response: Response | null = null;
+    const PER_MODEL_TIMEOUT_MS = 25_000;
+
+    let content = "";
+    let usedModel = "";
     let lastErrorText = "";
     let lastStatus = 0;
-    let usedModel = "";
 
     for (const model of MODEL_CHAIN) {
       console.log("[Chat] Trying model:", model, "messages:", messages.length);
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), PER_MODEL_TIMEOUT_MS);
       try {
         const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
@@ -251,19 +259,14 @@ ${medicalContext}`;
           body: JSON.stringify({
             model,
             messages: [{ role: "system", content: systemPrompt }, ...messages],
-            stream: true,
+            // НЕ stream — забираем целиком за один раз с таймаутом.
           }),
+          signal: ctrl.signal,
         });
 
+        clearTimeout(t);
         console.log("[Chat]", model, "→", r.status);
 
-        if (r.ok) {
-          response = r;
-          usedModel = model;
-          break;
-        }
-
-        // 402 — глобальная проблема с биллингом, нет смысла перебирать
         if (r.status === 402) {
           return new Response(JSON.stringify({ error: "Требуется пополнение счета OpenRouter." }), {
             status: 402,
@@ -271,21 +274,38 @@ ${medicalContext}`;
           });
         }
 
-        // 429/404/5xx — пробуем следующую модель
-        lastStatus = r.status;
-        lastErrorText = await r.text();
-        console.error("[Chat]", model, "failed:", r.status, lastErrorText.slice(0, 200));
+        if (!r.ok) {
+          lastStatus = r.status;
+          lastErrorText = await r.text();
+          console.error("[Chat]", model, "failed:", r.status, lastErrorText.slice(0, 200));
+          continue;
+        }
+
+        const data = await r.json();
+        const c: string = data?.choices?.[0]?.message?.content || "";
+        if (!c || !c.trim()) {
+          console.warn("[Chat]", model, "вернул пустой content, идём дальше");
+          lastErrorText = "empty content";
+          continue;
+        }
+
+        content = c;
+        usedModel = model;
+        break;
       } catch (err) {
-        console.error("[Chat]", model, "network error:", err);
-        lastErrorText = err instanceof Error ? err.message : String(err);
+        clearTimeout(t);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Chat]", model, "error:", msg);
+        lastErrorText = msg;
+        // AbortError при таймауте — переходим к следующей модели
       }
     }
 
-    if (!response) {
+    if (!content) {
       console.error("[Chat] All models failed. Last:", lastStatus, lastErrorText);
       return new Response(
         JSON.stringify({
-          error: `Все ИИ-модели сейчас недоступны (последняя ошибка: ${lastStatus || "network"}). Попробуйте через 1–2 минуты.`,
+          error: `Все ИИ-модели сейчас недоступны (последняя ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`,
         }),
         {
           status: lastStatus === 429 ? 429 : 503,
@@ -294,9 +314,39 @@ ${medicalContext}`;
       );
     }
 
-    console.log("[Chat] Streaming from", usedModel);
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream", "X-AI-Model": usedModel },
+    console.log("[Chat] Got content from", usedModel, "len:", content.length);
+
+    // Эмулируем SSE-стрим из готового content. Клиент уже умеет парсить
+    // OpenAI-совместимый SSE с delta.content — формат сохраняем.
+    // Бьём ответ на куски по ~80 символов чтобы UX-эффект "печатания" сохранялся.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const chunkSize = 80;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            const piece = content.slice(i, i + chunkSize);
+            const payload = JSON.stringify({
+              choices: [{ delta: { content: piece } }],
+            });
+            controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+            // Небольшая пауза между чанками для эффекта печатания
+            await new Promise((r) => setTimeout(r, 15));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "X-AI-Model": usedModel,
+        "Cache-Control": "no-cache",
+      },
     });
   } catch (error) {
     const corsHeaders = getCorsHeaders(req);
