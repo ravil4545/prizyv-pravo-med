@@ -211,18 +211,19 @@ export function RagChat() {
                 )}>
                   {m.content
                     ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-current prose-ul:my-1 prose-li:my-0"
-                        components={{
-                          h1: ({ children }) => <p className="font-bold">{children}</p>,
-                          h2: ({ children }) => <p className="font-bold">{children}</p>,
-                          h3: ({ children }) => <p className="font-semibold">{children}</p>,
-                          hr: () => <div className="border-t border-current opacity-20 my-2" />,
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
+                      <div className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-current prose-ul:my-1 prose-li:my-0">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => <p className="font-bold">{children}</p>,
+                            h2: ({ children }) => <p className="font-bold">{children}</p>,
+                            h3: ({ children }) => <p className="font-semibold">{children}</p>,
+                            hr: () => <div className="border-t border-current opacity-20 my-2" />,
+                          }}
+                        >
+                          {m.content}
+                        </ReactMarkdown>
+                      </div>
                     )
                     : (
                       <span className="flex items-center gap-1 opacity-60">

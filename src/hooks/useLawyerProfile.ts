@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface LawyerProfile {
-  id: string;
+  id?: string;
   user_id: string;
   full_name: string | null;
   specialization: string | null;
@@ -32,7 +32,7 @@ export const useLawyerProfile = () => {
       .eq("user_id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        setProfile(data as LawyerProfile | null);
+        setProfile(data as unknown as LawyerProfile | null);
         setLoading(false);
       });
   }, [user?.id, authLoading]);

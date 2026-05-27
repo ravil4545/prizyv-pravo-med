@@ -58,11 +58,11 @@ export default function CommissariatDirectoryPage() {
   }, []);
 
   const loadRatings = async () => {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from("commissariat_ratings")
       .select("*")
       .order("created_at", { ascending: false });
-    setRatings(data || []);
+    setRatings((data as unknown as Rating[]) || []);
     setLoading(false);
   };
 
@@ -77,7 +77,7 @@ export default function CommissariatDirectoryPage() {
     }
     setSaving(true);
     try {
-      await supabase.from("commissariat_ratings").insert({
+      await (supabase as any).from("commissariat_ratings").insert({
         commissariat_name: form.commissariat_name.trim(),
         city: form.city.trim(),
         region: form.region.trim() || null,

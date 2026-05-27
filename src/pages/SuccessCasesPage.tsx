@@ -52,12 +52,12 @@ export default function SuccessCasesPage() {
   }, []);
 
   const loadCases = async () => {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from("success_cases")
       .select("*")
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
-    setCases(data || []);
+    setCases((data as unknown as SuccessCase[]) || []);
     setLoading(false);
   };
 
@@ -69,7 +69,7 @@ export default function SuccessCasesPage() {
     setSaving(true);
     try {
       const codes = form.diagnosis_codes.split(",").map(s => s.trim()).filter(Boolean);
-      await supabase.from("success_cases").insert({
+      await (supabase as any).from("success_cases").insert({
         diagnosis_codes: codes,
         fitness_category: form.fitness_category,
         outcome: form.outcome.trim(),
