@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileDown, ArrowRight, CheckCircle2 } from "lucide-react";
+import { FileDown, ArrowRight, CheckCircle2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
@@ -12,6 +12,8 @@ export interface LeadMagnetConfig {
   ctaLabel: string;
   /** Краткий промо-текст под кнопкой */
   promoText?: string;
+  /** Прямая ссылка на PDF в public/leadmagnets/ — выдаётся сразу после email */
+  fileUrl?: string;
 }
 
 interface Props {
@@ -76,20 +78,40 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
   if (done) {
     return (
       <div className={containerClass}>
-        <div className="flex items-start gap-4">
+        <div className="flex items-start gap-4 mb-4">
           <div className={`flex h-10 w-10 items-center justify-center flex-shrink-0 ${variant === "inline" ? "bg-ink text-paper" : "bg-gold text-ink"}`}>
             <CheckCircle2 className="h-5 w-5" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className={`font-serif text-xl ${textColor} leading-tight`}>
-              Материал отправлен на {email}.
+              Готово.
             </p>
             <p className={`text-sm ${subColor} mt-2 leading-relaxed`}>
-              Проверьте папку «Спам», если письма нет в основной. По другим вопросам
-              пишите в Telegram — отвечаем в течение часа.
+              Скопия отправлена на <span className="font-semibold">{email}</span>.
+              {magnet.fileUrl && " Файл можно открыть прямо сейчас:"}
             </p>
           </div>
         </div>
+
+        {magnet.fileUrl && (
+          <a
+            href={magnet.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className={`group inline-flex items-center justify-between w-full gap-3 px-5 py-3.5 font-semibold text-sm transition-colors ${
+              variant === "inline"
+                ? "bg-ink text-paper hover:bg-gold hover:text-ink"
+                : "bg-gold text-ink hover:bg-paper"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Скачать PDF — {magnet.title}
+            </span>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </a>
+        )}
       </div>
     );
   }
@@ -150,7 +172,8 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
   );
 };
 
-// Готовые магниты — реальные PDF загружаются позже в public/leadmagnets/.
+// Готовые магниты — реальные PDF лежат в public/leadmagnets/, генерируются
+// скриптом scripts/generate_leadmagnets.py.
 export const LEAD_MAGNETS: Record<string, LeadMagnetConfig> = {
   checklist_medcomission: {
     id: "checklist_medcomission",
@@ -158,7 +181,8 @@ export const LEAD_MAGNETS: Record<string, LeadMagnetConfig> = {
     description:
       "9 пунктов: какие документы собрать, в каком порядке проходить врачей, как фиксировать действия комиссии.",
     ctaLabel: "Получить чек-лист",
-    promoText: "Без спама. Материал придёт на email в течение пары минут.",
+    promoText: "Без спама. Ссылка на PDF откроется сразу после ввода email.",
+    fileUrl: "/leadmagnets/checklist-medcomission.pdf",
   },
   guide_povestka: {
     id: "guide_povestka",
@@ -166,7 +190,8 @@ export const LEAD_MAGNETS: Record<string, LeadMagnetConfig> = {
     description:
       "Пошаговый план на ближайшие 72 часа: что подписывать, что не подписывать, кому звонить, какие документы готовить.",
     ctaLabel: "Получить план",
-    promoText: "PDF на 5 страниц. Без воды.",
+    promoText: "PDF. Откроется сразу после отправки email.",
+    fileUrl: "/leadmagnets/guide-povestka.pdf",
   },
   matrix_565: {
     id: "matrix_565",
@@ -175,6 +200,7 @@ export const LEAD_MAGNETS: Record<string, LeadMagnetConfig> = {
       "Таблица с 40 самыми частыми диагнозами и их привязкой к статьям Расписания болезней. Какая категория и при каких критериях.",
     ctaLabel: "Получить матрицу",
     promoText: "Обновляется ежеквартально по практике.",
+    fileUrl: "/leadmagnets/matrix-565.pdf",
   },
   template_appeal: {
     id: "template_appeal",
@@ -182,7 +208,8 @@ export const LEAD_MAGNETS: Record<string, LeadMagnetConfig> = {
     description:
       "Готовый юридически выверенный шаблон обжалования с примечаниями: что подставлять, какие статьи закона цитировать.",
     ctaLabel: "Скачать шаблон",
-    promoText: "Word/PDF. Можно править под свою ситуацию.",
+    promoText: "PDF. Подставьте свои данные в курсивные поля.",
+    fileUrl: "/leadmagnets/template-apellyaciya.pdf",
   },
 };
 
