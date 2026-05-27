@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare } from "lucide-react";
+import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare, Briefcase } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,10 +10,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
 
 const initials = (full: string): string => {
@@ -39,7 +44,11 @@ const Header = () => {
   const { user } = useAuth();
   const branding = useBranding();
   const { unreadCount } = useUnreadMessages();
+  const { isLawyer } = useLawyerProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Куда ведёт «Кабинет» в Header — клиента в /dashboard, юриста в /lawyer
+  const cabinetPath = isLawyer ? "/lawyer" : "/dashboard";
 
   const brandPhoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const brandWhatsapp = branding.whatsapp || "79253500533";
@@ -191,12 +200,12 @@ const Header = () => {
               <Send className="h-4 w-4" />
             </Button>
 
-            {/* Messages notification badge */}
+            {/* Messages notification badge — юрист идёт в /lawyer/chats, клиент в /client/messages */}
             {user && (
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/client/messages")}
+                onClick={() => navigate(isLawyer ? "/lawyer/chats" : "/client/messages")}
                 className="h-10 w-10 relative"
                 aria-label={unreadCount > 0 ? `Сообщения (${unreadCount})` : "Сообщения"}
               >
@@ -211,15 +220,40 @@ const Header = () => {
 
             {/* Auth */}
             {user ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/dashboard")}
-                className="h-10 w-10 lg:hidden"
-                aria-label="Кабинет"
-              >
-                <User className="h-4 w-4 text-primary" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10"
+                    aria-label="Меню аккаунта"
+                  >
+                    <User className="h-4 w-4 text-primary" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="truncate">
+                    {user.email}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate(cabinetPath)}>
+                    <User className="h-4 w-4 mr-2" />
+                    {isLawyer ? "Кабинет юриста" : "Личный кабинет"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>
+                    <User className="h-4 w-4 mr-2" />
+                    Профиль и настройки
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleAuth}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Выйти
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <Button
                 variant="default"
@@ -252,7 +286,7 @@ const Header = () => {
                 {/* Limits indicator */}
                 <div className="px-4 py-3 border-b">
                   <Link
-                    to={user ? "/dashboard" : "/auth"}
+                    to={user ? cabinetPath : "/auth"}
                     onClick={() => setMobileMenuOpen(false)}
                     className="block hover:opacity-80 transition-opacity"
                   >
@@ -264,22 +298,22 @@ const Header = () => {
                 <nav className="flex flex-col p-2 flex-1 overflow-y-auto">
                   {user && (
                     <Link
-                      to="/dashboard"
+                      to={cabinetPath}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-semibold transition-colors mb-2",
-                        isActive("/dashboard")
+                        isActive(cabinetPath)
                           ? "bg-primary/10 text-primary"
                           : "bg-primary/5 text-primary hover:bg-primary/10"
                       )}
                     >
                       <User className="h-5 w-5" />
-                      Личный кабинет
+                      {isLawyer ? "Кабинет юриста" : "Личный кабинет"}
                     </Link>
                   )}
                   {user && (
                     <Link
-                      to="/client/messages"
+                      to={isLawyer ? "/lawyer/chats" : "/client/messages"}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium transition-colors mb-1",

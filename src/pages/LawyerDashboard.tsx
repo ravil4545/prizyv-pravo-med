@@ -10,10 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Users, AlertTriangle, Trophy, TrendingUp,
+  Users, User, AlertTriangle, Trophy, TrendingUp,
   Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
+  LogOut, Settings,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 const CRM_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Первичный контакт",
@@ -42,10 +48,18 @@ interface RecentClient {
   crm_stage: string; priority: string; updated_at: string;
 }
 
+// Канонический порядок этапов CRM — чтобы воронка отрисовывалась как путь дела
+const CRM_STAGE_ORDER = [
+  "initial_contact", "no_diagnosis", "has_diagnosis", "examinations",
+  "diagnosis_confirmed", "waiting_documents", "documents_received",
+  "military_office", "regional_commission", "courts", "military_ticket",
+];
+
 const LawyerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile, loading: profileLoading, isLawyer, isPro } = useLawyerProfile();
+  const { unreadCount } = useUnreadMessages();
 
   const [stageCounts, setStageCounts] = useState<StageCount[]>([]);
   const [recentClients, setRecentClients] = useState<RecentClient[]>([]);
@@ -112,7 +126,7 @@ const LawyerDashboard = () => {
               {profile?.full_name || user?.email} · {isPro ? "Pro" : "Basic"}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <DiseaseScheduleDrawer>
               <Button variant="outline">
                 <BookOpen className="h-4 w-4 mr-2" />
@@ -121,6 +135,37 @@ const LawyerDashboard = () => {
             </DiseaseScheduleDrawer>
             <Button variant="outline" asChild><Link to="/lawyer/templates"><FileText className="h-4 w-4 mr-2" />Шаблоны</Link></Button>
             <Button asChild><Link to="/lawyer/clients"><Plus className="h-4 w-4 mr-2" />Добавить клиента</Link></Button>
+
+            {/* Меню аккаунта юриста — настройки бренда / выход */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Меню аккаунта">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="truncate">
+                  {profile?.full_name || user?.email}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/lawyer/branding")}>
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Мой бренд
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/profile")}>
+                  <User className="h-4 w-4 mr-2" />
+                  Профиль и удаление
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={async () => { await supabase.auth.signOut(); navigate("/"); }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Выйти
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -178,7 +223,9 @@ const LawyerDashboard = () => {
                 : stageCounts.length === 0
                   ? <p className="text-sm text-muted-foreground text-center py-4">Нет клиентов</p>
                   : stageCounts
-                      .sort((a, b) => b.count - a.count)
+                      // Сортируем по каноническому порядку этапов CRM — пользователь видит
+                      // движение дела сверху вниз, а не «топ-загруженности»
+                      .sort((a, b) => CRM_STAGE_ORDER.indexOf(a.stage) - CRM_STAGE_ORDER.indexOf(b.stage))
                       .map(({ stage, count }) => (
                         <div key={stage} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted cursor-pointer"
                           onClick={() => navigate(`/lawyer/clients?stage=${stage}`)}>
@@ -230,17 +277,22 @@ const LawyerDashboard = () => {
           </Card>
         </div>
 
-        {/* Quick nav */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+        {/* Quick nav — 5 равноценных карточек, на десктопе в одну строку */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
           {[
-            { to: "/lawyer/clients",   icon: Users,          label: "CRM — Клиенты", desc: "Ведение дел" },
-            { to: "/lawyer/templates", icon: FileText,        label: "Шаблоны",       desc: "Документы" },
-            { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами" },
-            { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел" },
-            { to: "/lawyer/branding",  icon: Briefcase,      label: "Мой бренд",     desc: "Личное приложение и QR" },
-          ].map(({ to, icon: Icon, label, desc }) => (
-            <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(to)}>
+            { to: "/lawyer/clients",   icon: Users,          label: "CRM — Клиенты", desc: "Ведение дел", badge: 0 },
+            { to: "/lawyer/templates", icon: FileText,       label: "Шаблоны",       desc: "DOCX / PDF", badge: 0 },
+            { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами", badge: unreadCount },
+            { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел", badge: 0 },
+            { to: "/lawyer/branding",  icon: Briefcase,      label: "Мой бренд",     desc: "Личное приложение и QR", badge: 0 },
+          ].map(({ to, icon: Icon, label, desc, badge }) => (
+            <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow relative" onClick={() => navigate(to)}>
               <CardContent className="p-4 text-center">
+                {badge > 0 && (
+                  <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
                 <Icon className="h-8 w-8 text-primary mx-auto mb-2" />
                 <p className="font-semibold text-sm">{label}</p>
                 <p className="text-xs text-muted-foreground">{desc}</p>
@@ -248,6 +300,19 @@ const LawyerDashboard = () => {
             </Card>
           ))}
         </div>
+
+        {/* Подсказки юристу — что упростит работу */}
+        <Card className="mt-6 border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold text-primary mb-2">💡 Подсказки</p>
+            <ul className="text-xs text-muted-foreground space-y-1.5 list-disc list-inside">
+              <li>В карточке клиента есть кнопка <strong>«Из шаблона»</strong> — поля документа подставятся автоматически.</li>
+              <li>Кнопка <strong>«Расписание болезней»</strong> вверху открывает справочник без ухода со страницы.</li>
+              <li>Для клиентов без аккаунта на сайте можно загружать медкарты прямо в карточке (вкладка «Документы»).</li>
+              <li>Brand-страница <strong>/u/{profile?.user_id ? "ваш-slug" : "..."}</strong> — отдельный лендинг, не копия основного сайта. Шаблон визуала меняется в «Мой бренд».</li>
+            </ul>
+          </CardContent>
+        </Card>
       </main>
       <Footer />
     </div>

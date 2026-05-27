@@ -17,6 +17,7 @@ import ShareWithLawyer from "@/components/ShareWithLawyer";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
+import LawyerPartnerDialog from "@/components/LawyerPartnerDialog";
 
 interface DashboardCard {
   title: string;
@@ -34,6 +35,7 @@ const DashboardPage = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [partnerDialogOpen, setPartnerDialogOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
@@ -452,7 +454,14 @@ const DashboardPage = () => {
       {!isDemoMode && user && (
         <div className="container mx-auto px-4 pb-4 max-w-5xl">
           <div
-            onClick={() => navigate(isLawyer ? "/lawyer/clients" : "/lawyer")}
+            onClick={() => {
+              if (isLawyer) {
+                navigate("/lawyer/clients");
+              } else {
+                // Незалогиненный юрист — открываем диалог выбора канала связи
+                setPartnerDialogOpen(true);
+              }
+            }}
             className={cn(
               "cursor-pointer rounded-xl border px-5 py-4 flex items-center gap-4",
               "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
@@ -498,6 +507,7 @@ const DashboardPage = () => {
           userId={user.id}
         />
       )}
+      <LawyerPartnerDialog open={partnerDialogOpen} onOpenChange={setPartnerDialogOpen} />
     </div>
   );
 };

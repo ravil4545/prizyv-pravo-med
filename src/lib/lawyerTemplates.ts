@@ -1,4 +1,7 @@
 import { jsPDF } from "jspdf";
+import {
+  Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel,
+} from "docx";
 
 export interface TemplateField {
   key: string;
@@ -408,6 +411,120 @@ export function generateTemplatePdf(template: Template, fields: Record<string, s
   });
 
   return doc;
+}
+
+/**
+ * Генерирует DOCX-файл (Blob) с шапкой в правом верхнем углу и телом слева.
+ * Кириллица в .docx работает «из коробки» — в отличие от jsPDF, не нужны
+ * embedded шрифты, Word и LibreOffice сами рендерят правильно.
+ *
+ * Возвращает Promise<Blob>, который можно скачать через URL.createObjectURL.
+ */
+export async function generateTemplateDocx(
+  template: Template,
+  fields: Record<string, string>,
+): Promise<Blob> {
+  const text = template.body(fields);
+  const { header, body } = splitHeaderAndBody(text);
+
+  const headerParagraphs: Paragraph[] = header
+    ? header.split("\n").map(
+        (line) =>
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            spacing: { after: 60 },
+            children: [new TextRun({ text: line, size: 22 })], // 11pt
+          }),
+      )
+    : [];
+
+  // Если шапка есть — добавим разделитель (пустую строку)
+  if (headerParagraphs.length > 0) {
+    headerParagraphs.push(
+      new Paragraph({ children: [new TextRun({ text: "", size: 22 })] }),
+    );
+  }
+
+  // Тело: первая строка — заголовок (выделяем bold + center), остальное — обычный текст
+  const bodyLines = (body || text).split("\n");
+
+  const bodyParagraphs: Paragraph[] = [];
+  let titleHandled = false;
+
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    if (!titleHandled && TITLE_MARKERS.some((m) => trimmed.toUpperCase().startsWith(m))) {
+      // Заголовок документа — bold + center + крупнее
+      bodyParagraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 120, after: 120 },
+          children: [new TextRun({ text: trimmed, bold: true, size: 28 })], // 14pt
+        }),
+      );
+      titleHandled = true;
+      continue;
+    }
+    if (!titleHandled) {
+      // Подзаголовок (вторая строка после ЗАЯВЛЕНИЕ типа) — центрируем
+      bodyParagraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 120 },
+          children: [new TextRun({ text: trimmed, italics: true, size: 22 })],
+        }),
+      );
+      continue;
+    }
+    // Обычные строки тела
+    bodyParagraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { after: 80 },
+        children: [new TextRun({ text: line, size: 22 })],
+      }),
+    );
+  }
+
+  const doc = new Document({
+    creator: "nepriziv.ru",
+    title: template.title,
+    description: template.description,
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: { top: 1134, right: 1134, bottom: 1134, left: 1701 }, // ~3см лево, 2см право/верх/низ
+          },
+        },
+        children: [...headerParagraphs, ...bodyParagraphs],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  return blob;
+}
+
+/**
+ * Скачивает DOCX в браузере. Имя файла на основе шаблона + текущей даты.
+ */
+export async function downloadTemplateDocx(
+  template: Template,
+  fields: Record<string, string>,
+): Promise<void> {
+  const blob = await generateTemplateDocx(template, fields);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  // Заменяем недопустимые в Windows символы на нижнее подчёркивание
+  const safeTitle = template.title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+  a.download = `${safeTitle} — ${todayRu()}.docx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**

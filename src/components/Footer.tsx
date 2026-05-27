@@ -1,13 +1,16 @@
-import { Phone, MessageCircle, Send, Mail, Clock } from "lucide-react";
+import { Phone, MessageCircle, Send, Mail, Clock, Briefcase, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useBranding } from "@/contexts/BrandingContext";
+import LawyerPartnerDialog from "@/components/LawyerPartnerDialog";
 
 const Footer = () => {
   const isMobile = useIsMobile();
   const { isLawyer } = useLawyerProfile();
   const branding = useBranding();
+  const [partnerDialogOpen, setPartnerDialogOpen] = useState(false);
 
   const phoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const phoneDisplay = branding.phone || "+7 (925) 350-05-33";
@@ -196,6 +199,43 @@ const Footer = () => {
           </div>
         </div>
 
+        {/* ── Lawyer cabinet entry — отдельный блок снизу ────────────────── */}
+        <div className="mt-12 pt-8 border-t border-paper/15">
+          {isLawyer ? (
+            <Link
+              to="/lawyer"
+              className="group flex items-center gap-4 p-4 border border-paper/20 hover:border-gold transition-colors max-w-2xl"
+            >
+              <div className="h-12 w-12 border border-gold/40 flex items-center justify-center flex-shrink-0">
+                <Briefcase className="h-5 w-5 text-gold" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-serif text-base text-paper">Кабинет юриста</p>
+                <p className="text-xs text-paper/60 mt-0.5 font-mono uppercase tracking-wider">
+                  CRM · клиенты · документы · бренд
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gold/60 group-hover:text-gold flex-shrink-0" />
+            </Link>
+          ) : (
+            <button
+              onClick={() => setPartnerDialogOpen(true)}
+              className="group flex items-center gap-4 p-4 border border-paper/20 hover:border-gold transition-colors max-w-2xl w-full text-left"
+            >
+              <div className="h-12 w-12 border border-gold/40 flex items-center justify-center flex-shrink-0">
+                <Briefcase className="h-5 w-5 text-gold" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-serif text-base text-paper">Юристам — стать партнёром</p>
+                <p className="text-xs text-paper/60 mt-0.5 font-mono uppercase tracking-wider">
+                  Личный кабинет · CRM · приём заявок
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gold/60 group-hover:text-gold flex-shrink-0" />
+            </button>
+          )}
+        </div>
+
         {/* Bottom strip */}
         <div className="border-t border-paper/15 mt-14 pt-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-1">
@@ -217,6 +257,7 @@ const Footer = () => {
           </div>
         </div>
       </div>
+      <LawyerPartnerDialog open={partnerDialogOpen} onOpenChange={setPartnerDialogOpen} />
     </footer>
   );
 };

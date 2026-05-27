@@ -91,6 +91,7 @@ const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
 const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
 const LawyerAnalyticsPage = lazy(() => import("./pages/LawyerAnalyticsPage"));
 const LawyerBrandingPage = lazy(() => import("./pages/LawyerBrandingPage"));
+const LawyerLandingPage = lazy(() => import("./pages/LawyerLandingPage"));
 const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 // Lazy-load RagChat — keeps react-markdown out of the main bundle
@@ -131,7 +132,8 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 {/* White-label маршруты юриста — точка входа клиента по ссылке/QR */}
-                <Route path="/u/:slug" element={<Index />} />
+                {/* /u/:slug — отдельный лендинг юриста (не копия основного сайта) */}
+                <Route path="/u/:slug" element={<LawyerLandingPage />} />
                 <Route path="/u/:slug/auth" element={<AuthPage />} />
                 <Route path="/u/:slug/register" element={<RegisterPage />} />
                 <Route path="/u/:slug/login" element={<LoginPage />} />

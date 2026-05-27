@@ -27,6 +27,7 @@ import {
   ShieldCheck, Lock, FileSignature,
 } from "lucide-react";
 import TemplatePickerDialog from "@/components/TemplatePickerDialog";
+import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
 import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
 
 const stripMarkdown = (s: string) =>
@@ -409,11 +410,12 @@ const LawyerClientDetail = () => {
           <TabsContent value="documents">
             {!client?.client_user_id
               ? (
-                  <Card><CardContent className="py-8 text-center">
-                    <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
-                    <p className="font-medium">Клиент не привязан к аккаунту</p>
-                    <p className="text-sm text-muted-foreground mt-1">Укажите ID аккаунта клиента во вкладке «Обзор»</p>
-                  </CardContent></Card>
+                  /* CRM-клиент без аккаунта — юрист сам загружает медкарту */
+                  <LawyerClientDocsUploader
+                    lawyerClientId={clientId!}
+                    lawyerId={user!.id}
+                    onPreview={openPreview}
+                  />
                 )
               : !hasDocAccess
                 ? (

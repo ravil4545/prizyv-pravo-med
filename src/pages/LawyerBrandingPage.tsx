@@ -16,6 +16,8 @@ import { Briefcase, ArrowLeft, Save, Loader2, Link as LinkIcon, Copy, Check, Ext
 import { slugifyRu } from "@/lib/slug";
 import BrandedAvatar from "@/components/BrandedAvatar";
 
+type BrandTemplate = "classic" | "editorial" | "minimal";
+
 interface BrandingForm {
   slug: string;
   full_name: string;
@@ -27,6 +29,7 @@ interface BrandingForm {
   brand_whatsapp: string;
   brand_email: string;
   accent_color: string;
+  brand_template: BrandTemplate;
 }
 
 const DEFAULT_FORM: BrandingForm = {
@@ -40,7 +43,29 @@ const DEFAULT_FORM: BrandingForm = {
   brand_whatsapp: "",
   brand_email: "",
   accent_color: "",
+  brand_template: "classic",
 };
+
+const TEMPLATE_OPTIONS: Array<{ value: BrandTemplate; title: string; description: string; preview: string }> = [
+  {
+    value: "classic",
+    title: "Карточка",
+    description: "Тёплая визитка с фото и контактами в один экран — идеально для звонков от клиентов",
+    preview: "bg-gradient-to-br from-amber-100 to-stone-100",
+  },
+  {
+    value: "editorial",
+    title: "Газетный",
+    description: "Сдержанный editorial-разворот с серифной типографикой — стиль nepriziv.ru",
+    preview: "bg-paper",
+  },
+  {
+    value: "minimal",
+    title: "Минимал",
+    description: "Большая чёрно-белая типографика и одна крупная кнопка — современный лук",
+    preview: "bg-white",
+  },
+];
 
 const SITE_ORIGIN = (typeof window !== "undefined") ? window.location.origin : "https://nepriziv.ru";
 const PUBLIC_BASE = "https://nepriziv.ru";
@@ -86,6 +111,7 @@ const LawyerBrandingPage = () => {
         brand_whatsapp: row.brand_whatsapp || "",
         brand_email: row.brand_email || "",
         accent_color: row.accent_color || "",
+        brand_template: (row.brand_template as BrandTemplate) || "classic",
       });
       if (row.slug) setSlugTouched(true);
     }
@@ -159,6 +185,7 @@ const LawyerBrandingPage = () => {
       brand_whatsapp: form.brand_whatsapp?.replace(/\D/g, "") || null,
       brand_email: form.brand_email || null,
       accent_color: form.accent_color || null,
+      brand_template: form.brand_template || "classic",
     };
     // upsert: если записи нет — создаст, если есть — обновит. Это устойчиво
     // к тому, что юрист попал на /lawyer/branding без существующей строки
@@ -319,6 +346,50 @@ const LawyerBrandingPage = () => {
                   </p>
                 </div>
               </CardContent>
+            </Card>
+
+            {/* Шаблон визуала лендинга */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Шаблон лендинга</CardTitle>
+                <CardDescription>
+                  Как выглядит ваша персональная страница /u/{form.slug || "<адрес>"} для клиента.
+                  Можно поменять в любой момент — данные не теряются.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid sm:grid-cols-3 gap-3">
+                {TEMPLATE_OPTIONS.map((opt) => {
+                  const active = form.brand_template === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, brand_template: opt.value }))}
+                      className={`text-left rounded-xl border-2 p-3 transition-all ${
+                        active
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <div className={`${opt.preview} h-20 rounded-lg border border-stone-200 mb-2 flex items-center justify-center text-[10px] uppercase tracking-widest text-stone-500`}>
+                        {opt.title}
+                      </div>
+                      <p className="font-semibold text-sm">{opt.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{opt.description}</p>
+                    </button>
+                  );
+                })}
+              </CardContent>
+              {form.slug && (
+                <CardContent className="pt-0">
+                  <Button variant="outline" size="sm" asChild className="w-full">
+                    <a href={`/u/${form.slug}`} target="_blank" rel="noopener noreferrer">
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      Посмотреть, как видит клиент
+                    </a>
+                  </Button>
+                </CardContent>
+              )}
             </Card>
 
             {/* Контакты */}

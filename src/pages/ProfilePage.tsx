@@ -17,6 +17,7 @@ import MedicalTestsForm from "@/components/profile/MedicalTestsForm";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Loader2 } from "lucide-react";
+import DeleteAccountDialog from "@/components/DeleteAccountDialog";
 
 const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
@@ -181,6 +182,21 @@ const ProfilePage = () => {
             <DocumentsGenerator profile={profile} userId={user?.id} />
           </TabsContent>
         </Tabs>
+
+        {/* Danger zone — удаление аккаунта */}
+        <div className="mt-12 border-t pt-8">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="flex-1">
+              <p className="font-semibold text-sm text-destructive">Удаление аккаунта</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Безвозвратно удалит ваш профиль, медицинские документы, переписку и
+                — если вы юрист — все CRM-карточки клиентов. Перед удалением попросим
+                ввести подтверждающее слово.
+              </p>
+            </div>
+            <DeleteAccountDialog />
+          </div>
+        </div>
       </div>
       <Footer />
     </div>

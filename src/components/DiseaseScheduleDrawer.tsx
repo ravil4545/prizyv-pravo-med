@@ -40,9 +40,15 @@ const DiseaseScheduleDrawer = ({ children }: DiseaseScheduleDrawerProps) => {
     supabase
       .from("diagnoses")
       .select("id, title, description, article_number, category")
-      .order("article_number")
       .then(({ data }) => {
-        setDiagnoses((data || []) as Diagnosis[]);
+        // Сортируем по article_number численно (1, 2, ..., 10, 11), а не лексикографически
+        const sorted = ((data || []) as Diagnosis[]).slice().sort((a, b) => {
+          const na = parseInt(a.article_number, 10);
+          const nb = parseInt(b.article_number, 10);
+          if (isNaN(na) || isNaN(nb)) return a.article_number.localeCompare(b.article_number);
+          return na - nb;
+        });
+        setDiagnoses(sorted);
         setLoading(false);
         setLoadedOnce(true);
       });
@@ -88,8 +94,16 @@ const DiseaseScheduleDrawer = ({ children }: DiseaseScheduleDrawerProps) => {
             Расписание болезней
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Постановление Правительства РФ № 565 — справочник статей и категорий годности.
-            Не уходит со страницы — продолжайте работу в кабинете.
+            Постановление Правительства РФ № 565 от 04.07.2013 — справочник статей и категорий годности.
+            {" "}
+            <a
+              href="https://www.consultant.ru/document/cons_doc_LAW_149096/7cd8dde08fc9aff1bf6d22025061d18f55e576e5/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-primary inline-flex items-center gap-1"
+            >
+              Источник — КонсультантПлюс <ExternalLink className="h-3 w-3" />
+            </a>
           </SheetDescription>
         </SheetHeader>
 

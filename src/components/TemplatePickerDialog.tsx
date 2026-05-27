@@ -14,6 +14,7 @@ import {
   type Template,
   type ClientPrefillSource,
   generateTemplatePdf,
+  downloadTemplateDocx,
   prefillFromClient,
   todayRu,
 } from "@/lib/lawyerTemplates";
@@ -85,21 +86,36 @@ const TemplatePickerDialog = ({
     }
   };
 
+  const logUse = async () => {
+    if (!user || !activeTemplate) return;
+    try {
+      await supabase.from("lawyer_template_uses").insert({
+        lawyer_id: user.id,
+        template_key: activeTemplate.key,
+      });
+    } catch (e) {
+      // тихо игнорируем — статистика не критична
+      console.error("template_uses insert failed", e);
+    }
+  };
+
+  const downloadDocx = async () => {
+    if (!activeTemplate) return;
+    try {
+      await downloadTemplateDocx(activeTemplate, fields);
+      await logUse();
+      toast({ title: "DOCX скачан" });
+    } catch (e) {
+      console.error("DOCX generation failed", e);
+      toast({ title: "Ошибка генерации DOCX", variant: "destructive" });
+    }
+  };
+
   const downloadPdf = async () => {
     if (!activeTemplate) return;
     const doc = generateTemplatePdf(activeTemplate, fields);
     doc.save(`${activeTemplate.key}_${Date.now()}.pdf`);
-    if (user) {
-      try {
-        await supabase.from("lawyer_template_uses").insert({
-          lawyer_id: user.id,
-          template_key: activeTemplate.key,
-        });
-      } catch (e) {
-        // тихо игнорируем — статистика не критична
-        console.error("template_uses insert failed", e);
-      }
-    }
+    await logUse();
     toast({ title: "PDF скачан" });
   };
 
@@ -167,18 +183,24 @@ const TemplatePickerDialog = ({
               <ScrollArea className="border rounded-lg p-4 bg-muted/30 flex-1 md:max-h-[calc(92vh-260px)]">
                 <pre className="text-xs leading-relaxed whitespace-pre-wrap font-sans">{preview}</pre>
               </ScrollArea>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={copyText} className="flex-1">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={copyText} className="flex-1 min-w-[120px]">
                   {copied ? (
                     <><Check className="h-4 w-4 mr-1" />Скопировано</>
                   ) : (
                     <><Copy className="h-4 w-4 mr-1" />Копировать</>
                   )}
                 </Button>
-                <Button size="sm" onClick={downloadPdf} className="flex-1">
-                  <Download className="h-4 w-4 mr-1" />Скачать PDF
+                <Button size="sm" onClick={downloadDocx} className="flex-1 min-w-[140px]">
+                  <Download className="h-4 w-4 mr-1" />Скачать DOCX
+                </Button>
+                <Button variant="outline" size="sm" onClick={downloadPdf} className="flex-1 min-w-[120px]">
+                  <Download className="h-4 w-4 mr-1" />PDF
                 </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground text-center">
+                DOCX корректно отображает кириллицу; PDF — резервный вариант.
+              </p>
             </div>
           </div>
         ) : (
