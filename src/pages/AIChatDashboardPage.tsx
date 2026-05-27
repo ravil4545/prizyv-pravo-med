@@ -243,14 +243,13 @@ const AIChatDashboardPage = () => {
 
       console.log("[Chat] POST", `${SUPABASE_URL}/functions/v1/chat`, "auth:", session?.user?.id ? "user" : "anon");
 
-      // Timeout 45 сек на сам запрос (Supabase Edge функций обычно 60 сек,
-      // оставляем запас). AbortController остановит и fetch, и stream-чтение
-      // ниже, если модель тупит дольше лимита.
+      // Timeout 60 сек на сам запрос. Серверный fallback chain — 3 модели
+      // по 15 сек = до 45 сек + накладные расходы. 60 сек оставляет запас.
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.warn("[Chat] Timeout 45 сек — прерываю запрос");
+        console.warn("[Chat] Timeout 60 сек — прерываю запрос");
         abortController.abort();
-      }, 45_000);
+      }, 60_000);
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
         method: "POST",

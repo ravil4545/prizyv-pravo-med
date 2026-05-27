@@ -230,15 +230,16 @@ ${medicalContext}`;
     // Если модель не отдала контент за это время — пробуем следующую.
     // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
     // существующий клиент работает без изменений.
+    // Только самые быстрые free-модели. Тяжёлые модели (deepseek-r1)
+    // и старая nemotron убраны — они стабильно превышают клиентский таймаут.
     const MODEL_CHAIN = [
-      "meta-llama/llama-3.3-70b-instruct:free",
       "google/gemini-2.0-flash-exp:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
       "qwen/qwen-2.5-72b-instruct:free",
-      "deepseek/deepseek-r1:free",
-      "nvidia/nemotron-3-super-120b-a12b:free",
     ];
 
-    const PER_MODEL_TIMEOUT_MS = 25_000;
+    // 15 сек × 3 модели = 45 сек суммарно — укладываемся в клиентский timeout 60.
+    const PER_MODEL_TIMEOUT_MS = 15_000;
 
     let content = "";
     let usedModel = "";
