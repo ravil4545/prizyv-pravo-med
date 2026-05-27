@@ -230,16 +230,30 @@ ${medicalContext}`;
     // Если модель не отдала контент за это время — пробуем следующую.
     // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
     // существующий клиент работает без изменений.
-    // Актуальный free-список OpenRouter (проверен через /api/v1/models).
-    // gemini-2.0-flash-exp и qwen-2.5-72b удалены — возвращали 404.
-    // Если все 4 не отвечают → ключ OPENROUTER_API_KEY скорее всего
-    // упёрся в дневной free-лимит.
-    const MODEL_CHAIN = [
-      "google/gemma-4-31b-it:free",
-      "deepseek/deepseek-v4-flash:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "moonshotai/kimi-k2.6:free",
+    // Мульти-провайдерная цепочка. OpenRouter free-tier нестабилен:
+    // модели возвращают 429 (rate-limit) и 503 (перегруз) одновременно
+    // — нельзя полагаться только на него.
+    // Groq имеет отдельный free-tier с гораздо большими лимитами
+    // (~14 400 req/сутки) и заметно быстрее на текстовых моделях.
+    //
+    // Каждая запись определяет провайдера и имя модели у этого провайдера.
+    type ProviderName = "groq" | "openrouter";
+    interface ModelEntry {
+      provider: ProviderName;
+      model: string;
+    }
+    const MODEL_CHAIN: ModelEntry[] = [
+      // Groq — основной, быстрый и стабильный
+      { provider: "groq", model: "llama-3.3-70b-versatile" },
+      { provider: "groq", model: "llama-3.1-8b-instant" },
+      { provider: "groq", model: "mixtral-8x7b-32768" },
+      // OpenRouter free — резерв
+      { provider: "openrouter", model: "google/gemma-4-31b-it:free" },
+      { provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" },
+      { provider: "openrouter", model: "deepseek/deepseek-v4-flash:free" },
     ];
+
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
     // 15 сек × 3 модели = 45 сек суммарно — укладываемся в клиентский timeout 60.
     const PER_MODEL_TIMEOUT_MS = 15_000;
@@ -249,21 +263,40 @@ ${medicalContext}`;
     let lastErrorText = "";
     let lastStatus = 0;
 
-    for (const model of MODEL_CHAIN) {
-      console.log("[Chat] Trying model:", model, "messages:", messages.length);
+    for (const entry of MODEL_CHAIN) {
+      // Пропускаем Groq если ключ не сконфигурирован
+      if (entry.provider === "groq" && !GROQ_API_KEY) {
+        console.log("[Chat] Skip Groq:", entry.model, "(no GROQ_API_KEY)");
+        continue;
+      }
+
+      const tag = `${entry.provider}:${entry.model}`;
+      console.log("[Chat] Trying", tag, "messages:", messages.length);
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), PER_MODEL_TIMEOUT_MS);
+
+      const url =
+        entry.provider === "groq"
+          ? "https://api.groq.com/openai/v1/chat/completions"
+          : "https://openrouter.ai/api/v1/chat/completions";
+
+      const apiKey = entry.provider === "groq" ? GROQ_API_KEY! : OPENROUTER_API_KEY;
+
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      };
+      if (entry.provider === "openrouter") {
+        headers["HTTP-Referer"] = "https://nepriziv.ru";
+        headers["X-Title"] = "nepriziv.ru Legal Chat";
+      }
+
       try {
-        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        const r = await fetch(url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://nepriziv.ru",
-            "X-Title": "nepriziv.ru Legal Chat",
-          },
+          headers,
           body: JSON.stringify({
-            model,
+            model: entry.model,
             messages: [{ role: "system", content: systemPrompt }, ...messages],
             // НЕ stream — забираем целиком за один раз с таймаутом.
           }),
@@ -271,10 +304,10 @@ ${medicalContext}`;
         });
 
         clearTimeout(t);
-        console.log("[Chat]", model, "→", r.status);
+        console.log("[Chat]", tag, "→", r.status);
 
         if (r.status === 402) {
-          return new Response(JSON.stringify({ error: "Требуется пополнение счета OpenRouter." }), {
+          return new Response(JSON.stringify({ error: `Требуется пополнение счета ${entry.provider}.` }), {
             status: 402,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -283,25 +316,25 @@ ${medicalContext}`;
         if (!r.ok) {
           lastStatus = r.status;
           lastErrorText = await r.text();
-          console.error("[Chat]", model, "failed:", r.status, lastErrorText.slice(0, 200));
+          console.error("[Chat]", tag, "failed:", r.status, lastErrorText.slice(0, 200));
           continue;
         }
 
         const data = await r.json();
         const c: string = data?.choices?.[0]?.message?.content || "";
         if (!c || !c.trim()) {
-          console.warn("[Chat]", model, "вернул пустой content, идём дальше");
+          console.warn("[Chat]", tag, "вернул пустой content, идём дальше");
           lastErrorText = "empty content";
           continue;
         }
 
         content = c;
-        usedModel = model;
+        usedModel = `${entry.provider}/${entry.model}`;
         break;
       } catch (err) {
         clearTimeout(t);
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Chat]", model, "error:", msg);
+        console.error("[Chat]", tag, "error:", msg);
         lastErrorText = msg;
         // AbortError при таймауте — переходим к следующей модели
       }
