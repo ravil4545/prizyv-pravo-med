@@ -62,7 +62,7 @@ const LawyerClientDocsUploader = ({
       console.warn("lawyer_client_med_docs не найдена, миграцию надо применить", error);
       setDocs([]);
     } else {
-      setDocs((data as LawyerClientDoc[]) || []);
+      setDocs((data as unknown as LawyerClientDoc[]) || []);
     }
     setLoading(false);
   };
