@@ -9,8 +9,15 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Shield, FileText, Brain, Users, Info, ShieldOff, ShieldCheck,
-  ChevronDown, ChevronUp, Loader2,
+  ChevronDown, ChevronUp, Loader2, MoreVertical, UserMinus, AlertTriangle,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface LawyerEntry {
   id: string;
@@ -58,6 +65,31 @@ const ShareWithLawyer = () => {
   const [loading, setLoading] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  // ID карточки lawyer_clients, по которой клиент собирается отвязаться.
+  // null = диалог закрыт. Используем AlertDialog с явным подтверждением, потому
+  // что действие необратимое со стороны клиента (юрист может пригласить заново
+  // только новым кодом).
+  const [unlinkTarget, setUnlinkTarget] = useState<LawyerEntry | null>(null);
+  const [unlinking, setUnlinking] = useState(false);
+
+  const unlinkFromLawyer = async () => {
+    if (!unlinkTarget) return;
+    setUnlinking(true);
+    const { error } = await supabase.rpc("client_unlink_from_lawyer", {
+      p_lawyer_client_id: unlinkTarget.id,
+    });
+    setUnlinking(false);
+    if (error) {
+      toast({ title: "Не удалось отвязаться", description: error.message, variant: "destructive" });
+      return;
+    }
+    setUnlinkTarget(null);
+    await load();
+    toast({
+      title: "Вы отвязались от юриста",
+      description: "Юрист потерял доступ к вашим документам. История чата у юриста сохранена.",
+    });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -324,7 +356,7 @@ const ShareWithLawyer = () => {
                   </p>
                 </div>
 
-                {/* Switch + badge */}
+                {/* Switch + badge + меню действий */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {granted ? (
                     <Badge variant="outline" className="text-[10px] gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
@@ -340,12 +372,90 @@ const ShareWithLawyer = () => {
                     onCheckedChange={(v) => toggleOne(l.lawyer_id, v)}
                     aria-label={`Доступ для ${displayName}`}
                   />
+                  {/* Меню — отвязка целиком (разные сценарии: только закрыть
+                      доступ — switch; полностью разорвать связь — здесь). */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label="Действия"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => toggleOne(l.lawyer_id, !granted)}
+                      >
+                        {granted ? (
+                          <>
+                            <ShieldOff className="h-4 w-4 mr-2 text-muted-foreground" />
+                            Закрыть доступ к документам
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-4 w-4 mr-2 text-emerald-600" />
+                            Открыть доступ к документам
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setUnlinkTarget(l)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <UserMinus className="h-4 w-4 mr-2" />
+                        Отвязаться от юриста
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             );
           })}
         </div>
       </CardContent>
+
+      {/* Подтверждение отвязки — действие необратимое, спрашиваем явно. */}
+      <AlertDialog open={!!unlinkTarget} onOpenChange={(open) => { if (!open) setUnlinkTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Отвязаться от юриста?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  После отвязки:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Юрист потеряет доступ к вашим медицинским документам и ИИ-анализам</li>
+                  <li>Карточка с историей дела останется у юриста (но без ваших новых документов)</li>
+                  <li>Чтобы снова работать с этим юристом — нужен новый код приглашения</li>
+                </ul>
+                <p className="pt-2">
+                  Если вы хотите только временно скрыть документы, проще <strong>«Закрыть доступ»</strong>
+                  переключателем — связь сохранится.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlinking}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); unlinkFromLawyer(); }}
+              disabled={unlinking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unlinking ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserMinus className="h-4 w-4 mr-2" />}
+              Отвязаться
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

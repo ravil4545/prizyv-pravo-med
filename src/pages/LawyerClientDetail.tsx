@@ -24,8 +24,15 @@ import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
-  ShieldCheck, Lock, FileSignature,
+  ShieldCheck, Lock, FileSignature, MoreVertical, UserMinus, Trash2, AlertTriangle,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import TemplatePickerDialog from "@/components/TemplatePickerDialog";
 import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
 import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
@@ -110,10 +117,56 @@ const LawyerClientDetail = () => {
   const [clientAddress, setClientAddress] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<null | "unlink" | "delete">(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   // Логика invite-кода (копирование, регенерация, шаринг в WhatsApp/Telegram/email)
   // переехала в reusable-компонент InviteCodeCard — здесь только колбэк для
   // синхронизации стейта при обновлении кода.
+
+  // Отвязать аккаунт клиента: карточка остаётся в CRM как анонимная запись
+  // (история дела сохраняется), но client_user_id → NULL, доступ закрыт,
+  // генерируется новый invite_code — юрист может пригласить снова.
+  const handleUnlinkClient = async () => {
+    setActionBusy(true);
+    const { data, error } = await supabase.rpc("lawyer_unlink_client", {
+      p_lawyer_client_id: clientId,
+    });
+    setActionBusy(false);
+    if (error) {
+      toast({ title: "Не удалось отвязать", description: error.message, variant: "destructive" });
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    setConfirmAction(null);
+    setClient((prev: any) => ({
+      ...prev,
+      client_user_id: null,
+      invite_code: row?.new_invite_code ?? prev?.invite_code,
+    }));
+    setHasDocAccess(false);
+    setMedDocs([]);
+    toast({
+      title: "Аккаунт клиента отвязан",
+      description: "Карточка осталась в CRM. Чтобы пригласить снова — отправьте новый код.",
+    });
+  };
+
+  // Полное удаление карточки клиента (DELETE CASCADE: case_notes, chats,
+  // template_uses, lawyer_client_med_docs). Действие необратимое.
+  const handleDeleteClient = async () => {
+    setActionBusy(true);
+    const { error } = await supabase.rpc("lawyer_delete_client", {
+      p_lawyer_client_id: clientId,
+    });
+    setActionBusy(false);
+    if (error) {
+      toast({ title: "Не удалось удалить", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Карточка клиента удалена" });
+    navigate("/lawyer/clients", { replace: true });
+  };
 
   useEffect(() => {
     if (!user || profileLoading) return;
@@ -412,6 +465,33 @@ const LawyerClientDetail = () => {
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}Сохранить
             </Button>
+            {/* Меню деструктивных действий — отдельный dropdown, чтобы не
+                стояли «опасные» кнопки рядом с обычным «Сохранить». */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Действия">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {client?.client_user_id && (
+                  <>
+                    <DropdownMenuItem onClick={() => setConfirmAction("unlink")}>
+                      <UserMinus className="h-4 w-4 mr-2 text-amber-600" />
+                      Отвязать аккаунт клиента
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem
+                  onClick={() => setConfirmAction("delete")}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Удалить карточку клиента
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -877,6 +957,88 @@ const LawyerClientDetail = () => {
         onOpenChange={setUpgradeOpen}
         currentTier={isPro ? "pro" : "basic"}
       />
+
+      {/* Подтверждение «Отвязать аккаунт» — оставляем карточку, чистим связь. */}
+      <AlertDialog
+        open={confirmAction === "unlink"}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Отвязать аккаунт клиента?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>После отвязки:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Вы потеряете доступ к медицинским документам и ИИ-анализам клиента</li>
+                  <li>Карточка дела с заметками и историей чата <strong>останется в CRM</strong></li>
+                  <li>Будет сгенерирован новый код приглашения — можете пригласить клиента снова</li>
+                </ul>
+                <p className="pt-2 text-xs">
+                  Если хотите удалить дело целиком — используйте «Удалить карточку клиента».
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleUnlinkClient(); }}
+              disabled={actionBusy}
+              className="bg-amber-500 text-white hover:bg-amber-600"
+            >
+              {actionBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserMinus className="h-4 w-4 mr-2" />}
+              Отвязать
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение «Удалить карточку» — необратимое действие. */}
+      <AlertDialog
+        open={confirmAction === "delete"}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Удалить карточку клиента?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Будет безвозвратно удалено:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Сама карточка клиента {client?.client_name ? <strong>«{client.client_name}»</strong> : null}</li>
+                  <li>Все заметки и записи об изменении этапов</li>
+                  <li>История чата</li>
+                  <li>Сканы документов, загруженные вами для этого клиента</li>
+                  <li>ИИ-анализы дела</li>
+                </ul>
+                <p className="pt-2 text-xs text-destructive">
+                  Действие необратимо. Документы клиента в его собственном кабинете не пострадают.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDeleteClient(); }}
+              disabled={actionBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {actionBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Удалить навсегда
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Templates Picker: подставит данные клиента ─────────────────── */}
       <TemplatePickerDialog
