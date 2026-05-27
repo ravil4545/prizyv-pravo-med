@@ -98,7 +98,7 @@ const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-ink/10 bg-paper/90 backdrop-blur-lg supports-[backdrop-filter]:bg-paper/75">
+    <header className="sticky top-0 z-50 w-full border-b border-ink/10 bg-paper">
       <div className="container mx-auto px-3 sm:px-4 lg:px-12">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2">
           {/* Logo — editorial monogram */}

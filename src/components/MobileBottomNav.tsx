@@ -1,8 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { FileHeart, BookOpen, MessageSquare, Home, User } from "lucide-react";
+import { FileHeart, BookOpen, MessageSquare, Home, User, Users, FileText, BarChart3 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
 
 const MobileBottomNav = () => {
@@ -10,6 +11,7 @@ const MobileBottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isLawyer } = useLawyerProfile();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -30,13 +32,25 @@ const MobileBottomNav = () => {
   const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
-  const navItems = [
-    { label: "Главная", icon: Home, path: "/" },
-    { label: "Документы", icon: FileHeart, path: "/dashboard/medical-documents" },
-    { label: "ИИ чат", icon: MessageSquare, path: "/dashboard/ai-chat", featured: true },
-    { label: "Диагнозы", icon: BookOpen, path: "/medical-history" },
-    { label: isAuthenticated ? "Кабинет" : "Войти", icon: User, path: isAuthenticated ? "/dashboard" : "/auth" },
-  ];
+  // Юристам — навигация по их кабинету. Клиенту/гостю — клиентский набор.
+  const isLawyerArea = location.pathname.startsWith("/lawyer");
+  const showLawyerNav = isLawyer || isLawyerArea;
+
+  const navItems = showLawyerNav
+    ? [
+        { label: "Клиенты",   icon: Users,        path: "/lawyer/clients" },
+        { label: "Чаты",      icon: MessageSquare, path: "/lawyer/chats", featured: true },
+        { label: "Шаблоны",   icon: FileText,     path: "/lawyer/templates" },
+        { label: "Аналитика", icon: BarChart3,    path: "/lawyer/analytics" },
+        { label: "Кабинет",   icon: User,         path: "/lawyer" },
+      ]
+    : [
+        { label: "Главная",   icon: Home,         path: "/" },
+        { label: "Документы", icon: FileHeart,    path: "/dashboard/medical-documents" },
+        { label: "ИИ чат",    icon: MessageSquare, path: "/dashboard/ai-chat", featured: true },
+        { label: "Диагнозы",  icon: BookOpen,     path: "/medical-history" },
+        { label: isAuthenticated ? "Кабинет" : "Войти", icon: User, path: isAuthenticated ? "/dashboard" : "/auth" },
+      ];
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -49,7 +63,7 @@ const MobileBottomNav = () => {
       <div className="h-[68px] md:hidden" aria-hidden />
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.04)]"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.04)]"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-stretch justify-around h-[60px] px-1">

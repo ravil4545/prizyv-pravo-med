@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, User, AlertTriangle, Trophy, TrendingUp,
   Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
-  LogOut, Settings,
+  LogOut, Settings, Palette,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import {
@@ -20,40 +20,17 @@ import {
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
-
-const CRM_STAGE_LABELS: Record<string, string> = {
-  initial_contact: "Первичный контакт",
-  no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз",
-  examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз получен",
-  waiting_documents: "Ожидание документов",
-  documents_received: "Документы получены",
-  military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта",
-  courts: "Суды",
-  military_ticket: "Получение ВБ",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "destructive",
-  high: "secondary",
-  normal: "outline",
-  low: "outline",
-};
+import {
+  CRM_STAGE_LABELS, CRM_STAGE_ORDER, CRM_STAGE_BAR_CLASS, getStageDef,
+} from "@/lib/crmStages";
+import { cn } from "@/lib/utils";
+import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 
 interface StageCount { stage: string; count: number }
 interface RecentClient {
   id: string; client_name: string; client_phone: string | null;
   crm_stage: string; priority: string; updated_at: string;
 }
-
-// Канонический порядок этапов CRM — чтобы воронка отрисовывалась как путь дела
-const CRM_STAGE_ORDER = [
-  "initial_contact", "no_diagnosis", "has_diagnosis", "examinations",
-  "diagnosis_confirmed", "waiting_documents", "documents_received",
-  "military_office", "regional_commission", "courts", "military_ticket",
-];
 
 const LawyerDashboard = () => {
   const navigate = useNavigate();
@@ -67,6 +44,7 @@ const LawyerDashboard = () => {
   const [urgentCount, setUrgentCount] = useState(0);
   const [wonCount, setWonCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -182,7 +160,8 @@ const LawyerDashboard = () => {
                   </div>
                 </div>
               </div>
-              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => setUpgradeOpen(true)}>
                 Upgrade до Pro
               </Button>
             </CardContent>
@@ -212,27 +191,51 @@ const LawyerDashboard = () => {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Pipeline */}
+          {/* Pipeline — горизонтальные прогресс-бары, чтобы было видно «куда уходят клиенты» */}
           <Card className="lg:col-span-1">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Воронка этапов</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2.5">
               {dataLoading
                 ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
                 : stageCounts.length === 0
                   ? <p className="text-sm text-muted-foreground text-center py-4">Нет клиентов</p>
-                  : stageCounts
-                      // Сортируем по каноническому порядку этапов CRM — пользователь видит
-                      // движение дела сверху вниз, а не «топ-загруженности»
-                      .sort((a, b) => CRM_STAGE_ORDER.indexOf(a.stage) - CRM_STAGE_ORDER.indexOf(b.stage))
-                      .map(({ stage, count }) => (
-                        <div key={stage} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted cursor-pointer"
-                          onClick={() => navigate(`/lawyer/clients?stage=${stage}`)}>
-                          <span className="text-sm truncate">{CRM_STAGE_LABELS[stage] || stage}</span>
-                          <Badge variant="secondary" className="ml-2 flex-shrink-0">{count}</Badge>
-                        </div>
-                      ))}
+                  : (() => {
+                      const ordered = [...stageCounts].sort(
+                        (a, b) => CRM_STAGE_ORDER.indexOf(a.stage as never) - CRM_STAGE_ORDER.indexOf(b.stage as never),
+                      );
+                      const maxCount = Math.max(1, ...ordered.map((s) => s.count));
+                      return ordered.map(({ stage, count }) => {
+                        const def = getStageDef(stage);
+                        const Icon = def?.icon;
+                        const pct = Math.round((count / maxCount) * 100);
+                        return (
+                          <button
+                            key={stage}
+                            className="w-full text-left group"
+                            onClick={() => navigate(`/lawyer/clients?stage=${stage}`)}
+                          >
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="flex items-center gap-1.5 text-muted-foreground group-hover:text-foreground truncate">
+                                {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+                                <span className="truncate">{def?.label || stage}</span>
+                              </span>
+                              <span className="font-semibold ml-2 flex-shrink-0">{count}</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all group-hover:opacity-90",
+                                  CRM_STAGE_BAR_CLASS[stage] || "bg-primary",
+                                )}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </button>
+                        );
+                      });
+                    })()}
               <Button variant="outline" className="w-full mt-2" asChild>
                 <Link to="/lawyer/clients">Все клиенты <ChevronRight className="h-4 w-4 ml-1" /></Link>
               </Button>
@@ -277,15 +280,16 @@ const LawyerDashboard = () => {
           </Card>
         </div>
 
-        {/* Quick nav — 5 равноценных карточек, на десктопе в одну строку */}
+        {/* Quick nav — 5 равноценных карточек, на десктопе в одну строку.
+            Цвет иконки/тинта подсказывает раздел (для быстрого распознавания «куда я иду»). */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
           {[
-            { to: "/lawyer/clients",   icon: Users,          label: "CRM — Клиенты", desc: "Ведение дел", badge: 0 },
-            { to: "/lawyer/templates", icon: FileText,       label: "Шаблоны",       desc: "DOCX / PDF", badge: 0 },
-            { to: "/lawyer/chats",     icon: MessageSquare,  label: "Чаты",          desc: "Переписка с клиентами", badge: unreadCount },
-            { to: "/lawyer/analytics", icon: TrendingUp,     label: "Аналитика",     desc: "Статистика дел", badge: 0 },
-            { to: "/lawyer/branding",  icon: Briefcase,      label: "Мой бренд",     desc: "Личное приложение и QR", badge: 0 },
-          ].map(({ to, icon: Icon, label, desc, badge }) => (
+            { to: "/lawyer/clients",   icon: Users,         label: "CRM — Клиенты", desc: "Ведение дел",            badge: 0,            color: "text-blue-600 dark:text-blue-400",     bg: "bg-blue-50 dark:bg-blue-950/30" },
+            { to: "/lawyer/templates", icon: FileText,      label: "Шаблоны",       desc: "DOCX / PDF",             badge: 0,            color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/30" },
+            { to: "/lawyer/chats",     icon: MessageSquare, label: "Чаты",          desc: "Переписка с клиентами",  badge: unreadCount,  color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
+            { to: "/lawyer/analytics", icon: TrendingUp,    label: "Аналитика",     desc: "Статистика дел",         badge: 0,            color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30" },
+            { to: "/lawyer/branding",  icon: Palette,       label: "Мой бренд",     desc: "Личное приложение и QR", badge: 0,            color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30" },
+          ].map(({ to, icon: Icon, label, desc, badge, color, bg }) => (
             <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow relative" onClick={() => navigate(to)}>
               <CardContent className="p-4 text-center">
                 {badge > 0 && (
@@ -293,7 +297,9 @@ const LawyerDashboard = () => {
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
-                <Icon className="h-8 w-8 text-primary mx-auto mb-2" />
+                <div className={cn("inline-flex items-center justify-center h-12 w-12 rounded-2xl mb-2", bg)}>
+                  <Icon className={cn("h-6 w-6", color)} />
+                </div>
                 <p className="font-semibold text-sm">{label}</p>
                 <p className="text-xs text-muted-foreground">{desc}</p>
               </CardContent>
@@ -315,6 +321,12 @@ const LawyerDashboard = () => {
         </Card>
       </main>
       <Footer />
+
+      <LawyerUpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        currentTier={isPro ? "pro" : "basic"}
+      />
     </div>
   );
 };

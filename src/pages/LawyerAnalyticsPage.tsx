@@ -10,27 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Users, Trophy, TrendingUp, AlertTriangle, ArrowLeft, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const CRM_STAGES = [
-  { value: "initial_contact",     label: "Первичный контакт",    color: "bg-slate-400" },
-  { value: "no_diagnosis",        label: "Нет диагноза",         color: "bg-orange-400" },
-  { value: "has_diagnosis",       label: "Есть диагноз",         color: "bg-blue-400" },
-  { value: "examinations",        label: "Обследования",         color: "bg-cyan-400" },
-  { value: "diagnosis_confirmed", label: "Диагноз получен",      color: "bg-indigo-400" },
-  { value: "waiting_documents",   label: "Ожидание документов",  color: "bg-yellow-400" },
-  { value: "documents_received",  label: "Документы получены",   color: "bg-lime-400" },
-  { value: "military_office",     label: "Военкомат",            color: "bg-purple-400" },
-  { value: "regional_commission", label: "Комиссия субъекта",    color: "bg-pink-400" },
-  { value: "courts",              label: "Суды",                 color: "bg-red-400" },
-  { value: "military_ticket",     label: "Получение ВБ ✓",       color: "bg-green-400" },
-];
-
-const PRIORITY_LABELS: Record<string, { label: string; color: string }> = {
-  urgent: { label: "Срочный",  color: "bg-red-500" },
-  high:   { label: "Высокий",  color: "bg-orange-400" },
-  normal: { label: "Обычный",  color: "bg-blue-400" },
-  low:    { label: "Низкий",   color: "bg-slate-400" },
-};
+import { CRM_STAGES, PRIORITIES } from "@/lib/crmStages";
 
 interface ClientRow {
   id: string; crm_stage: string; priority: string;
@@ -156,7 +136,7 @@ const LawyerAnalyticsPage = () => {
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
-                            className={cn("h-full rounded-full transition-all", s.color)}
+                            className={cn("h-full rounded-full transition-all", s.barClass)}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -180,18 +160,17 @@ const LawyerAnalyticsPage = () => {
                 <p className="text-sm text-muted-foreground text-center py-4">Нет клиентов</p>
               ) : (
                 <div className="space-y-3">
-                  {["urgent", "high", "normal", "low"]
-                    .filter((p) => priorityMap[p])
-                    .map((p) => {
-                      const count = priorityMap[p] || 0;
+                  {PRIORITIES
+                    .filter((p) => priorityMap[p.value])
+                    .map(({ value, label, dotClass }) => {
+                      const count = priorityMap[value] || 0;
                       const pct = Math.round((count / total) * 100);
-                      const { label, color } = PRIORITY_LABELS[p];
                       return (
-                        <div key={p} className="flex items-center gap-3">
-                          <div className={cn("h-3 w-3 rounded-full flex-shrink-0", color)} />
+                        <div key={value} className="flex items-center gap-3">
+                          <div className={cn("h-3 w-3 rounded-full flex-shrink-0", dotClass)} />
                           <span className="text-sm text-muted-foreground w-24 flex-shrink-0">{label}</span>
                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className={cn("h-full rounded-full", color)} style={{ width: `${pct}%` }} />
+                            <div className={cn("h-full rounded-full", dotClass)} style={{ width: `${pct}%` }} />
                           </div>
                           <span className="text-sm font-semibold w-10 text-right flex-shrink-0">
                             {count} <span className="text-xs text-muted-foreground font-normal">({pct}%)</span>

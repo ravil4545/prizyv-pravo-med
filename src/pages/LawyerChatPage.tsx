@@ -14,11 +14,14 @@ import {
   ArrowLeft, Send, Paperclip, Loader2, Download, Users,
   Search, User, FileText, CheckCheck, Check, Pencil,
   Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
+  Wand2, AlertTriangle,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { BookOpen } from "lucide-react";
+import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -44,15 +47,6 @@ interface SuggestionSet {
   suggestions: AISuggestion[];
   collapsed: boolean;
 }
-
-const CRM_STAGES: Record<string, string> = {
-  initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз", examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз получен", waiting_documents: "Ожидание документов",
-  documents_received: "Документы получены", military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта", courts: "Суды",
-  military_ticket: "Получение ВБ ✓",
-};
 
 const SUGGEST_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/lawyer-chat-suggest";
 
@@ -84,6 +78,51 @@ const LawyerChatPage = () => {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const autoSuggestRef = useRef<string | null>(null);
+
+  // Draft review (проверка черновика перед отправкой)
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewResult, setReviewResult] = useState<{
+    tone?: number; completeness?: number; legal_accuracy?: number; clarity?: number;
+    warnings?: string[]; improved?: string; verdict?: string;
+  } | null>(null);
+
+  const reviewDraft = async () => {
+    if (!text.trim() || !clientId) return;
+    setReviewOpen(true);
+    setReviewLoading(true);
+    setReviewResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Найдём последний вопрос клиента для контекста
+      const lastClient = [...messages].reverse().find(
+        (m) => m.message_type === "text" && m.sender_id !== user!.id && m.content?.trim(),
+      );
+      const res = await supabase.functions.invoke("lawyer-draft-review", {
+        body: {
+          lawyerClientId: clientId,
+          draft: text,
+          lastClientMessage: lastClient?.content || null,
+        },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.error) throw new Error(res.error.message);
+      setReviewResult(res.data);
+    } catch (e) {
+      toast({ title: "Ошибка проверки", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      setReviewOpen(false);
+    }
+    setReviewLoading(false);
+  };
+
+  const applyImprovedDraft = () => {
+    if (reviewResult?.improved) {
+      setText(reviewResult.improved);
+      setReviewOpen(false);
+      toast({ title: "Черновик заменён" });
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  };
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -149,7 +188,54 @@ const LawyerChatPage = () => {
     if (autoSuggestRef.current === lastText.id) return;
     autoSuggestRef.current = lastText.id;
     loadSuggestionsFor(messages);
+    // Параллельно — лёгкий парсер даты призыва. Если клиент упомянул дату повестки,
+    // юристу появится тост с предложением одним кликом заполнить conscription_date.
+    tryExtractDate(lastText.content || "", lastText.id);
   }, [messages, user?.id, clientId]);
+
+  const extractedDateRef = useRef<string | null>(null);
+
+  const tryExtractDate = async (text: string, msgId: string) => {
+    if (!clientId || extractedDateRef.current === msgId) return;
+    extractedDateRef.current = msgId;
+    if (text.length < 8 || !/(\d{1,2}|январ|феврал|март|апрел|мая|июн|июл|август|сентябр|октябр|ноябр|декабр|призыв|повестк)/i.test(text)) {
+      return; // быстрый локальный фильтр чтобы не дёргать ИИ зря
+    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke("lawyer-extract-date", {
+        body: { text },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.error) return;
+      const result = res.data as {
+        found: boolean; date_iso: string | null; original_phrase: string | null; confidence: number;
+      };
+      if (!result.found || !result.date_iso || result.confidence < 70) return;
+
+      // Если у клиента уже есть та же дата — не предлагаем повторно
+      if (client?.conscription_date === result.date_iso) return;
+
+      toast({
+        title: "Кажется, клиент назвал дату призыва",
+        description: `«${result.original_phrase || text.slice(0, 60)}» → ${new Date(result.date_iso).toLocaleDateString("ru-RU")}. Сохранить?`,
+        action: (
+          <Button
+            size="sm"
+            onClick={async () => {
+              await supabase.from("lawyer_clients")
+                .update({ conscription_date: result.date_iso })
+                .eq("id", clientId);
+              setClient((prev: any) => ({ ...prev, conscription_date: result.date_iso }));
+              toast({ title: "Дата призыва сохранена" });
+            }}
+          >
+            Сохранить
+          </Button>
+        ) as any,
+      });
+    } catch { /* тихий фейл */ }
+  };
 
   const loadSidebar = async () => {
     const { data: clients } = await supabase
@@ -445,21 +531,26 @@ const LawyerChatPage = () => {
             </div>
           )}
 
-          {/* Current suggestions */}
+          {/* Current suggestions — тонкий градиент даёт визуальный сигнал «это магия ИИ», а не обычный текст */}
           {!suggestionsLoading && currentItem && (
             <>
               {currentItem.summary && (
-                <p className="text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 rounded-lg px-3 py-2 leading-relaxed border border-violet-200/40 dark:border-violet-900/30">
                   {currentItem.summary}
                 </p>
               )}
               {currentItem.suggestions.map((s, i) => (
-                <div key={i} className="border rounded-xl p-3 space-y-2 bg-card hover:border-primary/30 transition-colors">
+                <div
+                  key={i}
+                  className="rounded-xl p-3 space-y-2 bg-gradient-to-br from-violet-50/70 to-blue-50/70 dark:from-violet-950/20 dark:to-blue-950/20 border border-violet-200/50 dark:border-violet-900/30 hover:border-primary/40 transition-colors"
+                >
                   <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] font-semibold text-primary">{s.label}</span>
+                    <span className="text-[11px] font-semibold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
+                      {s.label}
+                    </span>
                     <Button
                       variant="outline" size="sm"
-                      className="h-6 text-[10px] px-2 gap-1 flex-shrink-0"
+                      className="h-6 text-[10px] px-2 gap-1 flex-shrink-0 bg-background/80"
                       onClick={() => insertSuggestion(s.text)}
                     >
                       <CornerDownLeft className="h-3 w-3" />
@@ -537,7 +628,7 @@ const LawyerChatPage = () => {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {CRM_STAGES[c.crm_stage] || c.crm_stage}
+                    {CRM_STAGE_LABELS[c.crm_stage] || c.crm_stage}
                   </p>
                 </button>
               ))}
@@ -558,7 +649,7 @@ const LawyerChatPage = () => {
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm truncate">{client?.client_name}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {CRM_STAGES[client?.crm_stage] || ""}
+                  {CRM_STAGE_LABELS[client?.crm_stage] || ""}
                   {client?.client_phone ? ` · ${client.client_phone}` : ""}
                 </p>
               </div>
@@ -717,6 +808,17 @@ const LawyerChatPage = () => {
                   className="flex-1 resize-none overflow-hidden bg-background border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 placeholder:text-muted-foreground disabled:opacity-50 leading-relaxed"
                   style={{ minHeight: "40px", maxHeight: "120px" }}
                 />
+                {/* ИИ-проверка черновика перед отправкой — страхует от ошибок в формулировках */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={reviewDraft}
+                  disabled={!text.trim() || sending || reviewLoading}
+                  className="h-9 w-9 flex-shrink-0"
+                  title="ИИ-проверка черновика"
+                >
+                  {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4 text-primary" />}
+                </Button>
                 <Button size="icon" onClick={handleSend} disabled={!text.trim() || sending}
                   className="h-9 w-9 flex-shrink-0 rounded-xl">
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -738,6 +840,84 @@ const LawyerChatPage = () => {
           {aiPanelContent}
         </SheetContent>
       </Sheet>
+
+      {/* ── ИИ-проверка черновика ─────────────────────────────────────────── */}
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Проверка черновика
+            </DialogTitle>
+          </DialogHeader>
+          {reviewLoading && (
+            <div className="py-8 flex flex-col items-center gap-3 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <p className="text-sm">ИИ читает ваш черновик и проверяет его на корректность...</p>
+            </div>
+          )}
+          {!reviewLoading && reviewResult && (
+            <div className="space-y-4">
+              {reviewResult.verdict && (
+                <p className="text-sm bg-muted/40 rounded-lg px-3 py-2">{reviewResult.verdict}</p>
+              )}
+              {/* Оценки */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Тон", value: reviewResult.tone },
+                  { label: "Полнота", value: reviewResult.completeness },
+                  { label: "Юр. точность", value: reviewResult.legal_accuracy },
+                  { label: "Понятность", value: reviewResult.clarity },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-lg border p-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                    <p className={cn(
+                      "text-lg font-bold",
+                      (value || 0) >= 4 ? "text-emerald-600" : (value || 0) >= 3 ? "text-amber-600" : "text-red-600",
+                    )}>
+                      {value ?? "—"}<span className="text-xs text-muted-foreground">/5</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Предупреждения */}
+              {reviewResult.warnings && reviewResult.warnings.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 mb-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" /> На что обратить внимание
+                  </p>
+                  <ul className="text-sm space-y-0.5 list-disc list-inside">
+                    {reviewResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {/* Улучшенная версия */}
+              {reviewResult.improved && (
+                <div>
+                  <p className="text-xs font-semibold mb-1.5 flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" /> Предлагаемая версия
+                  </p>
+                  <div className="rounded-lg border bg-gradient-to-br from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 p-3 text-sm whitespace-pre-wrap leading-relaxed">
+                    {reviewResult.improved}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setReviewOpen(false)} className="w-full sm:w-auto">
+              Закрыть
+            </Button>
+            {reviewResult?.improved && (
+              <Button onClick={applyImprovedDraft} className="w-full sm:w-auto">
+                <Wand2 className="h-4 w-4 mr-1.5" /> Подставить улучшенную
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

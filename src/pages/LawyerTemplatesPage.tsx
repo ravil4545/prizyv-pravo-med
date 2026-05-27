@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, ArrowLeft, Crown } from "lucide-react";
 import TemplatePickerDialog from "@/components/TemplatePickerDialog";
+import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import { TEMPLATES, CATEGORIES, type Template } from "@/lib/lawyerTemplates";
 
 const LawyerTemplatesPage = () => {
@@ -20,6 +21,7 @@ const LawyerTemplatesPage = () => {
   const [activeCategory, setActiveCategory] = useState("Все");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
     if (profileLoading || authLoading) return;
@@ -65,7 +67,8 @@ const LawyerTemplatesPage = () => {
             <p className="text-sm">
               Pro-шаблоны доступны после перехода на тариф <strong>Pro</strong>. Базовые шаблоны бесплатны.
             </p>
-            <Button size="sm" className="ml-auto bg-amber-500 hover:bg-amber-600 text-white flex-shrink-0">
+            <Button size="sm" className="ml-auto bg-amber-500 hover:bg-amber-600 text-white flex-shrink-0"
+              onClick={() => setUpgradeOpen(true)}>
               Upgrade
             </Button>
           </div>
@@ -128,6 +131,11 @@ const LawyerTemplatesPage = () => {
           if (!open) setInitialTemplate(null);
         }}
         isPro={isPro}
+      />
+      <LawyerUpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        currentTier={isPro ? "pro" : "basic"}
       />
       {/* Если хотим — можно прокидывать initialTemplate как «открыть сразу», но
           сейчас TemplatePickerDialog показывает галерею; ключ initialTemplate

@@ -9,20 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const CRM_STAGE_LABELS: Record<string, string> = {
-  initial_contact: "Первичный контакт",
-  no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз",
-  examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз получен",
-  waiting_documents: "Ожидание документов",
-  documents_received: "Документы получены",
-  military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта",
-  courts: "Суды",
-  military_ticket: "Получение ВБ",
-};
+import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 
 interface ChatEntry {
   id: string;

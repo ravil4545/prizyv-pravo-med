@@ -56,32 +56,60 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Клиент не найден или нет доступа" }, { status: 403, headers: corsHeaders(req) });
     }
 
-    // Check if document access is granted
-    if (!clientEntry.client_user_id) {
-      return Response.json({ error: "Клиент не привязан к аккаунту. Попросите клиента зарегистрироваться и дать доступ к документам." }, { status: 400, headers: corsHeaders(req) });
+    // Источник документов:
+    //   (A) Клиент привязан к аккаунту + дал доступ — берём из medical_documents_v2.
+    //   (B) Клиент только в CRM юриста (без аккаунта) — берём из lawyer_client_med_docs
+    //       (загружены самим юристом). Это покрывает основную часть базы — клиентов,
+    //       которые работают через переписку/звонки, а не через сайт.
+    // Возвращаем единый формат для дальнейшего промптинга.
+    let docs: Array<{
+      title: string | null;
+      document_date: string | null;
+      ai_fitness_category: string | null;
+      ai_explanation: string | null;
+      raw_text: string | null;
+    }> = [];
+    let sourceKind: "client_account" | "lawyer_uploads" = "lawyer_uploads";
+
+    if (clientEntry.client_user_id) {
+      const { data: access } = await supabase
+        .from("client_document_access")
+        .select("id")
+        .eq("client_user_id", clientEntry.client_user_id)
+        .eq("lawyer_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (access) {
+        const { data } = await supabase
+          .from("medical_documents_v2")
+          .select("title, document_date, ai_fitness_category, ai_category_chance, ai_recommendations, ai_explanation, raw_text")
+          .eq("user_id", clientEntry.client_user_id)
+          .order("document_date", { ascending: false });
+        docs = (data || []) as typeof docs;
+        sourceKind = "client_account";
+      }
     }
 
-    const { data: access } = await supabase
-      .from("client_document_access")
-      .select("id")
-      .eq("client_user_id", clientEntry.client_user_id)
-      .eq("lawyer_id", user.id)
-      .eq("is_active", true)
-      .single();
-
-    if (!access) {
-      return Response.json({ error: "Клиент не дал доступ к документам. Попросите его открыть доступ в личном кабинете." }, { status: 403, headers: corsHeaders(req) });
+    // Fallback / основной поток для CRM-only клиентов
+    if (docs.length === 0) {
+      const { data } = await supabase
+        .from("lawyer_client_med_docs")
+        .select("title, document_date, ai_fitness_category, ai_explanation, raw_text")
+        .eq("lawyer_client_id", lawyerClientId)
+        .order("document_date", { ascending: false });
+      docs = (data || []) as typeof docs;
+      sourceKind = "lawyer_uploads";
     }
-
-    // Fetch client's medical documents with AI analysis
-    const { data: docs } = await supabase
-      .from("medical_documents_v2")
-      .select("id, title, document_date, ai_fitness_category, ai_category_chance, ai_recommendations, ai_explanation, raw_text, meta")
-      .eq("user_id", clientEntry.client_user_id)
-      .order("document_date", { ascending: false });
 
     if (!docs?.length) {
-      return Response.json({ error: "У клиента нет загруженных документов" }, { status: 400, headers: corsHeaders(req) });
+      const hint = clientEntry.client_user_id
+        ? "Клиент не дал доступ к документам, и в карточке нет загруженных юристом сканов."
+        : "Загрузите медкарты клиента во вкладке «Документы» — после этого анализ заработает.";
+      return Response.json({ error: `У клиента нет документов для анализа. ${hint}` }, {
+        status: 400,
+        headers: corsHeaders(req),
+      });
     }
 
     const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
@@ -178,7 +206,10 @@ ${docSummary}
       analysis = { raw: rawContent };
     }
 
-    return Response.json({ analysis, documentsAnalyzed: docs.length }, { headers: corsHeaders(req) });
+    return Response.json(
+      { analysis, documentsAnalyzed: docs.length, source: sourceKind },
+      { headers: corsHeaders(req) },
+    );
   } catch (err) {
     console.error("lawyer-analyze-client error:", err);
     return Response.json(

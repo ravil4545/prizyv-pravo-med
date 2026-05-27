@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Upload, FileText, Loader2, Brain, Trash2, Eye, AlertCircle, ShieldCheck,
+  FileText, Brain, Trash2, Eye, AlertCircle,
 } from "lucide-react";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import DocumentUploadWizard, { type DocumentUploadResult } from "@/components/DocumentUploadWizard";
 
 interface LawyerClientDocsUploaderProps {
   lawyerClientId: string;
@@ -41,8 +41,6 @@ const LawyerClientDocsUploader = ({
   lawyerClientId, lawyerId, onPreview,
 }: LawyerClientDocsUploaderProps) => {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [docs, setDocs] = useState<LawyerClientDoc[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,41 +65,31 @@ const LawyerClientDocsUploader = ({
     setLoading(false);
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const ext = file.name.split(".").pop() || "bin";
-        const safeBase = file.name.replace(/[^\w.-]/g, "_").slice(0, 80);
-        const path = `lawyer-uploads/${lawyerId}/${lawyerClientId}/${Date.now()}_${safeBase}`;
-        const { error: uploadError } = await supabase.storage
-          .from("medical-documents")
-          .upload(path, file, { contentType: file.type || `application/${ext}` });
-        if (uploadError) throw uploadError;
+  // Загрузка из мастера: к нам приходит готовый PDF-blob со всеми склеенными
+  // страницами одного логического документа. Сохраняем как один файл в
+  // medical-documents/lawyer-uploads/<lawyer>/<client>/<ts>.pdf и одну запись
+  // в lawyer_client_med_docs.
+  const handleWizardUpload = async (result: DocumentUploadResult) => {
+    const safeTitle = result.title.replace(/[^\w.\-а-яА-ЯёЁ ]/g, "_").slice(0, 80) || "Документ";
+    const path = `lawyer-uploads/${lawyerId}/${lawyerClientId}/${Date.now()}_${safeTitle}.pdf`;
+    const { error: uploadError } = await supabase.storage
+      .from("medical-documents")
+      .upload(path, result.blob, { contentType: "application/pdf" });
+    if (uploadError) throw uploadError;
 
-        const { error: insertError } = await supabase
-          .from("lawyer_client_med_docs" as any)
-          .insert({
-            lawyer_client_id: lawyerClientId,
-            lawyer_id: lawyerId,
-            title: file.name,
-            file_url: path,
-            document_date: new Date().toISOString().slice(0, 10),
-          });
-        if (insertError) throw insertError;
-      }
-      toast({ title: `Загружено: ${files.length} файл(а)` });
-      loadDocs();
-    } catch (e) {
-      console.error("Upload failed", e);
-      const msg = e instanceof Error ? e.message : "Ошибка загрузки";
-      toast({ title: msg, variant: "destructive" });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    const { error: insertError } = await supabase
+      .from("lawyer_client_med_docs" as any)
+      .insert({
+        lawyer_client_id: lawyerClientId,
+        lawyer_id: lawyerId,
+        title: result.title,
+        file_url: path,
+        document_date: new Date().toISOString().slice(0, 10),
+      });
+    if (insertError) throw insertError;
+
+    toast({ title: `«${result.title}» загружен`, description: `${result.pages} стр.` });
+    loadDocs();
   };
 
   const deleteDoc = async (doc: LawyerClientDoc) => {
@@ -142,31 +130,10 @@ const LawyerClientDocsUploader = ({
 
   return (
     <div className="space-y-4">
-      <Card className="border-dashed">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium text-sm">Загрузить медицинские документы клиента</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                PDF / DOCX / JPG / PNG. Документы видны только вам и не отображаются клиенту.
-              </p>
-              <div className="flex gap-2 mt-3 items-center">
-                <Input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.jpg,.jpeg,.png"
-                  onChange={handleFileChange}
-                  disabled={uploading}
-                  className="text-sm"
-                />
-                {uploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <DocumentUploadWizard
+        onUpload={handleWizardUpload}
+        hint="Каждый слот — отдельный документ клиента (выписка, заключение, справка). Внутри одного слота можно собрать все страницы документа: загрузить PDF, фото из галереи или сфотографировать камерой. После заполнения 3 слотов добавится ещё."
+      />
 
       {loading ? (
         Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)

@@ -18,37 +18,10 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, MessageSquare, ChevronRight,
   Phone, Calendar, AlertTriangle, Crown, Filter,
-  LayoutList, KanbanSquare, BookOpen,
+  LayoutList, KanbanSquare, BookOpen, Ticket,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
-
-const CRM_STAGES = [
-  { value: "initial_contact",    label: "Первичный контакт" },
-  { value: "no_diagnosis",       label: "Нет диагноза" },
-  { value: "has_diagnosis",      label: "Есть диагноз" },
-  { value: "examinations",       label: "Обследования" },
-  { value: "diagnosis_confirmed",label: "Диагноз получен" },
-  { value: "waiting_documents",  label: "Ожидание документов" },
-  { value: "documents_received", label: "Документы получены" },
-  { value: "military_office",    label: "Военкомат" },
-  { value: "regional_commission",label: "Комиссия субъекта" },
-  { value: "courts",             label: "Суды" },
-  { value: "military_ticket",    label: "Получение ВБ" },
-];
-
-const STAGE_COLORS: Record<string, string> = {
-  initial_contact: "bg-slate-100 text-slate-700",
-  no_diagnosis: "bg-orange-100 text-orange-700",
-  has_diagnosis: "bg-blue-100 text-blue-700",
-  examinations: "bg-cyan-100 text-cyan-700",
-  diagnosis_confirmed: "bg-indigo-100 text-indigo-700",
-  waiting_documents: "bg-yellow-100 text-yellow-700",
-  documents_received: "bg-lime-100 text-lime-700",
-  military_office: "bg-purple-100 text-purple-700",
-  regional_commission: "bg-pink-100 text-pink-700",
-  courts: "bg-red-100 text-red-700",
-  military_ticket: "bg-green-100 text-green-700",
-};
+import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
 
 interface LawyerClient {
   id: string; lawyer_id: string; client_user_id: string | null;
@@ -236,20 +209,46 @@ const LawyerClientsPage = () => {
     toast({ title: "Клиент добавлен" });
   };
 
+  // Дело «горит», если до даты призыва осталось ≤ 14 дней и дело ещё не выиграно.
+  // Это главный сортировочный сигнал — юрист должен видеть такие клиенты первыми.
+  const isBurning = (c: LawyerClient): boolean => {
+    if (c.case_won || !c.conscription_date) return false;
+    const days = (new Date(c.conscription_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    return days >= 0 && days <= 14;
+  };
+
+  // Расширенный поиск: имя / телефон / email / диагноз / ожид.категория.
+  // Юристам со 30+ клиентами «только по имени» — мало.
+  const matchesSearch = (c: LawyerClient, q: string): boolean => {
+    if (!q) return true;
+    const hay = [
+      c.client_name, c.client_phone, c.client_email, c.diagnosis, c.expected_category,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  };
+
   const filtered = clients
     .filter((c) => {
-      const q = search.toLowerCase();
-      if (search && !c.client_name.toLowerCase().includes(q) && !(c.client_phone || "").includes(q)) return false;
+      if (!matchesSearch(c, search.toLowerCase())) return false;
       if (stageFilter !== "all" && c.crm_stage !== stageFilter) return false;
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
       return true;
     })
     .sort((a, b) => {
-      const ua = unreadMap[a.id] || 0;
-      const ub = unreadMap[b.id] || 0;
-      if (ua > 0 && ub === 0) return -1;
-      if (ua === 0 && ub > 0) return 1;
-      return 0;
+      // 1) Горящие (≤14 дней до призыва) — наверх
+      const ba = isBurning(a), bb = isBurning(b);
+      if (ba !== bb) return ba ? -1 : 1;
+      // 2) Срочный приоритет
+      const ua = a.priority === "urgent", ub = b.priority === "urgent";
+      if (ua !== ub) return ua ? -1 : 1;
+      // 3) Непрочитанные сообщения
+      const um_a = (unreadMap[a.id] || 0) > 0, um_b = (unreadMap[b.id] || 0) > 0;
+      if (um_a !== um_b) return um_a ? -1 : 1;
+      // 4) Дальше — по updated_at (по умолчанию из БД уже отсортировано)
+      return b.updated_at.localeCompare(a.updated_at);
     });
 
   if (profileLoading) return (
@@ -351,9 +350,15 @@ const LawyerClientsPage = () => {
                   <div><Label>Заметки</Label>
                     <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Дополнительная информация..." rows={3} />
                   </div>
-                  <div><Label>ID аккаунта клиента (если зарегистрирован)</Label>
-                    <Input value={form.client_email_link} onChange={(e) => setForm((f) => ({ ...f, client_email_link: e.target.value }))} placeholder="UUID из профиля клиента" />
-                    <p className="text-xs text-muted-foreground mt-1">Клиент найдёт свой ID в настройках профиля</p>
+                  <div className="rounded-lg border border-dashed bg-muted/30 p-3">
+                    <p className="text-xs font-medium flex items-center gap-1.5">
+                      <Ticket className="h-3.5 w-3.5 text-primary" /> Привязка через код-приглашение
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                      После создания карточки появится 8-символьный код. Отправьте его клиенту —
+                      клиент введёт код в своём кабинете и автоматически привяжется + откроет доступ к
+                      документам. UUID искать больше не нужно.
+                    </p>
                   </div>
                   <Button onClick={handleAdd} disabled={saving} className="w-full">
                     {saving ? "Сохраняем..." : "Добавить клиента"}
@@ -368,7 +373,7 @@ const LawyerClientsPage = () => {
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Поиск по имени или телефону..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-9" placeholder="Имя, телефон, email, диагноз, категория..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={stageFilter} onValueChange={setStageFilter}>
             <SelectTrigger className="w-full sm:w-52">
@@ -412,6 +417,11 @@ const LawyerClientsPage = () => {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{c.client_name}</span>
+                          {isBurning(c) && (
+                            <Badge className="text-xs bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 border-red-300">
+                              🔥 Горит
+                            </Badge>
+                          )}
                           {c.priority === "urgent" && <Badge variant="destructive" className="text-xs">Срочно</Badge>}
                           {c.priority === "high" && <Badge variant="secondary" className="text-xs">Высокий</Badge>}
                           {c.case_won && <Badge className="text-xs bg-green-100 text-green-700">✓ ВБ получен</Badge>}
@@ -424,7 +434,7 @@ const LawyerClientsPage = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STAGE_COLORS[c.crm_stage] || "bg-gray-100 text-gray-700"}`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CRM_STAGE_BADGE_CLASS[c.crm_stage] || "bg-gray-100 text-gray-700"}`}>
                           {CRM_STAGES.find((s) => s.value === c.crm_stage)?.label || c.crm_stage}
                         </span>
                         <div className="relative">
@@ -450,8 +460,7 @@ const LawyerClientsPage = () => {
           // Kanban view — игнорируем stageFilter, поскольку доска показывает все этапы
           (() => {
             const kanbanClients = clients.filter((c) => {
-              const q = search.toLowerCase();
-              if (search && !c.client_name.toLowerCase().includes(q) && !(c.client_phone || "").includes(q)) return false;
+              if (!matchesSearch(c, search.toLowerCase())) return false;
               if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
               return true;
             });
@@ -471,7 +480,7 @@ const LawyerClientsPage = () => {
                           isDropTarget ? "border-primary bg-primary/5" : "border-border bg-muted/30"
                         }`}
                       >
-                        <div className={`px-3 py-2 rounded-t-lg border-b text-xs font-semibold flex items-center justify-between ${STAGE_COLORS[stage.value] || "bg-gray-100 text-gray-700"}`}>
+                        <div className={`px-3 py-2 rounded-t-lg border-b text-xs font-semibold flex items-center justify-between ${CRM_STAGE_BADGE_CLASS[stage.value] || "bg-gray-100 text-gray-700"}`}>
                           <span className="truncate">{stage.label}</span>
                           <span className="ml-2 px-1.5 py-0.5 rounded bg-white/60 text-[10px]">
                             {stageClients.length}

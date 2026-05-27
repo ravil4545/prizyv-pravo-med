@@ -48,6 +48,7 @@ import {
 import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import UploadProgress from "@/components/UploadProgress";
+import DocumentUploadWizard, { type DocumentUploadResult } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1012,6 +1013,69 @@ export default function MedicalDocumentsPage() {
     }
   };
 
+  // Загрузка из DocumentUploadWizard: PDF уже склеен на клиенте, остаётся
+  // только положить его в Storage, создать запись и запустить AI-анализ.
+  // Лимиты и demo-учёт работают так же, как в uploadFiles.
+  const handleWizardUpload = async (result: DocumentUploadResult) => {
+    const currentUser = await ensureAuthForUpload();
+    if (!currentUser) throw new Error("Войдите, чтобы загружать документы");
+
+    const isDemoUser = currentUser.is_anonymous === true;
+    if (isDemoUser) {
+      if (!demo.canUploadDocument()) {
+        toast({
+          title: "Демо-лимит исчерпан",
+          description: "Зарегистрируйтесь, чтобы продолжить",
+          variant: "destructive",
+        });
+        throw new Error("Демо-лимит исчерпан");
+      }
+    } else if (!canUploadDocument()) {
+      toast({
+        title: "Лимит исчерпан",
+        description: "Оформите подписку для продолжения",
+        variant: "destructive",
+      });
+      throw new Error("Лимит исчерпан");
+    }
+
+    const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
+    const { error: uploadError } = await supabase.storage
+      .from("medical-documents")
+      .upload(fileName, result.blob, { contentType: "application/pdf" });
+    if (uploadError) throw uploadError;
+
+    const { data: insertedDoc, error: insertError } = await supabase
+      .from("medical_documents_v2")
+      .insert({
+        user_id: currentUser.id,
+        title: result.title,
+        file_url: fileName,
+        is_classified: false,
+      })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+
+    if (currentUser.is_anonymous) {
+      demo.incrementDemoDocUploads();
+    } else {
+      await incrementDocumentUploads();
+    }
+
+    toast({
+      title: "Документ загружен",
+      description: `«${result.title}» · ${result.pages} стр. Запускаем AI-анализ…`,
+    });
+
+    // Запускаем AI на первой странице (как в существующем combineIntoOne-пути)
+    if (insertedDoc && result.firstPageBase64) {
+      analyzeDocument(insertedDoc.id, result.firstPageBase64);
+    }
+
+    loadDocuments();
+  };
+
   const handleAnalysisError = (data: any) => {
     let toastTitle = "Ошибка анализа";
     let toastDescription = data.message || "Попробуйте позже";
@@ -1747,121 +1811,17 @@ export default function MedicalDocumentsPage() {
                     </Button>
                   </div>
                 </div>
-              ) : uploadMode === "choose-combine" ? (
-                <div className="py-4">
-                  <div className="text-center mb-5">
-                    <FileStack className="h-10 w-10 mx-auto mb-3 text-primary" />
-                    <h3 className="text-lg font-medium mb-1">
-                      Выбрано файлов: {pendingFiles.length}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Как обработать эти файлы?
-                    </p>
-                  </div>
-
-                  <div className="space-y-3 mb-5">
-                    <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${pendingCombineMode === "combine" ? "border-primary bg-primary/5" : "border-muted hover:border-primary/40"}`}>
-                      <input
-                        type="radio"
-                        name="combine-mode"
-                        checked={pendingCombineMode === "combine"}
-                        onChange={() => setPendingCombineMode("combine")}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium flex items-center gap-2">
-                          <FileStack className="h-4 w-4" />
-                          Один документ
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          Объединить все страницы в один PDF — для медкарт, многостраничных выписок
-                        </div>
-                      </div>
-                    </label>
-
-                    <label className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${pendingCombineMode === "separate" ? "border-primary bg-primary/5" : "border-muted hover:border-primary/40"}`}>
-                      <input
-                        type="radio"
-                        name="combine-mode"
-                        checked={pendingCombineMode === "separate"}
-                        onChange={() => setPendingCombineMode("separate")}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium flex items-center gap-2">
-                          <File className="h-4 w-4" />
-                          Разные документы
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          Каждый файл — отдельная справка или заключение
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="mb-5">
-                    <p className="text-sm font-medium mb-2">Файлы:</p>
-                    <div className="max-h-40 overflow-y-auto space-y-1 border rounded-lg p-2 bg-muted/30">
-                      {pendingFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-1.5 rounded">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs text-muted-foreground flex-shrink-0">{index + 1}.</span>
-                            <span className="text-sm truncate">{file.name}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 flex-shrink-0"
-                            onClick={() => removePendingFile(index)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={cancelPendingUpload}>
-                      Отмена
-                    </Button>
-                    <Button className="flex-1" onClick={confirmPendingUpload}>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Загрузить ({pendingFiles.length})
-                    </Button>
-                  </div>
-                </div>
               ) : (
-                <div className="py-2">
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    className={`
-                      relative border-2 border-dashed rounded-lg p-8 sm:p-10 text-center transition-all
-                      ${
-                        isDragOver
-                          ? "border-primary bg-primary/5"
-                          : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
-                      }
-                    `}
-                  >
-                    <Upload className={`h-12 w-12 mx-auto mb-3 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
-                    <p className="text-base sm:text-lg font-medium mb-1">Перетащите документы сюда</p>
-                    <p className="text-sm text-muted-foreground mb-2">или нажмите для выбора файлов</p>
-                    <p className="text-xs text-muted-foreground">
-                      PDF · DOCX · JPEG · PNG · WebP
-                    </p>
-                    <input
-                      type="file"
-                      multiple
-                      accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
-                      onChange={handleFileInput}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                  </div>
+                // Новый wizard: каждый слот = логический документ. Внутри
+                // одного слота можно собрать страницы из PDF, фото, камеры —
+                // всё склеится в один PDF и попадёт одной записью в БД.
+                <div className="py-2 space-y-4">
+                  <DocumentUploadWizard
+                    onUpload={handleWizardUpload}
+                    hint="Каждая иконка — один документ. На активной (выделенной) иконке выберите способ: PDF, фото из галереи или сфотографировать камерой. Все страницы одного документа собираются в один файл."
+                  />
 
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mt-4 text-sm">
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm">
                     <span className="text-muted-foreground hidden sm:inline">Если ИИ не распознаёт текст —</span>
                     <button
                       type="button"

@@ -36,6 +36,7 @@ import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
 import AICaseSummary from "@/components/dashboard/AICaseSummary";
 import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
+import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 
 interface DashboardCard {
   title: string;
@@ -253,6 +254,13 @@ const DashboardPage = () => {
           {!isDemoMode && (
             <div className="mb-6">
               <CaseRoadmap />
+            </div>
+          )}
+
+          {/* ── Привязка к юристу по коду-приглашению ───────────────────── */}
+          {!isDemoMode && !isLawyer && (
+            <div className="mb-6">
+              <LawyerInviteRedeem />
             </div>
           )}
 

@@ -474,7 +474,7 @@ export default function MedicalQuestionnairePage() {
         </div>
 
         {/* Submit buttons */}
-        <div className="sticky bottom-20 md:bottom-4 mt-6 bg-background/95 backdrop-blur-sm border rounded-xl p-4 shadow-lg">
+        <div className="sticky bottom-20 md:bottom-4 mt-6 bg-background border rounded-xl p-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs sm:text-sm text-muted-foreground">
               После отправки документ будет загружен в «Медицинские документы» и проанализирован ИИ

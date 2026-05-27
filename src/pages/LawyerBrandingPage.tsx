@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -12,9 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, ArrowLeft, Save, Loader2, Link as LinkIcon, Copy, Check, ExternalLink, QrCode, Eye, AlertCircle } from "lucide-react";
+import { Briefcase, ArrowLeft, Save, Loader2, Link as LinkIcon, Copy, Check, ExternalLink, QrCode, Eye, AlertCircle, Upload, X } from "lucide-react";
 import { slugifyRu } from "@/lib/slug";
 import BrandedAvatar from "@/components/BrandedAvatar";
+
+const BRAND_BUCKET = "lawyer-brand-assets";
+const PRESET_ACCENT_COLORS = ["#0F766E", "#1D4ED8", "#7C3AED", "#DB2777", "#DC2626", "#EA580C", "#CA8A04", "#16A34A"];
 
 type BrandTemplate = "classic" | "editorial" | "minimal";
 
@@ -82,6 +85,52 @@ const LawyerBrandingPage = () => {
   const [slugTouched, setSlugTouched] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Загрузка фото юриста в bucket lawyer-brand-assets/<user_id>/photo-<ts>.<ext>.
+  // RLS гарантирует что юрист может писать только в свою папку.
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !user) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Файл больше 5 МБ", description: "Выберите изображение поменьше.", variant: "destructive" });
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Только изображения", variant: "destructive" });
+      return;
+    }
+    setUploadingPhoto(true);
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${user.id}/photo-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from(BRAND_BUCKET).upload(path, file, {
+      upsert: false,
+      contentType: file.type,
+    });
+    if (upErr) {
+      // Если bucket не существует — даём осмысленный месседж админу
+      const isMissingBucket = /not found|does not exist/i.test(upErr.message);
+      toast({
+        title: isMissingBucket ? "Bucket не создан" : "Не удалось загрузить",
+        description: isMissingBucket
+          ? "Админу: примените миграцию 20260527001000_lawyer_brand_assets_bucket.sql"
+          : upErr.message,
+        variant: "destructive",
+      });
+      setUploadingPhoto(false);
+      return;
+    }
+    const { data: { publicUrl } } = supabase.storage.from(BRAND_BUCKET).getPublicUrl(path);
+    setForm((f) => ({ ...f, photo_url: publicUrl }));
+    setUploadingPhoto(false);
+    toast({ title: "Фото загружено", description: "Не забудьте сохранить бренд." });
+  };
+
+  const clearPhoto = () => {
+    setForm((f) => ({ ...f, photo_url: "" }));
+  };
 
   useEffect(() => {
     if (profileLoading) return;
@@ -339,10 +388,96 @@ const LawyerBrandingPage = () => {
                   <Textarea id="about" rows={4} value={form.brand_about} onChange={(e) => setForm((f) => ({ ...f, brand_about: e.target.value }))} placeholder="Краткое описание для главной страницы вашего приложения" />
                 </div>
                 <div className="sm:col-span-2">
-                  <Label htmlFor="photo">URL фото (HTTPS)</Label>
-                  <Input id="photo" value={form.photo_url} onChange={(e) => setForm((f) => ({ ...f, photo_url: e.target.value }))} placeholder="https://..." />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Можно ссылку из Google Drive (доступ по ссылке) или другого хранилища. Загрузка с устройства добавится позже.
+                  <Label>Фото</Label>
+                  <div className="flex items-start gap-3 mt-1.5">
+                    <div className="flex-shrink-0">
+                      <BrandedAvatar
+                        src={form.photo_url}
+                        name={form.full_name || "Юрист"}
+                        shape="round"
+                        className="h-20 w-20 border"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          ref={photoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handlePhotoUpload}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => photoInputRef.current?.click()}
+                          disabled={uploadingPhoto}
+                        >
+                          {uploadingPhoto ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Upload className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          {form.photo_url ? "Заменить" : "Загрузить с устройства"}
+                        </Button>
+                        {form.photo_url && (
+                          <Button type="button" variant="ghost" size="sm" onClick={clearPhoto}>
+                            <X className="h-3.5 w-3.5 mr-1.5" /> Убрать
+                          </Button>
+                        )}
+                      </div>
+                      <Input
+                        id="photo"
+                        value={form.photo_url}
+                        onChange={(e) => setForm((f) => ({ ...f, photo_url: e.target.value }))}
+                        placeholder="…или вставьте URL https://..."
+                        className="text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Размер до 5 МБ. Фото клиент видит на вашей brand-странице /u/&lt;адрес&gt;.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <Label>Акцентный цвет</Label>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <input
+                      type="color"
+                      value={form.accent_color || "#0F766E"}
+                      onChange={(e) => setForm((f) => ({ ...f, accent_color: e.target.value }))}
+                      className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0"
+                      aria-label="Выбрать акцентный цвет"
+                    />
+                    <Input
+                      value={form.accent_color}
+                      onChange={(e) => setForm((f) => ({ ...f, accent_color: e.target.value }))}
+                      placeholder="#0F766E"
+                      className="w-32 font-mono text-xs"
+                    />
+                    {form.accent_color && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setForm((f) => ({ ...f, accent_color: "" }))}>
+                        <X className="h-3.5 w-3.5 mr-1" /> Сбросить
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap mt-2">
+                    {PRESET_ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, accent_color: c }))}
+                        className="h-6 w-6 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                        style={{ backgroundColor: c }}
+                        title={c}
+                        aria-label={`Выбрать ${c}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    Используется для акцентов на вашей brand-странице (кнопки, ссылки).
                   </p>
                 </div>
               </CardContent>

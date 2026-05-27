@@ -24,29 +24,18 @@ import {
   ArrowLeft, Save, MessageSquare, Brain, FileText, User,
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
-  ShieldCheck, Lock, FileSignature,
+  ShieldCheck, Lock, FileSignature, Ticket, Copy, RefreshCw,
 } from "lucide-react";
 import TemplatePickerDialog from "@/components/TemplatePickerDialog";
 import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
 import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
+import { CRM_STAGES } from "@/lib/crmStages";
+import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
+import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
 
 const stripMarkdown = (s: string) =>
   s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
    .replace(/#+\s*/g, "").replace(/_{1,2}(.+?)_{1,2}/g, "$1").trim();
-
-const CRM_STAGES = [
-  { value: "initial_contact",    label: "Первичный контакт" },
-  { value: "no_diagnosis",       label: "Нет диагноза" },
-  { value: "has_diagnosis",      label: "Есть диагноз" },
-  { value: "examinations",       label: "Обследования" },
-  { value: "diagnosis_confirmed",label: "Диагноз получен" },
-  { value: "waiting_documents",  label: "Ожидание документов" },
-  { value: "documents_received", label: "Документы получены" },
-  { value: "military_office",    label: "Военкомат" },
-  { value: "regional_commission",label: "Комиссия субъекта" },
-  { value: "courts",             label: "Суды" },
-  { value: "military_ticket",    label: "Получение ВБ ✓" },
-];
 
 interface MedDoc {
   id: string; title: string | null; document_date: string | null;
@@ -65,7 +54,7 @@ const LawyerClientDetail = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isLawyer, isPro, loading: profileLoading } = useLawyerProfile();
+  const { profile, isLawyer, isPro, loading: profileLoading } = useLawyerProfile();
   const { toast } = useToast();
 
   const [client, setClient] = useState<Record<string, any> | null>(null);
@@ -87,6 +76,30 @@ const LawyerClientDetail = () => {
   const [lastAnalysisAt, setLastAnalysisAt] = useState<string | null>(null);
   const [newDocsDetected, setNewDocsDetected] = useState(false);
 
+  // Ready-check: оценка готовности пакета к военкомату (% + чек-лист)
+  const [readyCheck, setReadyCheck] = useState<{
+    score: number; verdict?: string; strong?: string[]; missing?: string[]; next_actions?: string[];
+  } | null>(null);
+  const [readyLoading, setReadyLoading] = useState(false);
+
+  const runReadyCheck = async () => {
+    if (!isPro) { setUpgradeOpen(true); return; }
+    setReadyLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke("lawyer-ready-check", {
+        body: { lawyerClientId: clientId },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.error) throw new Error(res.error.message);
+      setReadyCheck(res.data);
+      toast({ title: `Готовность: ${res.data.score}%` });
+    } catch (e) {
+      toast({ title: "Ошибка ИИ", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    }
+    setReadyLoading(false);
+  };
+
   const [previewDoc, setPreviewDoc] = useState<{ title: string; file_url: string } | null>(null);
   const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -95,6 +108,46 @@ const LawyerClientDetail = () => {
   // клиент привязан и есть доступ к его данным
   const [clientAddress, setClientAddress] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [regeneratingCode, setRegeneratingCode] = useState(false);
+
+  // Регенерируем invite_code (если юрист хочет показать «свежий» код или
+  // боится, что старый утёк). RPC сам проверяет ownership и client_user_id IS NULL.
+  const regenerateCode = async () => {
+    if (!clientId) return;
+    setRegeneratingCode(true);
+    const { data, error } = await supabase.rpc("regenerate_lawyer_invite", { p_lawyer_client_id: clientId });
+    setRegeneratingCode(false);
+    if (error) {
+      toast({ title: "Не удалось обновить код", description: error.message, variant: "destructive" });
+      return;
+    }
+    setClient((prev: any) => ({ ...prev, invite_code: data }));
+    toast({ title: "Новый код сгенерирован" });
+  };
+
+  const copyInviteCode = async () => {
+    const code = client?.invite_code;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast({ title: "Код скопирован" });
+    } catch {
+      /* clipboard может быть недоступен */
+    }
+  };
+
+  const copyInviteLink = async () => {
+    const code = client?.invite_code;
+    if (!code) return;
+    const link = `${window.location.origin}/dashboard?lawyer_invite=${code}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ title: "Ссылка скопирована" });
+    } catch {
+      /* noop */
+    }
+  };
 
   useEffect(() => {
     if (!user || profileLoading) return;
@@ -151,11 +204,48 @@ const LawyerClientDetail = () => {
   };
 
   const loadNotes = async () => {
-    const { data } = await supabase.from("case_notes").select("*").eq("lawyer_client_id", clientId).order("created_at", { ascending: false });
-    const allNotes = (data as CaseNote[]) || [];
-    setNotes(allNotes);
+    // 1. Базовые заметки + изменения этапов + сохранённые AI-анализы.
+    const { data: rawNotes } = await supabase
+      .from("case_notes").select("*")
+      .eq("lawyer_client_id", clientId)
+      .order("created_at", { ascending: false });
+    const baseNotes = (rawNotes as CaseNote[]) || [];
+
+    // 2. События документов (загруженные юристом) — превращаем в виртуальные заметки.
+    const { data: lawyerDocs } = await supabase
+      .from("lawyer_client_med_docs")
+      .select("id, title, created_at")
+      .eq("lawyer_client_id", clientId)
+      .order("created_at", { ascending: false });
+
+    const docNotes: CaseNote[] = (lawyerDocs || []).map((d: any) => ({
+      id: `doc-${d.id}`,
+      content: `📎 Загружен документ: ${d.title || "без названия"}`,
+      note_type: "document_added",
+      created_at: d.created_at,
+    }));
+
+    // 3. Использование шаблонов.
+    const { data: tplUses } = await supabase
+      .from("lawyer_template_uses")
+      .select("id, template_key, created_at")
+      .eq("lawyer_client_id", clientId)
+      .order("created_at", { ascending: false });
+
+    const tplNotes: CaseNote[] = (tplUses || []).map((t: any) => ({
+      id: `tpl-${t.id}`,
+      content: `📄 Сформирован документ по шаблону: ${t.template_key}`,
+      note_type: "template_used",
+      created_at: t.created_at,
+    }));
+
+    // 4. Объединяем и сортируем по дате (новые сверху).
+    const all = [...baseNotes, ...docNotes, ...tplNotes]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    setNotes(all);
+
     // Restore the most recent AI analysis so it persists across tab switches / page reloads
-    const lastAiNote = allNotes.find(n => n.note_type === "ai_analysis");
+    const lastAiNote = baseNotes.find(n => n.note_type === "ai_analysis");
     if (lastAiNote) {
       try {
         setAiAnalysis(JSON.parse(lastAiNote.content));
@@ -183,6 +273,49 @@ const LawyerClientDetail = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [client?.client_user_id, hasDocAccess]);
+
+  // Realtime: клиент включил/выключил доступ из своего кабинета.
+  // Юристу сразу всплывает toast, перезагружается hasDocAccess и (если открыл)
+  // подтягиваются документы — без F5.
+  useEffect(() => {
+    if (!client?.client_user_id || !user) return;
+    const uid = client.client_user_id;
+    const channel = supabase.channel(`accessGrants-${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "client_document_access",
+          filter: `client_user_id=eq.${uid}`,
+        },
+        (payload) => {
+          const row = (payload.new || payload.old) as { lawyer_id?: string; is_active?: boolean };
+          if (!row || row.lawyer_id !== user.id) return;
+
+          const isActive = (payload.new as any)?.is_active === true;
+          setHasDocAccess(isActive);
+
+          if (isActive) {
+            toast({
+              title: "Клиент открыл доступ ✓",
+              description: "Документы и ИИ-анализы доступны для просмотра.",
+            });
+            loadMedDocs(uid);
+          } else {
+            toast({
+              title: "Клиент закрыл доступ",
+              description: "Документы и ИИ-анализы больше не видны.",
+              variant: "destructive",
+            });
+            setMedDocs([]);
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.client_user_id, user?.id, clientId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -234,7 +367,7 @@ const LawyerClientDetail = () => {
   };
 
   const runAiAnalysis = async () => {
-    if (!isPro) { toast({ title: "Функция доступна в тарифе Pro", variant: "destructive" }); return; }
+    if (!isPro) { setUpgradeOpen(true); return; }
     setAiLoading(true); setAiError("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -298,6 +431,15 @@ const LawyerClientDetail = () => {
             <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
               <FileSignature className="h-4 w-4 mr-1" />Из шаблона
             </Button>
+            {client && (
+              <LawyerDossierExportButton
+                lawyerClientId={clientId!}
+                client={client as any}
+                hasDocAccess={hasDocAccess}
+                lawyerName={profile?.full_name || null}
+                size="sm"
+              />
+            )}
             <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/chat/${clientId}`)}>
               <MessageSquare className="h-4 w-4 mr-1" />Чат
             </Button>
@@ -312,7 +454,7 @@ const LawyerClientDetail = () => {
             <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Обзор</TabsTrigger>
             <TabsTrigger value="documents"><FileText className="h-4 w-4 mr-1.5" />Документы</TabsTrigger>
             <TabsTrigger value="analysis"><Brain className="h-4 w-4 mr-1.5" />ИИ-анализ</TabsTrigger>
-            <TabsTrigger value="timeline"><ClipboardList className="h-4 w-4 mr-1.5" />Заметки</TabsTrigger>
+            <TabsTrigger value="timeline"><ClipboardList className="h-4 w-4 mr-1.5" />История</TabsTrigger>
           </TabsList>
 
           {/* ── TAB: Overview ────────────────────────────────────────────── */}
@@ -390,16 +532,47 @@ const LawyerClientDetail = () => {
                   <Textarea rows={4} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
                 </div>
 
-                {/* UUID-поле — только если клиент НЕ привязан (manual mode) */}
-                {!client?.client_user_id && (
-                  <div className="sm:col-span-2">
-                    <Label>ID аккаунта клиента (для доступа к документам)</Label>
-                    <Input
-                      value={form.client_user_id}
-                      onChange={(e) => setForm((f) => ({ ...f, client_user_id: e.target.value }))}
-                      placeholder="UUID из профиля клиента на сайте"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Клиент найдёт свой ID в личном кабинете → блок «Доступ юриста к документам»</p>
+                {/* Invite-код — простой способ привязать клиента БЕЗ передачи UUID.
+                    Показываем только если клиент ещё не привязан. */}
+                {!client?.client_user_id && client?.invite_code && (
+                  <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Ticket className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-medium">Код приглашения для клиента</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Отправьте клиенту код или ссылку. Клиент введёт его в своём кабинете и
+                      автоматически: (1) привяжется к этой карточке, (2) откроет доступ к меддокам.
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xl font-bold tracking-widest bg-background px-3 py-1.5 rounded border select-all">
+                        {client.invite_code}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={copyInviteCode}>
+                        <Copy className="h-3.5 w-3.5 mr-1" /> Код
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={copyInviteLink}>
+                        <Copy className="h-3.5 w-3.5 mr-1" /> Ссылка
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={regenerateCode} disabled={regeneratingCode}>
+                        {regeneratingCode ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Обновить
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Если клиент уже привязан — показываем статус */}
+                {client?.client_user_id && (
+                  <div className="sm:col-span-2 rounded-lg border border-emerald-300/40 bg-emerald-50 dark:bg-emerald-950/20 p-3 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                      Клиент привязан к аккаунту на сайте. ИИ-анализ и доступ к меддокам работают автоматически.
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -479,10 +652,19 @@ const LawyerClientDetail = () => {
           {/* ── TAB: AI Analysis ─────────────────────────────────────────── */}
           <TabsContent value="analysis" className="space-y-4">
             {!isPro && (
-              <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+              <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
                 <CardContent className="p-4 flex items-center gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                  <p className="text-sm">ИИ-анализ доступен в тарифе <strong>Pro</strong>. Upgrade для получения комплексного анализа дела.</p>
+                  <p className="text-sm flex-1">
+                    ИИ-анализ доступен в тарифе <strong>Pro</strong>. Получите комплексный разбор дела с категорией, рисками и планом действий.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="bg-amber-500 hover:bg-amber-600 text-white flex-shrink-0"
+                    onClick={() => setUpgradeOpen(true)}
+                  >
+                    Upgrade
+                  </Button>
                 </CardContent>
               </Card>
             )}
@@ -497,11 +679,71 @@ const LawyerClientDetail = () => {
                 </CardContent>
               </Card>
             )}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2 flex-wrap">
+              <Button variant="outline" onClick={runReadyCheck} disabled={readyLoading || !isPro}>
+                {readyLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Проверяю...</> : <><ShieldCheck className="h-4 w-4 mr-2" />Готовность к военкомату</>}
+              </Button>
               <Button onClick={runAiAnalysis} disabled={aiLoading || !isPro}>
-                {aiLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Анализируем...</> : <><Brain className="h-4 w-4 mr-2" />Запустить анализ</>}
+                {aiLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Анализируем...</> : <><Brain className="h-4 w-4 mr-2" />Полный анализ дела</>}
               </Button>
             </div>
+
+            {readyCheck && (
+              <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    Готовность пакета к военкомату
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-20 w-20 flex-shrink-0">
+                      {/* Круговая шкала score */}
+                      <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted" />
+                        <circle
+                          cx="18" cy="18" r="15.9" fill="none"
+                          stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                          strokeDasharray={`${readyCheck.score} 100`}
+                          className={readyCheck.score >= 70 ? "text-emerald-500" : readyCheck.score >= 40 ? "text-amber-500" : "text-red-500"}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xl font-bold">{readyCheck.score}%</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground flex-1">{readyCheck.verdict}</p>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {readyCheck.strong?.length ? (
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-600 mb-1">✓ Сильные стороны пакета</p>
+                        <ul className="text-sm space-y-0.5 list-disc list-inside">
+                          {readyCheck.strong.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {readyCheck.missing?.length ? (
+                      <div>
+                        <p className="text-xs font-semibold text-amber-600 mb-1">⚠ Чего не хватает</p>
+                        <ul className="text-sm space-y-0.5 list-disc list-inside">
+                          {readyCheck.missing.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                  {readyCheck.next_actions?.length ? (
+                    <div>
+                      <p className="text-xs font-semibold mb-1">Следующие шаги</p>
+                      <ol className="text-sm space-y-0.5 list-decimal list-inside">
+                        {readyCheck.next_actions.map((s, i) => <li key={i}>{s}</li>)}
+                      </ol>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
             {aiError && <Card className="border-red-200"><CardContent className="p-4 text-red-600 text-sm">{aiError}</CardContent></Card>}
             {aiAnalysis && (
               <div className="space-y-4">
@@ -666,6 +908,8 @@ const LawyerClientDetail = () => {
                     <div className="flex-shrink-0 mt-0.5">
                       {note.note_type === "stage_change" ? <AlertCircle className="h-4 w-4 text-blue-500" />
                         : note.note_type === "reminder" ? <Clock className="h-4 w-4 text-amber-500" />
+                        : note.note_type === "document_added" ? <FileText className="h-4 w-4 text-emerald-500" />
+                        : note.note_type === "template_used" ? <FileSignature className="h-4 w-4 text-violet-500" />
                         : <ClipboardList className="h-4 w-4 text-muted-foreground" />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -681,6 +925,12 @@ const LawyerClientDetail = () => {
         </Tabs>
       </main>
       <Footer />
+
+      <LawyerUpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        currentTier={isPro ? "pro" : "basic"}
+      />
 
       {/* ── Templates Picker: подставит данные клиента ─────────────────── */}
       <TemplatePickerDialog

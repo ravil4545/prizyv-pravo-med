@@ -1,122 +1,171 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Archive, Loader2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Archive, Loader2, FileText, FileType, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { jsPDF } from "jspdf";
+import {
+  generateDossierPDF,
+  generateDossierDOCX,
+  downloadDossier,
+  type DossierDoc,
+  type DossierData,
+} from "@/lib/dossier";
 
 interface DossierExportButtonProps {
   userId: string;
-  profile?: { full_name?: string; city?: string; phone?: string } | null;
+  profile?: {
+    full_name?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    birth_year?: number | null;
+    diagnosis?: string | null;
+    expected_category?: string | null;
+  } | null;
+  /** Опционально: если кнопку нажимает юрист — добавим его подпись в шапку */
+  generatedBy?: "client" | "lawyer";
+  lawyerName?: string | null;
 }
 
-export default function DossierExportButton({ userId, profile }: DossierExportButtonProps) {
-  const [loading, setLoading] = useState(false);
+export default function DossierExportButton({
+  userId, profile, generatedBy = "client", lawyerName,
+}: DossierExportButtonProps) {
+  const [loading, setLoading] = useState<"pdf" | "docx" | null>(null);
   const { toast } = useToast();
 
-  const handleExport = async () => {
-    setLoading(true);
-    try {
-      // Load documents
-      const { data: docs } = await supabase
-        .from("medical_documents_v2")
-        .select("id, title, file_url, uploaded_at, ai_fitness_category, ai_explanation, ai_recommendations")
-        .eq("user_id", userId)
-        .order("uploaded_at", { ascending: false });
+  const buildData = async (): Promise<DossierData | null> => {
+    const { data: docs, error } = await supabase
+      .from("medical_documents_v2")
+      .select("id, title, document_date, ai_fitness_category, ai_explanation, ai_recommendations")
+      .eq("user_id", userId)
+      .order("document_date", { ascending: false });
 
-      if (!docs || docs.length === 0) {
-        toast({ title: "Нет документов", description: "Загрузите медицинские документы для экспорта досье", variant: "destructive" });
+    if (error) {
+      toast({ title: "Не удалось загрузить документы", description: error.message, variant: "destructive" });
+      return null;
+    }
+    if (!docs || docs.length === 0) {
+      toast({
+        title: "Нет документов",
+        description: "Загрузите медицинские документы для экспорта досье",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    const dossierDocs: DossierDoc[] = (docs as any[]).map((d) => ({
+      title: d.title || "Без названия",
+      document_date: d.document_date,
+      ai_fitness_category: d.ai_fitness_category,
+      ai_explanation: d.ai_explanation,
+      ai_recommendations: Array.isArray(d.ai_recommendations)
+        ? d.ai_recommendations
+        : d.ai_recommendations
+          ? [String(d.ai_recommendations)]
+          : null,
+    }));
+
+    return {
+      fullName: profile?.full_name || null,
+      birthYear: profile?.birth_year || null,
+      city: profile?.city || null,
+      phone: profile?.phone || null,
+      email: profile?.email || null,
+      diagnosis: profile?.diagnosis || null,
+      expectedCategory: profile?.expected_category || null,
+      documents: dossierDocs,
+      generatedBy,
+      lawyerName,
+    };
+  };
+
+  const handleExport = async (format: "pdf" | "docx") => {
+    setLoading(format);
+    try {
+      const data = await buildData();
+      if (!data) return;
+
+      let blob: Blob;
+      try {
+        blob = format === "pdf"
+          ? await generateDossierPDF(data)
+          : await generateDossierDOCX(data);
+      } catch (e) {
+        // Часто бьётся PDF из-за того, что не удалось загрузить кириллический
+        // шрифт с CDN. Предложим клиенту DOCX-альтернативу.
+        console.error("Dossier generation error:", e);
+        if (format === "pdf") {
+          toast({
+            title: "Не удалось сделать PDF",
+            description: "Не загрузился кириллический шрифт. Попробуйте DOCX — он работает без интернета.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Ошибка экспорта DOCX",
+            description: e instanceof Error ? e.message : "Неизвестная ошибка",
+            variant: "destructive",
+          });
+        }
         return;
       }
 
-      // Generate PDF summary
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      let y = 20;
-
-      doc.setFontSize(18);
-      doc.setFont("helvetica", "bold");
-      doc.text("Медицинское досье", pageWidth / 2, y, { align: "center" });
-      y += 10;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      if (profile?.full_name) {
-        doc.text(`Пациент: ${profile.full_name}`, 14, y);
-        y += 7;
-      }
-      doc.text(`Дата формирования: ${new Date().toLocaleDateString("ru-RU")}`, 14, y);
-      y += 7;
-      doc.text(`Всего документов: ${docs.length}`, 14, y);
-      y += 12;
-
-      doc.setFontSize(13);
-      doc.setFont("helvetica", "bold");
-      doc.text("Список документов:", 14, y);
-      y += 8;
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-
-      for (const d of docs) {
-        if (y > 260) {
-          doc.addPage();
-          y = 20;
-        }
-        doc.setFont("helvetica", "bold");
-        doc.text(`• ${d.title || "Без названия"}`, 14, y);
-        y += 6;
-        doc.setFont("helvetica", "normal");
-
-        if (d.uploaded_at) {
-          doc.text(`  Дата: ${new Date(d.uploaded_at).toLocaleDateString("ru-RU")}`, 14, y);
-          y += 5;
-        }
-        if (d.ai_fitness_category) {
-          doc.text(`  Категория годности: ${d.ai_fitness_category}`, 14, y);
-          y += 5;
-        }
-        if (d.ai_explanation) {
-          const lines = doc.splitTextToSize(`  Анализ: ${d.ai_explanation}`, pageWidth - 28);
-          for (const line of lines.slice(0, 3)) {
-            doc.text(line, 14, y);
-            y += 5;
-          }
-        }
-        y += 3;
-      }
-
-      // Download PDF
-      const pdfBlob = doc.output("blob");
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = pdfUrl;
-      link.download = `Досье_${profile?.full_name || "пациент"}_${new Date().toLocaleDateString("ru-RU").replace(/\./g, "-")}.pdf`;
-      link.click();
-      URL.revokeObjectURL(pdfUrl);
-
+      downloadDossier(blob, data, format);
       toast({
-        title: "Досье экспортировано",
-        description: `PDF-сводка из ${docs.length} документов сохранена`,
+        title: "Досье готово",
+        description: `${format.toUpperCase()}-файл из ${data.documents.length} документов сохранён`,
       });
     } catch (error) {
       console.error("Dossier export error:", error);
-      toast({ title: "Ошибка экспорта", description: "Не удалось сформировать досье", variant: "destructive" });
+      toast({
+        title: "Ошибка экспорта",
+        description: "Не удалось сформировать досье",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
+  const isBusy = loading !== null;
+
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleExport}
-      disabled={loading}
-      className="gap-2"
-    >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-      {loading ? "Формируем..." : "Экспорт досье PDF"}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" disabled={isBusy} className="gap-2">
+          {isBusy
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Archive className="h-4 w-4" />}
+          {isBusy ? "Формируем..." : "Экспорт досье"}
+          {!isBusy && <ChevronDown className="h-3.5 w-3.5 opacity-60" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="text-xs">Выберите формат</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={isBusy}>
+          <FileText className="h-4 w-4 mr-2 text-red-500" />
+          <div className="flex flex-col items-start">
+            <span>PDF</span>
+            <span className="text-[10px] text-muted-foreground">для печати и пересылки</span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleExport("docx")} disabled={isBusy}>
+          <FileType className="h-4 w-4 mr-2 text-blue-500" />
+          <div className="flex flex-col items-start">
+            <span>DOCX (Word)</span>
+            <span className="text-[10px] text-muted-foreground">для правок и подписи</span>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
