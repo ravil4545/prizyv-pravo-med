@@ -37,7 +37,12 @@ export const useLawyerProfile = () => {
       });
   }, [user?.id, authLoading]);
 
-  const isLawyer = !!profile;
+  // Роль юриста активна, только если запись существует И is_active = true.
+  // Раньше было `!!profile` — из-за этого «снять с роли юриста» в админке
+  // (она ставит is_active=false) фактически не убирала роль: юрист всё равно
+  // редиректился в /lawyer. Теперь деактивация работает как ожидается,
+  // а бренд-данные (slug, фото, тариф) сохраняются и роль можно вернуть.
+  const isLawyer = !!profile && profile.is_active === true;
   const isPro = profile?.subscription_tier === "pro";
 
   return { profile, loading, isLawyer, isPro };
