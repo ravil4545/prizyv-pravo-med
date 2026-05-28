@@ -205,26 +205,26 @@ const AdminUsersPage = () => {
       if (!user) return;
       const willBeActive = !currentIsLawyerActive;
 
-      if (!user.is_lawyer) {
-        // Записи в lawyer_profiles ещё нет — создаём
-        const { error } = await supabase
-          .from("lawyer_profiles")
-          .insert({
+      // Раньше тут было: if (!user.is_lawyer) INSERT else UPDATE.
+      // Проблема: локальный user.is_lawyer мог расходиться с БД (например, запись
+      // в lawyer_profiles осталась с прошлых тестов, а UI её не видел), и INSERT
+      // падал с «duplicate key value violates unique constraint
+      // lawyer_profiles_pkey». Заменяем на единый UPSERT по user_id —
+      // он сам выберет INSERT или UPDATE.
+      const safeName = user.full_name || user.email || "Юрист";
+      const { error } = await supabase
+        .from("lawyer_profiles")
+        .upsert(
+          {
             user_id: userId,
-            full_name: user.full_name || user.email || "Юрист",
+            full_name: safeName,
             subscription_tier: "basic",
-            is_active: true,
+            is_active: willBeActive,
             clients_limit: 5,
-          } as any);
-        if (error) throw error;
-      } else {
-        // Запись есть — переключаем is_active (сохраняем CRM-историю клиентов)
-        const { error } = await supabase
-          .from("lawyer_profiles")
-          .update({ is_active: willBeActive })
-          .eq("user_id", userId);
-        if (error) throw error;
-      }
+          } as any,
+          { onConflict: "user_id" },
+        );
+      if (error) throw error;
 
       setUsers(prev =>
         prev.map(u =>
