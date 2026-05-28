@@ -67,6 +67,7 @@ import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import SendDocToLawyerButton from "@/components/SendDocToLawyerButton";
 import { getOcrQuality, ocrLevelColor } from "@/lib/ocrQuality";
 
 interface DocumentType {
@@ -2392,6 +2393,9 @@ export default function MedicalDocumentsPage() {
                                   <Brain className="h-5 w-5" />
                                 </Button>
                               )}
+
+                              {/* Отправить юристу в чат (без повторной загрузки) */}
+                              <SendDocToLawyerButton doc={doc} />
 
                               {/* Download */}
                               <Button

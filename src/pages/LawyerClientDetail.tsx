@@ -119,6 +119,7 @@ const LawyerClientDetail = () => {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "unlink" | "delete">(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [requestingAccess, setRequestingAccess] = useState(false);
   // Имя привязанного клиента из profiles (если доступно). Используем ТОЛЬКО
   // для отображения «Клиент привязан к аккаунту "ФИО"». Если профиля нет
   // (анонимный auth / RLS / триггер create_profile не сработал) — это нормально,
@@ -158,8 +159,9 @@ const LawyerClientDetail = () => {
     });
   };
 
-  // Полное удаление карточки клиента (DELETE CASCADE: case_notes, chats,
-  // template_uses, lawyer_client_med_docs). Действие необратимое.
+  // Убрать клиента в архив (soft-archive: lawyer_delete_client переводит
+  // карточку в link_state='archived', закрывает доступ, обнуляет invite_code).
+  // История чата, заметки и сканы СОХРАНЯЮТСЯ — это не безвозвратное удаление.
   const handleDeleteClient = async () => {
     setActionBusy(true);
     const { error } = await supabase.rpc("lawyer_delete_client", {
@@ -170,8 +172,28 @@ const LawyerClientDetail = () => {
       toast({ title: "Не удалось удалить", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Карточка клиента удалена" });
+    toast({ title: "Клиент убран в архив", description: "История дела сохранена. Доступ к документам закрыт." });
     navigate("/lawyer/clients", { replace: true });
+  };
+
+  // Запросить у клиента доступ к документам: отправляем сообщение в чат и
+  // ведём юриста туда. Не форсирует доступ — клиент откроет его кнопкой в чате.
+  const requestDocAccess = async () => {
+    if (!clientId || requestingAccess) return;
+    setRequestingAccess(true);
+    const { error } = await supabase.from("lawyer_chat_messages").insert({
+      lawyer_client_id: clientId,
+      sender_id: user!.id,
+      content: "Здравствуйте! Чтобы я мог разобрать вашу ситуацию и подготовить позицию, откройте, пожалуйста, доступ к медицинским документам — кнопка «Открыть доступ» вверху этого чата (или раздел «Доступ юриста к данным» в личном кабинете). Доступ можно отозвать в любой момент.",
+      message_type: "text",
+    });
+    setRequestingAccess(false);
+    if (error) {
+      toast({ title: "Не удалось отправить запрос", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Запрос на доступ отправлен", description: "Сообщение появилось в чате с клиентом." });
+    navigate(`/lawyer/chat/${clientId}`);
   };
 
   useEffect(() => {
@@ -512,7 +534,7 @@ const LawyerClientDetail = () => {
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Удалить карточку клиента
+                  Убрать клиента в архив
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -621,7 +643,7 @@ const LawyerClientDetail = () => {
                       variant="ghost" size="sm" className="text-destructive"
                       onClick={() => setConfirmAction("delete")}
                     >
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Удалить карточку
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Убрать в архив
                     </Button>
                   </div>
                 </div>
@@ -726,9 +748,13 @@ const LawyerClientDetail = () => {
                       и email откроются автоматически, как только клиент даст вам доступ к своим
                       медицинским документам в личном кабинете.
                     </p>
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Попросите его в чате открыть доступ — раздел «Доступ юриста к документам» в кабинете.
-                    </p>
+                    <Button
+                      size="sm" className="mt-3 gap-1.5"
+                      onClick={requestDocAccess} disabled={requestingAccess}
+                    >
+                      {requestingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                      Запросить доступ в чате
+                    </Button>
                   </div>
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -789,7 +815,11 @@ const LawyerClientDetail = () => {
                     <Card><CardContent className="py-8 text-center">
                       <Clock className="h-10 w-10 text-blue-400 mx-auto mb-3" />
                       <p className="font-medium">Доступ к документам не открыт</p>
-                      <p className="text-sm text-muted-foreground mt-1">Клиент должен нажать «Поделиться с юристом» в своём кабинете</p>
+                      <p className="text-sm text-muted-foreground mt-1 mb-4">Клиент ещё не открыл доступ к медкартам и ИИ-анализу</p>
+                      <Button size="sm" className="gap-1.5" onClick={requestDocAccess} disabled={requestingAccess}>
+                        {requestingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                        Запросить доступ в чате
+                      </Button>
                     </CardContent></Card>
                   )
               : docsLoading
@@ -1165,7 +1195,7 @@ const LawyerClientDetail = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Подтверждение «Удалить карточку» — необратимое действие. */}
+      {/* Подтверждение «Убрать в архив» — soft-archive, история сохраняется. */}
       <AlertDialog
         open={confirmAction === "delete"}
         onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
@@ -1173,23 +1203,22 @@ const LawyerClientDetail = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Удалить карточку клиента?
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Убрать клиента в архив?
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
-                  Будет безвозвратно удалено:
+                  Карточка {client?.client_name ? <strong>«{client.client_name}»</strong> : "клиента"} уйдёт
+                  в архив и пропадёт из списка активных клиентов.
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>Сама карточка клиента {client?.client_name ? <strong>«{client.client_name}»</strong> : null}</li>
-                  <li>Все заметки и записи об изменении этапов</li>
-                  <li>История чата</li>
-                  <li>Сканы документов, загруженные вами для этого клиента</li>
-                  <li>ИИ-анализы дела</li>
+                  <li>История чата, заметки и сканы документов <strong>сохранятся</strong> в архиве</li>
+                  <li>Доступ к медкартам и ИИ-анализам клиента закроется</li>
+                  <li>Привязка аккаунта снимется — чтобы вернуть клиента, понадобится новый код приглашения</li>
                 </ul>
-                <p className="pt-2 text-xs text-destructive">
-                  Действие необратимо. Документы клиента в его собственном кабинете не пострадают.
+                <p className="pt-2 text-xs text-muted-foreground">
+                  Это не безвозвратное удаление. Документы клиента в его собственном кабинете не пострадают.
                 </p>
               </div>
             </AlertDialogDescription>
@@ -1199,10 +1228,10 @@ const LawyerClientDetail = () => {
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); handleDeleteClient(); }}
               disabled={actionBusy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-amber-600 text-white hover:bg-amber-700"
             >
               {actionBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Удалить навсегда
+              Убрать в архив
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
