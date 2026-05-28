@@ -10,9 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download,
   Briefcase, Check, CheckCheck, MessageSquare, ChevronRight, Image as ImageIcon, Pencil, X,
+  ShieldCheck, ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
+import { uploadChatAttachment, getSignedChatAttachmentUrl } from "@/lib/storage";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -56,6 +58,12 @@ const ClientChatPage = () => {
   const [allConvs, setAllConvs] = useState<ConvEntry[]>([]);
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
 
+  // Доступ юриста к документам/профилю/ИИ. null = ещё не загрузили.
+  const [accessActive, setAccessActive] = useState<boolean | null>(null);
+  const [grantingAccess, setGrantingAccess] = useState(false);
+  // messageId → подписанная ссылка на вложение (bucket приватный).
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -88,6 +96,7 @@ const ClientChatPage = () => {
           if (prev.find((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        resolveAttachments([msg]);
         if (msg.sender_id !== user!.id) {
           supabase.from("lawyer_chat_messages").update({ is_read: true }).eq("id", msg.id);
         }
@@ -131,6 +140,20 @@ const ClientChatPage = () => {
     })));
   };
 
+  // Подписываем ссылки на вложения (bucket приватный) — по одной на сообщение.
+  const resolveAttachments = async (msgs: Message[]) => {
+    const targets = msgs.filter((m) => m.file_url && (m.message_type === "image" || m.message_type === "file"));
+    if (targets.length === 0) return;
+    const entries = await Promise.all(
+      targets.map(async (m) => [m.id, await getSignedChatAttachmentUrl(m.file_url!)] as const),
+    );
+    setAttachmentUrls((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of entries) if (url) next[id] = url;
+      return next;
+    });
+  };
+
   const initChat = async () => {
     setLoading(true);
     const { data: c } = await supabase
@@ -144,15 +167,45 @@ const ClientChatPage = () => {
       .eq("user_id", c.lawyer_id).maybeSingle();
     setLawyerProfile(profile);
 
+    // Открыт ли юристу доступ к документам/профилю/ИИ
+    const { data: access } = await supabase
+      .from("client_document_access").select("is_active")
+      .eq("client_user_id", user!.id).eq("lawyer_id", c.lawyer_id).maybeSingle();
+    setAccessActive(!!access?.is_active);
+
     const { data: msgs } = await supabase
       .from("lawyer_chat_messages").select("*")
       .eq("lawyer_client_id", lawyerClientId).order("created_at", { ascending: true });
-    setMessages((msgs as Message[]) || []);
+    const list = (msgs as Message[]) || [];
+    setMessages(list);
+    resolveAttachments(list);
     setLoading(false);
 
     await supabase.from("lawyer_chat_messages")
       .update({ is_read: true }).eq("lawyer_client_id", lawyerClientId).neq("sender_id", user!.id);
     setUnreadMap((prev) => ({ ...prev, [lawyerClientId!]: 0 }));
+  };
+
+  // Открыть юристу доступ к документам прямо из чата (одна кнопка).
+  const grantAccess = async () => {
+    if (!conv?.lawyer_id || grantingAccess) return;
+    setGrantingAccess(true);
+    const { error } = await supabase
+      .from("client_document_access")
+      .upsert(
+        { client_user_id: user!.id, lawyer_id: conv.lawyer_id, is_active: true },
+        { onConflict: "client_user_id,lawyer_id" },
+      );
+    setGrantingAccess(false);
+    if (error) {
+      toast({ title: "Не удалось открыть доступ", description: error.message, variant: "destructive" });
+      return;
+    }
+    setAccessActive(true);
+    toast({
+      title: "Доступ открыт",
+      description: "Юрист теперь видит ваши документы, профиль и ИИ-расшифровки. Отозвать можно в кабинете.",
+    });
   };
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
@@ -183,6 +236,7 @@ const ClientChatPage = () => {
         if (prev.find((m) => m.id === (data as Message).id)) return prev;
         return [...prev, data as Message];
       });
+      resolveAttachments([data as Message]);
     }
     setSending(false);
   };
@@ -205,10 +259,13 @@ const ClientChatPage = () => {
     setUploading(true);
     const ext = file.name.split(".").pop();
     const path = `chat/${lawyerClientId}/${Date.now()}.${ext}`;
-    const { data, error } = await supabase.storage.from("chat-attachments").upload(path, file, { upsert: false });
-    if (error) { toast({ title: "Ошибка загрузки", description: error.message, variant: "destructive" }); setUploading(false); return; }
-    const { data: { publicUrl } } = supabase.storage.from("chat-attachments").getPublicUrl(data.path);
-    await sendMessage(file.name, file.type.startsWith("image/") ? "image" : "file", publicUrl, file.name, file.size);
+    try {
+      // Храним storage-путь (bucket приватный); ссылку подписываем при показе.
+      const storedPath = await uploadChatAttachment(path, file, file.type);
+      await sendMessage(file.name, file.type.startsWith("image/") ? "image" : "file", storedPath, file.name, file.size);
+    } catch (err: any) {
+      toast({ title: "Ошибка загрузки", description: err?.message, variant: "destructive" });
+    }
     setUploading(false);
     e.target.value = "";
   };
@@ -320,6 +377,29 @@ const ClientChatPage = () => {
               </div>
             </div>
 
+            {/* Баннер доступа: связь есть, но юрист не видит документы/ИИ */}
+            {accessActive === false && (
+              <div className="border-b bg-amber-50 dark:bg-amber-950/20 px-3 py-2.5 flex items-center gap-2.5 flex-shrink-0">
+                <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <p className="text-xs text-amber-900 dark:text-amber-200 flex-1 leading-snug">
+                  Юрист пока <strong>не видит</strong> ваши документы, профиль и ИИ-расшифровки — он не сможет полноценно помочь.
+                </p>
+                <Button size="sm" className="h-7 gap-1.5 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
+                  onClick={grantAccess} disabled={grantingAccess}>
+                  {grantingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                  Открыть доступ
+                </Button>
+              </div>
+            )}
+            {accessActive === true && (
+              <div className="border-b bg-emerald-50/60 dark:bg-emerald-950/10 px-3 py-1.5 flex items-center gap-2 flex-shrink-0">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 flex-1 leading-snug">
+                  Юрист видит ваши документы и ИИ-анализ. Отозвать доступ можно в кабинете.
+                </p>
+              </div>
+            )}
+
             {/* Messages */}
             <div className="flex-1 overflow-y-auto">
               <div className="px-3 py-3 max-w-3xl mx-auto space-y-0.5">
@@ -335,6 +415,7 @@ const ClientChatPage = () => {
                     </div>
                     {msgs.map((m) => {
                       const isOwn = m.sender_id === user!.id;
+                      const fileSrc = attachmentUrls[m.id];
                       return (
                         <div key={m.id} className={cn("flex mb-1 items-end gap-1 group", isOwn ? "flex-row-reverse" : "")}>
                           {/* Edit button for own text messages */}
@@ -377,19 +458,32 @@ const ClientChatPage = () => {
                               <>
                                 {m.message_type === "image" && m.file_url && (
                                   <div className="mb-1.5">
-                                    <img src={m.file_url} alt={m.file_name || "Фото"}
-                                      className="max-w-full rounded-lg max-h-52 object-cover cursor-pointer"
-                                      onClick={() => window.open(m.file_url!, "_blank")} />
+                                    {fileSrc ? (
+                                      <img src={fileSrc} alt={m.file_name || "Фото"}
+                                        className="max-w-full rounded-lg max-h-52 object-cover cursor-pointer"
+                                        onClick={() => window.open(fileSrc, "_blank")} />
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-xs opacity-70 py-4">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Загрузка фото…
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                                 {m.message_type === "file" && m.file_url && (
-                                  <a href={m.file_url} target="_blank" rel="noopener noreferrer"
-                                    className={cn("flex items-center gap-2 text-sm hover:underline",
-                                      isOwn ? "text-primary-foreground" : "text-primary")}>
-                                    <Download className="h-4 w-4 flex-shrink-0" />
-                                    <span className="truncate">{m.file_name || "Файл"}</span>
-                                    {m.file_size && <span className="text-xs opacity-70">({Math.round(m.file_size / 1024)} КБ)</span>}
-                                  </a>
+                                  fileSrc ? (
+                                    <a href={fileSrc} target="_blank" rel="noopener noreferrer"
+                                      className={cn("flex items-center gap-2 text-sm hover:underline",
+                                        isOwn ? "text-primary-foreground" : "text-primary")}>
+                                      <Download className="h-4 w-4 flex-shrink-0" />
+                                      <span className="truncate">{m.file_name || "Файл"}</span>
+                                      {m.file_size && <span className="text-xs opacity-70">({Math.round(m.file_size / 1024)} КБ)</span>}
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-2 text-sm opacity-70">
+                                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                                      <span className="truncate">{m.file_name || "Файл"}</span>
+                                    </div>
+                                  )
                                 )}
                                 {m.message_type === "text" && m.content && (
                                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>

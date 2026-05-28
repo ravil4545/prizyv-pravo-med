@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
+import { uploadChatAttachment, getSignedChatAttachmentUrl } from "@/lib/storage";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { BookOpen } from "lucide-react";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
@@ -78,6 +79,8 @@ const LawyerChatPage = () => {
   const [allClients, setAllClients] = useState<SidebarClient[]>([]);
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [sidebarSearch, setSidebarSearch] = useState("");
+  // messageId → подписанная ссылка на вложение (bucket приватный).
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
 
   // AI suggestions
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -181,6 +184,7 @@ const LawyerChatPage = () => {
           if (prev.find((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        resolveAttachments([msg]);
         if (msg.sender_id !== user!.id) {
           supabase.from("lawyer_chat_messages").update({ is_read: true }).eq("id", msg.id);
           setUnreadMap((prev) => ({ ...prev, [clientId!]: Math.max(0, (prev[clientId!] || 1) - 1) }));
@@ -278,6 +282,20 @@ const LawyerChatPage = () => {
     setUnreadMap(map);
   };
 
+  // Подписываем ссылки на вложения (bucket приватный) — по одной на сообщение.
+  const resolveAttachments = async (msgs: Message[]) => {
+    const targets = msgs.filter((m) => m.file_url && (m.message_type === "image" || m.message_type === "file"));
+    if (targets.length === 0) return;
+    const entries = await Promise.all(
+      targets.map(async (m) => [m.id, await getSignedChatAttachmentUrl(m.file_url!)] as const),
+    );
+    setAttachmentUrls((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of entries) if (url) next[id] = url;
+      return next;
+    });
+  };
+
   const initChat = async () => {
     setLoading(true);
     const { data: c } = await supabase
@@ -288,7 +306,9 @@ const LawyerChatPage = () => {
     const { data: msgs } = await supabase
       .from("lawyer_chat_messages").select("*")
       .eq("lawyer_client_id", clientId).order("created_at", { ascending: true });
-    setMessages((msgs as Message[]) || []);
+    const list = (msgs as Message[]) || [];
+    setMessages(list);
+    resolveAttachments(list);
     setLoading(false);
 
     await supabase.from("lawyer_chat_messages")
@@ -390,6 +410,7 @@ const LawyerChatPage = () => {
         if (prev.find((m) => m.id === (data as Message).id)) return prev;
         return [...prev, data as Message];
       });
+      resolveAttachments([data as Message]);
     }
     setSending(false);
   };
@@ -412,10 +433,13 @@ const LawyerChatPage = () => {
     setUploading(true);
     const ext = file.name.split(".").pop();
     const path = `chat/${clientId}/${Date.now()}.${ext}`;
-    const { data, error } = await supabase.storage.from("chat-attachments").upload(path, file, { upsert: false });
-    if (error) { toast({ title: "Ошибка загрузки", description: error.message, variant: "destructive" }); setUploading(false); return; }
-    const { data: { publicUrl } } = supabase.storage.from("chat-attachments").getPublicUrl(data.path);
-    await sendMessage(file.name, file.type.startsWith("image/") ? "image" : "file", publicUrl, file.name, file.size);
+    try {
+      // Храним storage-путь (bucket приватный); ссылку подписываем при показе.
+      const storedPath = await uploadChatAttachment(path, file, file.type);
+      await sendMessage(file.name, file.type.startsWith("image/") ? "image" : "file", storedPath, file.name, file.size);
+    } catch (err: any) {
+      toast({ title: "Ошибка загрузки", description: err?.message, variant: "destructive" });
+    }
     setUploading(false);
     e.target.value = "";
   };
@@ -747,6 +771,7 @@ const LawyerChatPage = () => {
                     </div>
                     {msgs.map((m) => {
                       const isOwn = m.sender_id === user!.id;
+                      const fileSrc = attachmentUrls[m.id];
                       return (
                         <div key={m.id} className={cn("flex mb-1 items-end gap-1 group", isOwn ? "flex-row-reverse" : "")}>
                           {isOwn && m.message_type === "text" && editingId !== m.id && (
@@ -788,19 +813,32 @@ const LawyerChatPage = () => {
                               <>
                                 {m.message_type === "image" && m.file_url && (
                                   <div className="mb-1.5">
-                                    <img src={m.file_url} alt={m.file_name || "Фото"}
-                                      className="max-w-full rounded-lg max-h-52 object-cover cursor-pointer"
-                                      onClick={() => window.open(m.file_url!, "_blank")} />
+                                    {fileSrc ? (
+                                      <img src={fileSrc} alt={m.file_name || "Фото"}
+                                        className="max-w-full rounded-lg max-h-52 object-cover cursor-pointer"
+                                        onClick={() => window.open(fileSrc, "_blank")} />
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-xs opacity-70 py-4">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Загрузка фото…
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                                 {m.message_type === "file" && m.file_url && (
-                                  <a href={m.file_url} target="_blank" rel="noopener noreferrer"
-                                    className={cn("flex items-center gap-2 text-sm hover:underline",
-                                      isOwn ? "text-primary-foreground" : "text-primary")}>
-                                    <Download className="h-4 w-4 flex-shrink-0" />
-                                    <span className="truncate">{m.file_name || "Файл"}</span>
-                                    {m.file_size && <span className="text-xs opacity-70">({Math.round(m.file_size / 1024)} КБ)</span>}
-                                  </a>
+                                  fileSrc ? (
+                                    <a href={fileSrc} target="_blank" rel="noopener noreferrer"
+                                      className={cn("flex items-center gap-2 text-sm hover:underline",
+                                        isOwn ? "text-primary-foreground" : "text-primary")}>
+                                      <Download className="h-4 w-4 flex-shrink-0" />
+                                      <span className="truncate">{m.file_name || "Файл"}</span>
+                                      {m.file_size && <span className="text-xs opacity-70">({Math.round(m.file_size / 1024)} КБ)</span>}
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-2 text-sm opacity-70">
+                                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                                      <span className="truncate">{m.file_name || "Файл"}</span>
+                                    </div>
+                                  )
                                 )}
                                 {m.message_type === "text" && m.content && (
                                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>

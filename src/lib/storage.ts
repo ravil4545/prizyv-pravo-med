@@ -44,3 +44,46 @@ export async function uploadMedicalDocument(
 
   return fileName; // Store path, not URL
 }
+
+// ── Chat attachments ────────────────────────────────────────────────────────
+// Bucket `chat-attachments` приватный (RLS — только участники диалога).
+// В БД храним storage-путь, а не публичный URL: ссылку подписываем при показе.
+const CHAT_BUCKET = "chat-attachments";
+
+/**
+ * Из значения file_url достаём storage-путь. Поддерживает и легаси-значения
+ * (полный публичный URL из старых сообщений), и новые (уже путь).
+ */
+export function extractChatAttachmentPath(fileUrl: string): string {
+  if (!fileUrl) return fileUrl;
+  if (!fileUrl.startsWith("http")) return fileUrl;
+  const match = fileUrl.match(/\/(?:object\/(?:public|sign)\/)?chat-attachments\/(.+?)(?:\?|$)/);
+  return match ? match[1] : fileUrl;
+}
+
+/**
+ * Подписанная ссылка на вложение чата (или null при ошибке).
+ */
+export async function getSignedChatAttachmentUrl(fileUrl: string): Promise<string | null> {
+  if (!fileUrl) return null;
+  const filePath = extractChatAttachmentPath(fileUrl);
+  const { data, error } = await supabase.storage.from(CHAT_BUCKET).createSignedUrl(filePath, SIGNED_URL_EXPIRY);
+  if (error) {
+    console.error("Error creating chat attachment signed URL:", error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+/**
+ * Загрузка вложения чата. Возвращает storage-путь (его и пишем в file_url).
+ */
+export async function uploadChatAttachment(
+  path: string,
+  file: Blob,
+  contentType?: string,
+): Promise<string> {
+  const { error } = await supabase.storage.from(CHAT_BUCKET).upload(path, file, { upsert: false, contentType });
+  if (error) throw error;
+  return path; // храним путь, не URL
+}
