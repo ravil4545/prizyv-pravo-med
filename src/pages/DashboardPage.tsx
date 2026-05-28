@@ -38,6 +38,7 @@ import AICaseSummary from "@/components/dashboard/AICaseSummary";
 import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
 import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
+import ShareWithLawyer from "@/components/ShareWithLawyer";
 
 interface DashboardCard {
   title: string;
@@ -261,6 +262,13 @@ const DashboardPage = () => {
           {!isDemoMode && !isLawyer && (
             <div className="mb-6">
               <ClientLawyerRequests />
+            </div>
+          )}
+
+          {/* ── Мои юристы: тумблер доступа к данным + визитка ──────────── */}
+          {!isDemoMode && !isLawyer && (
+            <div className="mb-6">
+              <ShareWithLawyer />
             </div>
           )}
 
