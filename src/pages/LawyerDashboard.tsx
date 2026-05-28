@@ -55,23 +55,44 @@ const LawyerDashboard = () => {
     loadStats();
   }, [user, profileLoading, isLawyer]);
 
+  // Считаем агрегаты count-запросами (head: true — строки не тянем), а не
+  // вытягиванием всей таблицы. При росте базы у Pro-юриста (лимит клиентов
+  // снят) полный select деградировал; теперь нагрузка O(1) по объёму данных.
   const loadStats = async () => {
-    const { data: clients } = await supabase
-      .from("lawyer_clients")
-      .select("id, client_name, client_phone, crm_stage, priority, updated_at, case_won")
-      .eq("lawyer_id", user!.id)
-      .order("updated_at", { ascending: false });
+    // База: count по строкам юриста; build добавляет фильтр конкретной метрики.
+    const countClients = (build?: (q: any) => any) => {
+      const q = supabase
+        .from("lawyer_clients")
+        .select("*", { count: "exact", head: true })
+        .eq("lawyer_id", user!.id);
+      return build ? build(q) : q;
+    };
 
-    if (!clients) { setDataLoading(false); return; }
+    const [totalRes, urgentRes, wonRes, recentRes, ...stageRes] = await Promise.all([
+      countClients(),
+      countClients((q) => q.eq("priority", "urgent")),
+      countClients((q) => q.eq("case_won", true)),
+      supabase
+        .from("lawyer_clients")
+        .select("id, client_name, client_phone, crm_stage, priority, updated_at")
+        .eq("lawyer_id", user!.id)
+        .order("updated_at", { ascending: false })
+        .limit(6),
+      ...CRM_STAGE_ORDER.map((stage) => countClients((q) => q.eq("crm_stage", stage))),
+    ]);
 
-    setTotalClients(clients.length);
-    setUrgentCount(clients.filter((c) => c.priority === "urgent").length);
-    setWonCount(clients.filter((c) => c.case_won).length);
-    setRecentClients(clients.slice(0, 6) as RecentClient[]);
+    setTotalClients(totalRes.count ?? 0);
+    setUrgentCount(urgentRes.count ?? 0);
+    setWonCount(wonRes.count ?? 0);
+    setRecentClients((recentRes.data as RecentClient[]) || []);
 
-    const counts: Record<string, number> = {};
-    clients.forEach((c) => { counts[c.crm_stage] = (counts[c.crm_stage] || 0) + 1; });
-    setStageCounts(Object.entries(counts).map(([stage, count]) => ({ stage, count })));
+    // Воронка и счётчик «активных этапов» — только этапы с count > 0.
+    const counts: StageCount[] = [];
+    CRM_STAGE_ORDER.forEach((stage, i) => {
+      const c = stageRes[i].count ?? 0;
+      if (c > 0) counts.push({ stage, count: c });
+    });
+    setStageCounts(counts);
     setDataLoading(false);
   };
 

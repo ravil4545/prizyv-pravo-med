@@ -12,27 +12,88 @@ import { BarChart3, Users, Trophy, TrendingUp, AlertTriangle, ArrowLeft, Clock }
 import { cn } from "@/lib/utils";
 import { CRM_STAGES, PRIORITIES } from "@/lib/crmStages";
 
-interface ClientRow {
-  id: string; crm_stage: string; priority: string;
-  case_won: boolean; created_at: string;
+interface AnalyticsData {
+  total: number;
+  won: number;
+  urgent: number;
+  stageMap: Record<string, number>;
+  priorityMap: Record<string, number>;
+  monthly: { key: string; count: number }[];
 }
+
+const EMPTY_ANALYTICS: AnalyticsData = {
+  total: 0, won: 0, urgent: 0, stageMap: {}, priorityMap: {}, monthly: [],
+};
 
 const LawyerAnalyticsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isLawyer, loading: profileLoading } = useLawyerProfile();
-  const [clients, setClients] = useState<ClientRow[]>([]);
+  const [data, setData] = useState<AnalyticsData>(EMPTY_ANALYTICS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isLawyer) { navigate("/dashboard"); return; }
-    supabase
-      .from("lawyer_clients")
-      .select("id, crm_stage, priority, case_won, created_at")
-      .eq("lawyer_id", user.id)
-      .then(({ data }) => { setClients((data as ClientRow[]) || []); setLoading(false); });
+    loadAnalytics();
   }, [user, profileLoading, isLawyer]);
+
+  // Аналитика считается агрегирующими count-запросами (head: true — строки не
+  // тянем) вместо вытягивания всей таблицы lawyer_clients. O(1) по объёму
+  // данных: при росте базы у Pro-юриста (лимит клиентов снят) страница раньше
+  // деградировала, теперь нагрузка не зависит от числа клиентов.
+  const loadAnalytics = async () => {
+    const countClients = (build?: (q: any) => any) => {
+      const q = supabase
+        .from("lawyer_clients")
+        .select("*", { count: "exact", head: true })
+        .eq("lawyer_id", user!.id);
+      return build ? build(q) : q;
+    };
+
+    // Последние 6 месяцев — границы [начало месяца, начало следующего).
+    const now = new Date();
+    const monthRanges = Array.from({ length: 6 }, (_, idx) => {
+      const i = 5 - idx;
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      return {
+        key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`,
+        start: start.toISOString(),
+        end: end.toISOString(),
+      };
+    });
+
+    const [wonRes, stageRes, priorityRes, monthlyRes] = await Promise.all([
+      countClients((q) => q.eq("case_won", true)),
+      Promise.all(CRM_STAGES.map((s) => countClients((q) => q.eq("crm_stage", s.value)))),
+      Promise.all(PRIORITIES.map((p) => countClients((q) => q.eq("priority", p.value)))),
+      Promise.all(
+        monthRanges.map((m) => countClients((q) => q.gte("created_at", m.start).lt("created_at", m.end))),
+      ),
+    ]);
+
+    const stageMap: Record<string, number> = {};
+    let total = 0;
+    CRM_STAGES.forEach((s, i) => {
+      const c = stageRes[i].count ?? 0;
+      stageMap[s.value] = c;
+      total += c;
+    });
+
+    const priorityMap: Record<string, number> = {};
+    PRIORITIES.forEach((p, i) => { priorityMap[p.value] = priorityRes[i].count ?? 0; });
+
+    setData({
+      total,
+      won: wonRes.count ?? 0,
+      urgent: priorityMap["urgent"] ?? 0,
+      stageMap,
+      priorityMap,
+      monthly: monthRanges.map((m, i) => ({ key: m.key, count: monthlyRes[i].count ?? 0 })),
+    });
+    setLoading(false);
+  };
 
   if (loading || profileLoading) return (
     <div className="min-h-screen bg-background"><Header />
@@ -42,32 +103,10 @@ const LawyerAnalyticsPage = () => {
     </div>
   );
 
-  const total = clients.length;
-  const won = clients.filter((c) => c.case_won).length;
-  const urgent = clients.filter((c) => c.priority === "urgent").length;
+  const { total, won, urgent, stageMap, priorityMap, monthly } = data;
   const winRate = total > 0 ? Math.round((won / total) * 100) : 0;
-
-  // Stage breakdown
-  const stageMap: Record<string, number> = {};
-  clients.forEach((c) => { stageMap[c.crm_stage] = (stageMap[c.crm_stage] || 0) + 1; });
   const maxStage = Math.max(1, ...Object.values(stageMap));
-
-  // Priority breakdown
-  const priorityMap: Record<string, number> = {};
-  clients.forEach((c) => { priorityMap[c.priority] = (priorityMap[c.priority] || 0) + 1; });
-
-  // Monthly registrations (last 6 months)
-  const now = new Date();
-  const monthlyMap: Record<string, number> = {};
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthlyMap[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`] = 0;
-  }
-  clients.forEach((c) => {
-    const key = c.created_at.slice(0, 7);
-    if (key in monthlyMap) monthlyMap[key] = (monthlyMap[key] || 0) + 1;
-  });
-  const maxMonth = Math.max(1, ...Object.values(monthlyMap));
+  const maxMonth = Math.max(1, ...monthly.map((m) => m.count));
   const monthLabels: Record<string, string> = {
     "01": "Янв", "02": "Фев", "03": "Мар", "04": "Апр",
     "05": "Май", "06": "Июн", "07": "Июл", "08": "Авг",
@@ -194,7 +233,7 @@ const LawyerAnalyticsPage = () => {
           </CardHeader>
           <CardContent>
             <div className="flex items-end gap-2 h-28">
-              {Object.entries(monthlyMap).map(([key, count]) => {
+              {monthly.map(({ key, count }) => {
                 const pct = Math.round((count / maxMonth) * 100);
                 const [, month] = key.split("-");
                 return (
