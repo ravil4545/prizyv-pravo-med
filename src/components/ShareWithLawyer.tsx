@@ -225,37 +225,13 @@ const ShareWithLawyer = () => {
   const activeCount = lawyers.filter((l) => isGranted(l.lawyer_id)).length;
   const allActive = lawyers.length > 0 && activeCount === lawyers.length;
 
-  if (loading) {
-    return (
-      <Card><CardContent className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Загружаем доступы…
-      </CardContent></Card>
-    );
-  }
+  // Пока грузим — ничего не показываем (не мигаем спиннером в кабинете).
+  if (loading) return null;
 
-  if (lawyers.length === 0) {
-    return (
-      <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/10">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="h-5 w-5 text-blue-500" />
-            Доступ юриста к данным
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p className="flex items-start gap-2">
-            <Users className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            Ни один юрист пока не работает с вашим делом.
-          </p>
-          <p className="text-xs">
-            Если юрист дал вам <strong>код приглашения</strong> — введите его в блоке
-            «У меня есть код от юриста» выше. После этого здесь появится переключатель
-            доступа к вашим медкартам и ИИ-анализам.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Нет юристов — блок просто не отображается. Подключиться к юристу клиент
+  // может в каталоге /lawyers (плашка → визитка → тумблер доступа), поэтому
+  // пустая заглушка тут не нужна.
+  if (lawyers.length === 0) return null;
 
   return (
     <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/10">

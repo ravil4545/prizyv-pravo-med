@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Crown, MapPin, Briefcase, MessageCircle, X, Loader2, ShieldCheck, Calendar } from "lucide-react";
-import { format } from "date-fns";
-import { ru } from "date-fns/locale";
+import {
+  Search, Crown, MapPin, Briefcase, MessageCircle, X, Loader2, ShieldCheck, Calendar,
+  Phone, Send, Mail, ExternalLink, FileText, Brain, User,
+} from "lucide-react";
 
 interface LawyerCard {
   user_id: string;
@@ -23,6 +25,17 @@ interface LawyerCard {
   city: string | null;
   region: string | null;
   phone: string | null; // не отображаем публично — только для расчёта верификации
+  // Бренд-поля (из lawyer_profiles), которые юрист внёс о себе:
+  brand_subtitle: string | null;
+  specialization: string | null;
+  brand_about: string | null;
+  bio: string | null;
+  photo_url: string | null;
+  brand_phone: string | null;
+  brand_telegram: string | null;
+  brand_whatsapp: string | null;
+  brand_email: string | null;
+  slug: string | null;
 }
 
 const TIER_LABELS: Record<string, string> = { basic: "Basic", pro: "Pro" };
@@ -38,8 +51,54 @@ const LawyersDirectoryPage = () => {
   const [selectedLawyer, setSelectedLawyer] = useState<LawyerCard | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
+  // lawyer_id → доступ открыт. Для текущего клиента — какие юристы уже подключены.
+  const [accessMap, setAccessMap] = useState<Record<string, boolean>>({});
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  useEffect(() => { loadLawyers(); }, []);
+  useEffect(() => { loadLawyers(); loadMyAccess(); }, []);
+
+  // Какие юристы уже имеют доступ к данным текущего клиента (для тумблеров).
+  const loadMyAccess = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+    const { data } = await supabase
+      .from("client_document_access")
+      .select("lawyer_id, is_active")
+      .eq("client_user_id", session.user.id);
+    const map: Record<string, boolean> = {};
+    (data || []).forEach((r: any) => { map[r.lawyer_id] = !!r.is_active; });
+    setAccessMap(map);
+  };
+
+  // Тумблер «дать доступ» прямо из каталога/попапа.
+  const toggleAccess = async (lawyerId: string, grant: boolean) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      navigate(`/auth?next=${encodeURIComponent(`/lawyers?request=${lawyerId}`)}`);
+      return;
+    }
+    setTogglingId(lawyerId);
+    // Оптимистично
+    setAccessMap((prev) => ({ ...prev, [lawyerId]: grant }));
+    try {
+      if (grant) {
+        const { error } = await supabase.rpc("client_connect_to_lawyer", {
+          p_lawyer_id: lawyerId, p_grant_access: true,
+        });
+        if (error) throw error;
+        toast({ title: "Доступ открыт", description: "Юрист видит ваши документы, профиль и ИИ-расшифровки. Отозвать можно здесь же." });
+      } else {
+        const { error } = await supabase.rpc("client_revoke_lawyer_access", { p_lawyer_id: lawyerId });
+        if (error) throw error;
+        toast({ title: "Доступ закрыт" });
+      }
+    } catch (e: any) {
+      setAccessMap((prev) => ({ ...prev, [lawyerId]: !grant })); // откат
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   // Авто-открытие карточки и формы запроса по ?request=<lawyer_user_id> (возврат с auth)
   useEffect(() => {
@@ -54,7 +113,7 @@ const LawyersDirectoryPage = () => {
     setLoading(true);
     const { data: profiles } = await supabase
       .from("lawyer_profiles")
-      .select("user_id, full_name, subscription_tier, clients_limit, created_at, is_active")
+      .select("user_id, full_name, subscription_tier, clients_limit, created_at, is_active, brand_subtitle, specialization, brand_about, bio, photo_url, brand_phone, brand_telegram, brand_whatsapp, brand_email, slug")
       .eq("is_active", true)
       .order("created_at", { ascending: true });
 
@@ -85,6 +144,16 @@ const LawyersDirectoryPage = () => {
         city: p.city || null,
         region: p.region || null,
         phone: p.phone || null,
+        brand_subtitle: r.brand_subtitle || null,
+        specialization: r.specialization || null,
+        brand_about: r.brand_about || null,
+        bio: r.bio || null,
+        photo_url: r.photo_url || null,
+        brand_phone: r.brand_phone || null,
+        brand_telegram: r.brand_telegram || null,
+        brand_whatsapp: r.brand_whatsapp || null,
+        brand_email: r.brand_email || null,
+        slug: r.slug || null,
       };
     });
     setLawyers(cards);
@@ -120,34 +189,17 @@ const LawyersDirectoryPage = () => {
 
     setRequesting(true);
     try {
-      // Проверяем — может уже есть запись от этого клиента к этому юристу
-      const { data: existing } = await supabase
-        .from("lawyer_clients")
-        .select("id")
-        .eq("lawyer_id", selectedLawyer.user_id)
-        .eq("client_user_id", session.user.id)
-        .maybeSingle();
-
-      let lawyerClientId = existing?.id;
-
-      if (!lawyerClientId) {
-        // Обезличенное имя — реальные ФИО/телефон/email раскроются юристу
-        // только когда клиент сам откроет доступ к документам через профиль
-        const anonName = `Клиент #${session.user.id.substring(0, 8)}`;
-        const { data: created, error: insertError } = await supabase
-          .from("lawyer_clients")
-          .insert({
-            lawyer_id: selectedLawyer.user_id,
-            client_user_id: session.user.id,
-            client_name: anonName,
-            crm_stage: "initial_contact",
-            priority: "high",
-          })
-          .select()
-          .single();
-        if (insertError) throw insertError;
-        lawyerClientId = created.id;
-      }
+      // Связь создаём через RPC (прямой INSERT в lawyer_clients от клиента
+      // режет RLS). p_grant_access=false — просто чат, без открытия документов;
+      // доступ клиент даёт отдельным тумблером, осознанно.
+      const { data: conn, error: connErr } = await supabase.rpc("client_connect_to_lawyer", {
+        p_lawyer_id: selectedLawyer.user_id,
+        p_grant_access: false,
+      });
+      if (connErr) throw connErr;
+      const row = Array.isArray(conn) ? conn[0] : conn;
+      const lawyerClientId = row?.lawyer_client_id;
+      if (!lawyerClientId) throw new Error("Не удалось создать диалог");
 
       // Первое сообщение от клиента
       const messageText = requestMessage.trim() ||
@@ -271,23 +323,29 @@ const LawyersDirectoryPage = () => {
                 return (
                   <article
                     key={l.user_id}
-                    className={`border bg-paper p-5 sm:p-6 transition-colors group ${
-                      isPro ? "border-gold" : "border-ink/15 hover:border-gold/60"
+                    onClick={() => setSelectedLawyer(l)}
+                    className={`border bg-paper p-5 sm:p-6 transition-colors group cursor-pointer ${
+                      isPro ? "border-gold hover:bg-gold/[0.03]" : "border-ink/15 hover:border-gold/60 hover:bg-paper-deep/20"
                     }`}
                   >
                     {/* Top: avatar + name + tier */}
                     <div className="flex items-start gap-4 mb-4">
-                      <div className={`flex-shrink-0 h-14 w-14 border flex items-center justify-center font-serif italic text-xl ${
+                      <div className={`flex-shrink-0 h-14 w-14 border flex items-center justify-center font-serif italic text-xl overflow-hidden ${
                         isPro ? "border-gold text-gold-deep" : "border-ink/30 text-ink"
                       }`}>
-                        {l.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")}
+                        {l.photo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={l.photo_url} alt={l.full_name} className="h-full w-full object-cover" />
+                        ) : (
+                          l.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-serif text-lg sm:text-xl text-ink leading-tight">
                           {l.full_name}
                         </h3>
-                        <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1">
-                          Юрист · Призывное право
+                        <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold mt-1 truncate">
+                          {l.brand_subtitle || l.specialization || "Юрист · Призывное право"}
                         </p>
                       </div>
                       {isPro && (
@@ -321,11 +379,14 @@ const LawyersDirectoryPage = () => {
 
                     {/* CTA */}
                     <Button
-                      onClick={() => setSelectedLawyer(l)}
+                      onClick={(e) => { e.stopPropagation(); setSelectedLawyer(l); }}
                       className="w-full bg-ink text-paper hover:bg-gold hover:text-ink"
                     >
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Нужна консультация
+                      {accessMap[l.user_id] ? (
+                        <><ShieldCheck className="h-4 w-4 mr-2" /> Доступ открыт · подробнее</>
+                      ) : (
+                        <><Briefcase className="h-4 w-4 mr-2" /> Открыть визитку</>
+                      )}
                     </Button>
                   </article>
                 );
@@ -357,58 +418,138 @@ const LawyersDirectoryPage = () => {
 
       <Footer />
 
-      {/* Request dialog */}
+      {/* Визитка юриста + тумблер доступа + запрос консультации */}
       <Dialog open={!!selectedLawyer} onOpenChange={(open) => { if (!open) { setSelectedLawyer(null); setRequestMessage(""); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-xl">
-              Запрос консультации
-            </DialogTitle>
-          </DialogHeader>
-          {selectedLawyer && (
-            <div className="space-y-4">
-              <div className="border border-ink/15 bg-paper-deep/40 p-3 flex items-center gap-3">
-                <div className="h-10 w-10 border border-ink/30 flex items-center justify-center font-serif italic text-base text-ink">
-                  {selectedLawyer.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")}
+        <DialogContent className="max-w-lg p-0 overflow-hidden">
+          {selectedLawyer && (() => {
+            const l = selectedLawyer;
+            const about = l.brand_about || l.bio;
+            const subtitle = l.brand_subtitle || l.specialization || "Юрист по призывному праву";
+            const tg = l.brand_telegram?.replace(/^@/, "");
+            const wa = l.brand_whatsapp?.replace(/\D/g, "");
+            const hasContacts = l.brand_phone || tg || wa || l.brand_email;
+            const granted = !!accessMap[l.user_id];
+            const isPro = l.subscription_tier === "pro";
+            return (
+              <>
+                <DialogHeader className="sr-only">
+                  <DialogTitle>{l.full_name}</DialogTitle>
+                </DialogHeader>
+
+                {/* Шапка-визитка */}
+                <div className="flex items-center gap-4 p-5 bg-gradient-to-br from-gold/10 to-paper-deep/30 border-b border-ink/10">
+                  <div className="h-16 w-16 rounded-full overflow-hidden border border-ink/20 flex items-center justify-center font-serif italic text-2xl text-ink bg-paper flex-shrink-0">
+                    {l.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={l.photo_url} alt={l.full_name} className="h-full w-full object-cover" />
+                    ) : (
+                      l.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-serif text-xl text-ink leading-tight">{l.full_name}</h3>
+                      {isPro && (
+                        <Badge className="bg-gold/15 text-gold-deep border-gold/40 text-[10px] uppercase">
+                          <Crown className="h-3 w-3 mr-1" /> Pro
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-ink-soft mt-1">{subtitle}</p>
+                    {(l.city || l.region) && (
+                      <p className="text-xs text-ink/50 mt-0.5 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> {l.city}{l.city && l.region ? ", " : ""}{l.region}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-ink">{selectedLawyer.full_name}</p>
-                  <p className="text-xs text-ink/60 font-mono tracking-wide uppercase">
-                    {TIER_LABELS[selectedLawyer.subscription_tier] || "Юрист"}
+
+                <div className="p-5 space-y-4">
+                  {/* О себе */}
+                  {about && (
+                    <p className="text-sm text-ink-soft leading-relaxed">{about}</p>
+                  )}
+
+                  {/* Контакты — показываем то, что юрист внёс в бренд */}
+                  {hasContacts && (
+                    <div className="space-y-1.5">
+                      {l.brand_phone && (
+                        <a href={`tel:${l.brand_phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 text-sm text-ink-soft hover:text-gold-deep">
+                          <Phone className="h-3.5 w-3.5 text-ink/40" /> {l.brand_phone}
+                        </a>
+                      )}
+                      {tg && (
+                        <a href={`https://t.me/${tg}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-ink-soft hover:text-sky-600">
+                          <Send className="h-3.5 w-3.5 text-ink/40" /> @{tg}
+                        </a>
+                      )}
+                      {wa && (
+                        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-ink-soft hover:text-emerald-600">
+                          <MessageCircle className="h-3.5 w-3.5 text-ink/40" /> WhatsApp
+                        </a>
+                      )}
+                      {l.brand_email && (
+                        <a href={`mailto:${l.brand_email}`} className="flex items-center gap-2 text-sm text-ink-soft hover:text-gold-deep break-all">
+                          <Mail className="h-3.5 w-3.5 text-ink/40" /> {l.brand_email}
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {l.slug && (
+                    <a href={`/u/${l.slug}`} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-gold-deep hover:underline">
+                      <ExternalLink className="h-3.5 w-3.5" /> Открыть страницу юриста
+                    </a>
+                  )}
+
+                  {/* Тумблер доступа — главный CTA */}
+                  <div className={`rounded-lg border p-3.5 ${granted ? "border-emerald-300 bg-emerald-50/60" : "border-ink/15 bg-paper-deep/30"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink flex items-center gap-1.5">
+                          <ShieldCheck className={`h-4 w-4 ${granted ? "text-emerald-600" : "text-ink/40"}`} />
+                          {granted ? "Доступ открыт" : "Дать доступ юристу"}
+                        </p>
+                        <p className="text-xs text-ink/55 mt-0.5">
+                          Документы, профиль и все ИИ-расшифровки. Отозвать можно в любой момент.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={granted}
+                        disabled={togglingId === l.user_id}
+                        onCheckedChange={(v) => toggleAccess(l.user_id, v)}
+                        aria-label="Доступ юриста к данным"
+                      />
+                    </div>
+                    {/* Что откроется */}
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
+                      <span className="text-[10px] gap-0.5 inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700"><FileText className="h-3 w-3" /> Документы</span>
+                      <span className="text-[10px] gap-0.5 inline-flex items-center px-1.5 py-0.5 rounded bg-violet-100 text-violet-700"><Brain className="h-3 w-3" /> ИИ-расшифровки</span>
+                      <span className="text-[10px] gap-0.5 inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"><User className="h-3 w-3" /> Профиль</span>
+                    </div>
+                  </div>
+
+                  {/* Написать в чат */}
+                  <Button
+                    onClick={requestConsultation}
+                    disabled={requesting}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {requesting ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Отправляем...</>
+                    ) : (
+                      <><MessageCircle className="h-4 w-4 mr-2" /> Написать в чат</>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-ink/50 text-center">
+                    Общение до договора — только в защищённом чате сайта.
                   </p>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-ink block mb-1.5">
-                  Опишите ситуацию <span className="text-ink/50 font-normal">(можно пусто — юрист ответит на типовой запрос)</span>
-                </label>
-                <textarea
-                  value={requestMessage}
-                  onChange={(e) => setRequestMessage(e.target.value)}
-                  placeholder="Например: получил повестку, у меня диагноз остеохондроз — какие шансы на категорию В?"
-                  rows={4}
-                  className="w-full px-3 py-2 border border-ink/20 bg-paper focus:outline-none focus:border-gold text-sm resize-none"
-                />
-                <p className="text-[11px] text-ink/55 mt-1.5">
-                  ⚠️ Не указывайте номера телефонов и логины мессенджеров — они автоматически скрываются.
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setSelectedLawyer(null); setRequestMessage(""); }} className="flex-1">
-                  Отмена
-                </Button>
-                <Button onClick={requestConsultation} disabled={requesting} className="flex-1 bg-gold text-ink hover:bg-ink hover:text-paper">
-                  {requesting ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Отправляем...</>
-                  ) : (
-                    <><MessageCircle className="h-4 w-4 mr-2" /> Отправить</>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
