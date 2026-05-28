@@ -58,12 +58,11 @@ const DashboardPage = () => {
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useUnreadMessages();
-  const { isLawyer, loading: lawyerLoading } = useLawyerProfile();
+  const { isLawyer } = useLawyerProfile();
 
-  // Юристы попадают в свой кабинет
-  useEffect(() => {
-    if (!lawyerLoading && isLawyer) navigate("/lawyer", { replace: true });
-  }, [isLawyer, lawyerLoading]);
+  // Кабинеты независимы: юрист тоже может пользоваться обычным личным
+  // кабинетом. Авто-редирект на /lawyer убран — вход в кабинет юриста
+  // теперь через подвал сайта.
 
   useEffect(() => {
     checkUser();

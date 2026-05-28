@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Shield, FileText, Brain, Users, Info, ShieldOff, ShieldCheck,
+  Shield, FileText, Brain, Users, User, Info, ShieldOff, ShieldCheck,
   ChevronDown, ChevronUp, Loader2, MoreVertical, UserMinus, AlertTriangle,
 } from "lucide-react";
 import {
@@ -175,8 +175,8 @@ const ShareWithLawyer = () => {
       toast({
         title: next ? "Доступ открыт" : "Доступ отозван",
         description: next
-          ? "Юрист видит ваши документы и результаты ИИ-анализа"
-          : "Юрист больше не видит документы и ИИ-анализы",
+          ? "Юрист видит ваши документы, профиль и все ИИ-расшифровки"
+          : "Юрист больше не видит документы, профиль и ИИ-расшифровки",
       });
     } else {
       // Откатываем при ошибке
@@ -229,7 +229,7 @@ const ShareWithLawyer = () => {
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Shield className="h-5 w-5 text-blue-500" />
-            Доступ юриста к документам
+            Доступ юриста к данным
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
@@ -253,7 +253,7 @@ const ShareWithLawyer = () => {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <Shield className="h-5 w-5 text-blue-500" />
-            Доступ юриста к документам
+            Доступ юриста к данным
             {activeCount > 0 && (
               <Badge className="bg-blue-100 text-blue-700 border-blue-200">
                 {activeCount} из {lawyers.length}
@@ -308,9 +308,18 @@ const ShareWithLawyer = () => {
             <div className="flex items-start gap-2">
               <Brain className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium">Результаты ИИ-анализа этих документов</p>
+                <p className="font-medium">Все ИИ-расшифровки и своды</p>
                 <p className="text-muted-foreground">
-                  Категория годности по ИИ, краткое заключение, рекомендации — то же, что видите вы у каждого документа.
+                  Категория годности по ИИ, заключения и рекомендации по каждому документу, а также сводный анализ дела.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <User className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Профиль</p>
+                <p className="text-muted-foreground">
+                  ФИО, контакты и адрес из вашего профиля — чтобы юрист корректно заполнял документы и досье.
                 </p>
               </div>
             </div>
@@ -319,7 +328,7 @@ const ShareWithLawyer = () => {
               <div>
                 <p className="font-medium">Доступ можно отозвать в один клик</p>
                 <p className="text-muted-foreground">
-                  Юрист потеряет доступ к документам и ИИ-анализам мгновенно. История сообщений в чате остаётся.
+                  Юрист мгновенно потеряет доступ к документам, ИИ-анализам и профилю. История сообщений в чате остаётся.
                 </p>
               </div>
             </div>

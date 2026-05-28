@@ -14,12 +14,17 @@ interface RoleGuardProps {
 }
 
 /**
- * Разделяет кабинеты: на /dashboard/* пускаем только клиентов, на /lawyer/*
- * только юристов. Если зашёл «не та» роль — мягко переводим в её родной
- * кабинет, чтобы интерфейс не путал.
+ * Кабинет клиента и кабинет юриста — РАЗНЫЕ сущности, но один человек может
+ * пользоваться обоими (юрист тоже обычный пользователь сайта).
  *
- * Пока подгружаются auth/lawyer-профиль — рендерим заглушку, чтобы не было
- * вспышки контента «чужой» роли.
+ * Поэтому:
+ *   • /dashboard/* (role="client") — доступен любому залогиненному, включая
+ *     юриста. Вход — через шапку сайта.
+ *   • /lawyer/*    (role="lawyer") — только активному юристу. Вход — через
+ *     подвал сайта. Не-юриста отправляем в обычный кабинет.
+ *
+ * Раньше клиента-юриста насильно перекидывало с /dashboard на /lawyer — это
+ * мешало юристу пользоваться обычным кабинетом. Убрано.
  */
 const RoleGuard = ({ role, children, authRedirect }: RoleGuardProps) => {
   const location = useLocation();
@@ -38,22 +43,20 @@ const RoleGuard = ({ role, children, authRedirect }: RoleGuardProps) => {
       return;
     }
 
+    // Кабинет юриста — только для активных юристов. Остальных в обычный кабинет.
     if (role === "lawyer" && !isLawyer) {
       navigate("/dashboard", { replace: true });
       return;
     }
-    if (role === "client" && isLawyer) {
-      navigate("/lawyer", { replace: true });
-      return;
-    }
+    // role === "client": пускаем всех залогиненных (в т.ч. юристов) — кабинеты
+    // независимы, насильно никого не перекидываем.
   }, [loading, user, isLawyer, role, location.pathname, location.search, navigate, authRedirect]);
 
   // Skeleton пока решаем куда отправить
   const shouldShowSkeleton =
     loading ||
     !user ||
-    (role === "lawyer" && !isLawyer) ||
-    (role === "client" && isLawyer);
+    (role === "lawyer" && !isLawyer);
 
   if (shouldShowSkeleton) {
     return (

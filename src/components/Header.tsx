@@ -59,8 +59,9 @@ const Header = () => {
   const { isLawyer } = useLawyerProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Куда ведёт «Кабинет» в Header — клиента в /dashboard, юриста в /lawyer
-  const cabinetPath = isLawyer ? "/lawyer" : "/dashboard";
+  // Шапка ВСЕГДА ведёт в обычный личный кабинет — он общий для всех
+  // (включая юристов). Вход в кабинет юриста вынесен в подвал сайта.
+  const cabinetPath = "/dashboard";
 
   const brandPhoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const brandWhatsapp = branding.whatsapp || "79253500533";
@@ -186,7 +187,7 @@ const Header = () => {
                     : "text-primary hover:bg-primary/8"
                 )}
               >
-                {isLawyer ? "Кабинет юриста" : "Кабинет"}
+                Кабинет
               </Link>
             )}
           </nav>
@@ -250,7 +251,7 @@ const Header = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate(isLawyer ? "/lawyer/chats" : "/client/messages")}
+                onClick={() => navigate("/client/messages")}
                 className="h-10 w-10 relative"
                 aria-label={unreadCount > 0 ? `Сообщения (${unreadCount})` : "Сообщения"}
               >
@@ -283,8 +284,14 @@ const Header = () => {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate(cabinetPath)}>
                     <User className="h-4 w-4 mr-2" />
-                    {isLawyer ? "Кабинет юриста" : "Личный кабинет"}
+                    Личный кабинет
                   </DropdownMenuItem>
+                  {isLawyer && (
+                    <DropdownMenuItem onClick={() => navigate("/lawyer")}>
+                      <Briefcase className="h-4 w-4 mr-2" />
+                      Кабинет юриста
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="h-4 w-4 mr-2" />
                     Профиль и настройки
@@ -354,12 +361,22 @@ const Header = () => {
                       )}
                     >
                       <User className="h-5 w-5" />
-                      {isLawyer ? "Кабинет юриста" : "Личный кабинет"}
+                      Личный кабинет
+                    </Link>
+                  )}
+                  {user && isLawyer && (
+                    <Link
+                      to="/lawyer"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium text-foreground/80 hover:bg-muted transition-colors mb-1"
+                    >
+                      <Briefcase className="h-5 w-5" />
+                      Кабинет юриста
                     </Link>
                   )}
                   {user && (
                     <Link
-                      to={isLawyer ? "/lawyer/chats" : "/client/messages"}
+                      to="/client/messages"
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium transition-colors mb-1",

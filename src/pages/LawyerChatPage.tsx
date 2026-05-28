@@ -14,9 +14,16 @@ import {
   ArrowLeft, Send, Paperclip, Loader2, Download, Users,
   Search, User, FileText, CheckCheck, Check, Pencil,
   Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
-  Wand2, AlertTriangle,
+  Wand2, AlertTriangle, MoreVertical, UserMinus,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
@@ -128,6 +135,23 @@ const LawyerChatPage = () => {
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // «Убрать из моих клиентов» прямо из чата (soft-archive карточки).
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const removeClient = async () => {
+    if (!clientId) return;
+    setRemoving(true);
+    const { error } = await supabase.rpc("lawyer_delete_client", { p_lawyer_client_id: clientId });
+    setRemoving(false);
+    if (error) {
+      toast({ title: "Не удалось убрать клиента", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Клиент убран из CRM", description: "История дела сохранена в архиве." });
+    navigate("/lawyer/clients", { replace: true });
+  };
 
   useEffect(() => {
     if (!user || profileLoading) return;
@@ -688,6 +712,25 @@ const LawyerChatPage = () => {
                     </span>
                   )}
                 </Button>
+                {/* Меню действий по клиенту — «убрать из моих клиентов» */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" aria-label="Действия по клиенту">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => navigate(`/lawyer/clients/${clientId}`)}>
+                      <User className="h-4 w-4 mr-2" /> Открыть карточку
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setRemoveOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <UserMinus className="h-4 w-4 mr-2" /> Убрать из моих клиентов
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -840,6 +883,41 @@ const LawyerChatPage = () => {
           {aiPanelContent}
         </SheetContent>
       </Sheet>
+
+      {/* ── Подтверждение «Убрать из моих клиентов» ──────────────────────────── */}
+      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Убрать клиента из CRM?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Карточка {client?.client_name ? <strong>«{client.client_name}»</strong> : "клиента"} уйдёт
+                  в архив. Вы потеряете доступ к его документам и ИИ-анализам.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  История чата и заметки сохранятся в архиве. Документы клиента в его
+                  собственном кабинете не пострадают.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); removeClient(); }}
+              disabled={removing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserMinus className="h-4 w-4 mr-2" />}
+              Убрать из клиентов
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── ИИ-проверка черновика ─────────────────────────────────────────── */}
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
