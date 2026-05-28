@@ -30,17 +30,13 @@ import { uploadChatAttachment, getSignedChatAttachmentUrl } from "@/lib/storage"
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { BookOpen } from "lucide-react";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
+import { useLawyerConversations } from "@/hooks/useLawyerConversations";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
   message_type: string; file_url: string | null; file_name: string | null;
   file_size: number | null; is_read: boolean; created_at: string;
   edited_at?: string | null;
-}
-
-interface SidebarClient {
-  id: string; client_name: string; crm_stage: string;
-  client_phone: string | null; updated_at: string;
 }
 
 interface AISuggestion {
@@ -76,9 +72,10 @@ const LawyerChatPage = () => {
   const [editText, setEditText] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
 
-  const [allClients, setAllClients] = useState<SidebarClient[]>([]);
-  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [sidebarSearch, setSidebarSearch] = useState("");
+  // Сайдбар-переключатель использует тот же источник, что и инбокс /lawyer/chats:
+  // список диалогов и непрочитанные — из useLawyerConversations + ChatPresenceContext.
+  const { conversations: sidebarClients, totalUnread } = useLawyerConversations(sidebarSearch);
   // messageId → подписанная ссылка на вложение (bucket приватный).
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
 
@@ -159,7 +156,6 @@ const LawyerChatPage = () => {
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isLawyer) { navigate("/dashboard"); return; }
-    loadSidebar();
     initChat();
   }, [user, profileLoading, isLawyer, clientId]);
 
@@ -186,8 +182,9 @@ const LawyerChatPage = () => {
         });
         resolveAttachments([msg]);
         if (msg.sender_id !== user!.id) {
+          // Помечаем входящее прочитанным — ChatPresenceContext подхватит UPDATE
+          // и пересчитает непрочитанные (в т.ч. бейдж сайдбара).
           supabase.from("lawyer_chat_messages").update({ is_read: true }).eq("id", msg.id);
-          setUnreadMap((prev) => ({ ...prev, [clientId!]: Math.max(0, (prev[clientId!] || 1) - 1) }));
         }
       })
       .on("postgres_changes", {
@@ -265,23 +262,6 @@ const LawyerChatPage = () => {
     } catch { /* тихий фейл */ }
   };
 
-  const loadSidebar = async () => {
-    const { data: clients } = await supabase
-      .from("lawyer_clients")
-      .select("id, client_name, crm_stage, client_phone, updated_at")
-      .eq("lawyer_id", user!.id).order("updated_at", { ascending: false });
-    if (!clients?.length) return;
-    setAllClients(clients as SidebarClient[]);
-
-    const ids = clients.map((c) => c.id);
-    const { data: unread } = await supabase
-      .from("lawyer_chat_messages").select("lawyer_client_id")
-      .in("lawyer_client_id", ids).neq("sender_id", user!.id).eq("is_read", false);
-    const map: Record<string, number> = {};
-    (unread || []).forEach((r) => { map[r.lawyer_client_id] = (map[r.lawyer_client_id] || 0) + 1; });
-    setUnreadMap(map);
-  };
-
   // Подписываем ссылки на вложения (bucket приватный) — по одной на сообщение.
   const resolveAttachments = async (msgs: Message[]) => {
     const targets = msgs.filter((m) => m.file_url && (m.message_type === "image" || m.message_type === "file"));
@@ -313,7 +293,7 @@ const LawyerChatPage = () => {
 
     await supabase.from("lawyer_chat_messages")
       .update({ is_read: true }).eq("lawyer_client_id", clientId).neq("sender_id", user!.id);
-    setUnreadMap((prev) => ({ ...prev, [clientId!]: 0 }));
+    // Бейдж непрочитанных обновит ChatPresenceContext (он слушает UPDATE is_read).
   };
 
   const loadSuggestionsFor = async (currentMessages: Message[]) => {
@@ -469,10 +449,6 @@ const LawyerChatPage = () => {
     else last.msgs.push(m);
   });
 
-  const filteredClients = allClients.filter((c) =>
-    c.client_name.toLowerCase().includes(sidebarSearch.toLowerCase())
-  );
-  const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
 
   const historyItems = suggestionHistory.slice(0, -1);
   const currentItem = suggestionHistory.length > 0
@@ -659,7 +635,7 @@ const LawyerChatPage = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-              {filteredClients.map((c) => (
+              {sidebarClients.map((c) => (
                 <button key={c.id} onClick={() => navigate(`/lawyer/chat/${c.id}`)}
                   className={cn(
                     "w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted group",
@@ -669,9 +645,9 @@ const LawyerChatPage = () => {
                     <p className={cn("font-medium text-sm truncate", clientId === c.id ? "text-primary" : "")}>
                       {c.client_name}
                     </p>
-                    {(unreadMap[c.id] || 0) > 0 && (
+                    {c.unread > 0 && (
                       <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                        {unreadMap[c.id]}
+                        {c.unread}
                       </span>
                     )}
                   </div>
@@ -680,7 +656,7 @@ const LawyerChatPage = () => {
                   </p>
                 </button>
               ))}
-              {filteredClients.length === 0 && (
+              {sidebarClients.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8">Клиентов нет</p>
               )}
             </div>

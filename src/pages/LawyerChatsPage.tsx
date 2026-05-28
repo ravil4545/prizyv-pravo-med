@@ -1,7 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Header from "@/components/Header";
-import { supabase } from "@/integrations/supabase/client";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -10,16 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
-import { useChatPresence } from "@/contexts/ChatPresenceContext";
-
-interface ChatEntry {
-  id: string;
-  client_name: string;
-  crm_stage: string;
-  lastMessage: string | null;
-  lastMessageAt: string | null;
-  unreadCount: number;
-}
+import { useLawyerConversations } from "@/hooks/useLawyerConversations";
 
 const formatTime = (iso: string) => {
   const d = new Date(iso);
@@ -38,104 +28,17 @@ const LawyerChatsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isLawyer, loading: profileLoading } = useLawyerProfile();
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const loadChats = useCallback(async () => {
-    if (!user) return;
-    const { data: clients } = await supabase
-      .from("lawyer_clients")
-      .select("id, client_name, crm_stage")
-      .eq("lawyer_id", user.id);
-
-    if (!clients?.length) { setLoading(false); return; }
-
-    const clientIds = clients.map((c) => c.id);
-
-    const [{ data: messages }, { data: unreadRows }] = await Promise.all([
-      supabase
-        .from("lawyer_chat_messages")
-        .select("lawyer_client_id, content, created_at")
-        .in("lawyer_client_id", clientIds)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("lawyer_chat_messages")
-        .select("lawyer_client_id")
-        .in("lawyer_client_id", clientIds)
-        .neq("sender_id", user.id)
-        .eq("is_read", false),
-    ]);
-
-    const lastMsgMap: Record<string, { content: string; created_at: string }> = {};
-    messages?.forEach((m) => {
-      if (!lastMsgMap[m.lawyer_client_id]) {
-        lastMsgMap[m.lawyer_client_id] = { content: m.content, created_at: m.created_at };
-      }
-    });
-
-    const unreadMap: Record<string, number> = {};
-    unreadRows?.forEach((r) => {
-      unreadMap[r.lawyer_client_id] = (unreadMap[r.lawyer_client_id] || 0) + 1;
-    });
-
-    const result: ChatEntry[] = clients.map((c) => ({
-      id: c.id,
-      client_name: c.client_name,
-      crm_stage: c.crm_stage,
-      lastMessage: lastMsgMap[c.id]?.content || null,
-      lastMessageAt: lastMsgMap[c.id]?.created_at || null,
-      unreadCount: unreadMap[c.id] || 0,
-    }));
-
-    result.sort((a, b) => {
-      if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
-      if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-      if (a.lastMessageAt && b.lastMessageAt) return b.lastMessageAt.localeCompare(a.lastMessageAt);
-      if (a.lastMessageAt) return -1;
-      if (b.lastMessageAt) return 1;
-      return 0;
-    });
-
-    setEntries(result);
-    setLoading(false);
-  }, [user]);
+  // Единый источник диалогов и непрочитанных — общий с сайдбаром треда
+  // (useLawyerConversations + ChatPresenceContext). Раньше эта страница тянула
+  // всех клиентов и считала непрочитанные своим запросом.
+  const { conversations, loading, totalUnread } = useLawyerConversations(search);
 
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isLawyer) { navigate("/dashboard"); return; }
-    loadChats();
-  }, [user, profileLoading, isLawyer, loadChats]);
-
-  // Подписка теперь идёт через shared ChatPresenceContext — один канал
-  // фильтруется по recipient_id=auth.uid на всю сессию. На любое новое
-  // сообщение, адресованное мне, перезагружаем список диалогов.
-  const { onNewMessage } = useChatPresence();
-  useEffect(() => {
-    if (!user) return;
-    return onNewMessage(() => loadChats());
-  }, [user?.id, loadChats, onNewMessage]);
-
-  // Realtime: новый/изменённый клиент (само-подключение из каталога, принятый
-  // запрос, отвязка) — список диалогов обновляется без перезагрузки.
-  useEffect(() => {
-    if (!user || !isLawyer) return;
-    const ch = supabase
-      .channel(`lawyer-clients-chatlist:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "lawyer_clients", filter: `lawyer_id=eq.${user.id}` },
-        () => loadChats(),
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.id, isLawyer, loadChats]);
-
-  const filtered = entries.filter(
-    (e) => !search || e.client_name.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const totalUnread = entries.reduce((s, e) => s + e.unreadCount, 0);
+  }, [user, profileLoading, isLawyer, navigate]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -166,27 +69,27 @@ const LawyerChatsPage = () => {
 
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[68px] w-full mb-1 rounded-xl" />)
-        ) : filtered.length === 0 ? (
+        ) : conversations.length === 0 ? (
           <div className="text-center py-16">
             <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">{search ? "Клиент не найден" : "Нет диалогов"}</p>
           </div>
         ) : (
           <div className="space-y-0.5">
-            {filtered.map((e) => (
+            {conversations.map((e) => (
               <div
                 key={e.id}
                 onClick={() => navigate(`/lawyer/chat/${e.id}`)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-colors",
-                  e.unreadCount > 0 ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted",
+                  e.unread > 0 ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted",
                 )}
               >
                 {/* Avatar */}
                 <div
                   className={cn(
                     "h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-base uppercase",
-                    e.unreadCount > 0
+                    e.unread > 0
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground",
                   )}
@@ -197,7 +100,7 @@ const LawyerChatsPage = () => {
                 {/* Body */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-1">
-                    <p className={cn("font-semibold text-sm truncate", e.unreadCount > 0 && "text-primary")}>
+                    <p className={cn("font-semibold text-sm truncate", e.unread > 0 && "text-primary")}>
                       {e.client_name}
                     </p>
                     {e.lastMessageAt && (
@@ -214,9 +117,9 @@ const LawyerChatsPage = () => {
                           : e.lastMessage
                         : <span className="italic">{CRM_STAGE_LABELS[e.crm_stage] || e.crm_stage}</span>}
                     </p>
-                    {e.unreadCount > 0 && (
+                    {e.unread > 0 && (
                       <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                        {e.unreadCount > 99 ? "99+" : e.unreadCount}
+                        {e.unread > 99 ? "99+" : e.unread}
                       </span>
                     )}
                   </div>
