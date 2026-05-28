@@ -63,6 +63,11 @@ const Header = () => {
   // (включая юристов). Вход в кабинет юриста вынесен в подвал сайта.
   const cabinetPath = "/dashboard";
 
+  // Иконка «Сообщения» ведёт в инбокс по роли: у юриста чаты с клиентами
+  // живут в /lawyer/chats, у клиента — в /client/messages. Раньше всех вело
+  // в /client/messages, из-за чего юрист попадал на пустую клиентскую страницу.
+  const messagesPath = isLawyer ? "/lawyer/chats" : "/client/messages";
+
   const brandPhoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const brandWhatsapp = branding.whatsapp || "79253500533";
   const brandShortName = branding.displayName.split(/\s+/).slice(0, 2).join(" ");
@@ -251,7 +256,7 @@ const Header = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/client/messages")}
+                onClick={() => navigate(messagesPath)}
                 className="h-10 w-10 relative"
                 aria-label={unreadCount > 0 ? `Сообщения (${unreadCount})` : "Сообщения"}
               >
@@ -376,11 +381,11 @@ const Header = () => {
                   )}
                   {user && (
                     <Link
-                      to="/client/messages"
+                      to={messagesPath}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium transition-colors mb-1",
-                        isActive("/client/messages") || isActive("/client/chat")
+                        isActive("/client/messages") || isActive("/client/chat") || isActive("/lawyer/chats") || isActive("/lawyer/chat")
                           ? "bg-primary/10 text-primary font-semibold"
                           : "text-foreground/80 hover:bg-muted"
                       )}
