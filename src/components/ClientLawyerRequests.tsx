@@ -37,9 +37,11 @@ interface PendingRequest {
  *     открывается доступ к меддокам/AI, появляется чат с юристом.
  *   • «Отклонить» → RPC client_decline_request с подтверждением.
  *
- * Realtime: подписываемся на public.lawyer_clients и обновляемся при любом
- * INSERT/UPDATE (фильтр по client_user_id или target_email сложно сделать
- * на уровне БД, поэтому фильтрация в JS — для одиночного юзера это окей).
+ * Realtime: вместо подписки на ВСЮ таблицу lawyer_clients (будит компонент на
+ * любое изменение в системе) слушаем только свои строки — двумя фильтрами:
+ *   • client_user_id = uid (карточки, где аккаунт уже привязан);
+ *   • target_email   = email (pending-запросы создаются с client_user_id=NULL
+ *     и адресуются по email — их ловит этот фильтр).
  */
 const ClientLawyerRequests = () => {
   const { user } = useAuth();
@@ -69,14 +71,22 @@ const ClientLawyerRequests = () => {
     load();
 
     // Realtime: pending-запрос может появиться, пока юзер сидит на дашборде.
-    const ch = supabase
+    const email = user.email?.toLowerCase();
+    let ch = supabase
       .channel(`client-pending-requests-${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "lawyer_clients" },
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `client_user_id=eq.${user.id}` },
         () => load(),
-      )
-      .subscribe();
+      );
+    if (email) {
+      ch = ch.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `target_email=eq.${email}` },
+        () => load(),
+      );
+    }
+    ch.subscribe();
     return () => { supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);

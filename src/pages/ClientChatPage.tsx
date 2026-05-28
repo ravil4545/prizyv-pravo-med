@@ -371,9 +371,14 @@ const ClientChatPage = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm truncate">{lawyerName}</p>
-                {lawyerProfile?.specialization && (
+                {conv?.crm_stage && CRM_STAGE_LABELS[conv.crm_stage] ? (
+                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/60" />
+                    Этап дела: {CRM_STAGE_LABELS[conv.crm_stage]}
+                  </p>
+                ) : lawyerProfile?.specialization ? (
                   <p className="text-xs text-muted-foreground truncate">{lawyerProfile.specialization}</p>
-                )}
+                ) : null}
               </div>
             </div>
 
