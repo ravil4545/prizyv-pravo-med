@@ -18,6 +18,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Phone, Send, MessageCircle, Mail, ExternalLink } from "lucide-react";
 
 interface LawyerEntry {
   id: string;
@@ -39,6 +41,14 @@ interface LawyerProfileBrief {
   full_name: string | null;
   photo_url: string | null;
   brand_subtitle: string | null;
+  specialization: string | null;
+  brand_about: string | null;
+  bio: string | null;
+  brand_phone: string | null;
+  brand_telegram: string | null;
+  brand_whatsapp: string | null;
+  brand_email: string | null;
+  slug: string | null;
 }
 
 /**
@@ -136,7 +146,7 @@ const ShareWithLawyer = () => {
       const ids = Array.from(new Set(lawyerEntries.map((l) => l.lawyer_id)));
       const { data: profRows } = await supabase
         .from("lawyer_profiles")
-        .select("user_id, full_name, photo_url, brand_subtitle")
+        .select("user_id, full_name, photo_url, brand_subtitle, specialization, brand_about, bio, brand_phone, brand_telegram, brand_whatsapp, brand_email, slug")
         .in("user_id", ids);
       const map: Record<string, LawyerProfileBrief> = {};
       (profRows || []).forEach((p: any) => { map[p.user_id] = p; });
@@ -347,23 +357,128 @@ const ShareWithLawyer = () => {
                 key={l.id}
                 className="flex items-center gap-3 p-3 rounded-lg border bg-card"
               >
-                {/* Avatar */}
-                <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center font-semibold text-sm">
-                  {prof?.photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={prof.photo_url} alt={displayName} className="h-full w-full object-cover" />
-                  ) : (
-                    displayName.charAt(0).toUpperCase()
-                  )}
-                </div>
+                {/* Интерактивная плашка: avatar + имя + subtitle.
+                    Клик открывает компактную визитку юриста (Popover). */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-lg hover:bg-muted/50 -m-1 p-1 transition-colors"
+                      title="Открыть визитку юриста"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center font-semibold text-sm">
+                        {prof?.photo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={prof.photo_url} alt={displayName} className="h-full w-full object-cover" />
+                        ) : (
+                          displayName.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate flex items-center gap-1">
+                          {displayName}
+                          <ChevronDown className="h-3 w-3 text-muted-foreground/50 flex-shrink-0" />
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {prof?.brand_subtitle || prof?.specialization || `Записаны как «${l.client_name}»`}
+                        </p>
+                      </div>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-0 overflow-hidden">
+                    {(() => {
+                      const about = prof?.brand_about || prof?.bio;
+                      const tg = prof?.brand_telegram?.replace(/^@/, "");
+                      const wa = prof?.brand_whatsapp?.replace(/\D/g, "");
+                      const hasContacts = prof?.brand_phone || tg || wa || prof?.brand_email;
+                      return (
+                        <>
+                          {/* Шапка визитки */}
+                          <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 to-violet-500/5 border-b">
+                            <div className="h-14 w-14 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-lg">
+                              {prof?.photo_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={prof.photo_url} alt={displayName} className="h-full w-full object-cover" />
+                              ) : (
+                                displayName.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm leading-tight">{displayName}</p>
+                              {(prof?.brand_subtitle || prof?.specialization) && (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {prof?.brand_subtitle || prof?.specialization}
+                                </p>
+                              )}
+                            </div>
+                          </div>
 
-                {/* Name + subtitle */}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{displayName}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {prof?.brand_subtitle || `Записаны как «${l.client_name}»`}
-                  </p>
-                </div>
+                          <div className="p-4 space-y-3">
+                            {/* О себе */}
+                            {about && (
+                              <p className="text-xs text-foreground/80 leading-relaxed line-clamp-4">
+                                {about}
+                              </p>
+                            )}
+
+                            {/* Контакты */}
+                            {hasContacts && (
+                              <div className="space-y-1.5">
+                                {prof?.brand_phone && (
+                                  <a href={`tel:${prof.brand_phone.replace(/[^\d+]/g, "")}`}
+                                    className="flex items-center gap-2 text-xs text-foreground/80 hover:text-primary">
+                                    <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                    {prof.brand_phone}
+                                  </a>
+                                )}
+                                {tg && (
+                                  <a href={`https://t.me/${tg}`} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-xs text-foreground/80 hover:text-sky-500">
+                                    <Send className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                    @{tg}
+                                  </a>
+                                )}
+                                {wa && (
+                                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-xs text-foreground/80 hover:text-emerald-500">
+                                    <MessageCircle className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                    WhatsApp
+                                  </a>
+                                )}
+                                {prof?.brand_email && (
+                                  <a href={`mailto:${prof.brand_email}`}
+                                    className="flex items-center gap-2 text-xs text-foreground/80 hover:text-primary break-all">
+                                    <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                    {prof.brand_email}
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {!about && !hasContacts && (
+                              <p className="text-xs text-muted-foreground italic">
+                                Юрист пока не заполнил подробную информацию о себе.
+                              </p>
+                            )}
+
+                            {/* Ссылка на полную страницу юриста */}
+                            {prof?.slug && (
+                              <a
+                                href={`/u/${prof.slug}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:underline pt-1"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Открыть страницу юриста
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </PopoverContent>
+                </Popover>
 
                 {/* Switch + badge + меню действий */}
                 <div className="flex items-center gap-2 flex-shrink-0">
