@@ -82,10 +82,29 @@ const LawyersDirectoryPage = () => {
     setAccessMap((prev) => ({ ...prev, [lawyerId]: grant }));
     try {
       if (grant) {
-        const { error } = await supabase.rpc("client_connect_to_lawyer", {
+        const { data: conn, error } = await supabase.rpc("client_connect_to_lawyer", {
           p_lawyer_id: lawyerId, p_grant_access: true,
         });
         if (error) throw error;
+        // Создаём первое сообщение в чат — чтобы у юриста появился диалог и
+        // пришло уведомление (realtime по recipient_id). Только если переписки
+        // ещё не было, чтобы не спамить при повторных переключениях тумблера.
+        const row = Array.isArray(conn) ? conn[0] : conn;
+        const lcId = row?.lawyer_client_id as string | undefined;
+        if (lcId) {
+          const { count } = await supabase
+            .from("lawyer_chat_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("lawyer_client_id", lcId);
+          if (!count) {
+            await supabase.from("lawyer_chat_messages").insert({
+              lawyer_client_id: lcId,
+              sender_id: session.user.id,
+              content: "Здравствуйте! Я открыл вам доступ к своим медицинским документам и ИИ-анализу через nepriziv.ru. Готов обсудить мою ситуацию здесь, в чате.",
+              message_type: "text",
+            });
+          }
+        }
         toast({ title: "Доступ открыт", description: "Юрист видит ваши документы, профиль и ИИ-расшифровки. Отозвать можно здесь же." });
       } else {
         const { error } = await supabase.rpc("client_revoke_lawyer_access", { p_lawyer_id: lawyerId });

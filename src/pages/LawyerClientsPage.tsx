@@ -86,6 +86,22 @@ const LawyerClientsPage = () => {
     loadClients();
   }, [user, profileLoading, isLawyer]);
 
+  // Realtime: клиент сам подключился из каталога / принял запрос / отвязался —
+  // карточка должна появиться (или обновиться) в CRM без перезагрузки страницы.
+  useEffect(() => {
+    if (!user || !isLawyer) return;
+    const ch = supabase
+      .channel(`lawyer-clients-crm:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `lawyer_id=eq.${user.id}` },
+        () => loadClients(),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isLawyer]);
+
   // Live unread count updates через shared ChatPresenceContext.
   // Раньше тут была отдельная подписка на всю таблицу lawyer_chat_messages —
   // теперь работаем через единый канал с фильтром recipient_id=me.

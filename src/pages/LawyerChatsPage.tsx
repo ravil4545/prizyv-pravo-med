@@ -116,6 +116,21 @@ const LawyerChatsPage = () => {
     return onNewMessage(() => loadChats());
   }, [user?.id, loadChats, onNewMessage]);
 
+  // Realtime: новый/изменённый клиент (само-подключение из каталога, принятый
+  // запрос, отвязка) — список диалогов обновляется без перезагрузки.
+  useEffect(() => {
+    if (!user || !isLawyer) return;
+    const ch = supabase
+      .channel(`lawyer-clients-chatlist:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `lawyer_id=eq.${user.id}` },
+        () => loadChats(),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, isLawyer, loadChats]);
+
   const filtered = entries.filter(
     (e) => !search || e.client_name.toLowerCase().includes(search.toLowerCase()),
   );
