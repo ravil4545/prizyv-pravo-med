@@ -171,13 +171,6 @@ const DashboardPage = () => {
 
   const communityCards: DashboardCard[] = [
     {
-      title: "Юристы платформы",
-      description: "Подобрать юриста и написать в защищённом чате",
-      icon: Briefcase,
-      path: "/lawyers",
-      tag: "Сделка на сайте",
-    },
-    {
       title: "База успешных кейсов",
       description: "Реальные истории призывников с непризывными категориями",
       icon: Trophy,

@@ -9,7 +9,6 @@ import {
   Sparkles,
   FileText,
   MessageSquare,
-  Briefcase,
   AlertTriangle,
   TrendingUp,
   ChevronRight,
@@ -368,15 +367,6 @@ export default function AICaseSummary() {
           >
             <FileText className="h-3.5 w-3.5 mr-1.5" />
             Документы
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-gold/40 hover:bg-gold/5"
-            onClick={() => navigate("/lawyers")}
-          >
-            <Briefcase className="h-3.5 w-3.5 mr-1.5" />
-            Передать юристу
           </Button>
         </div>
       </CardContent>
