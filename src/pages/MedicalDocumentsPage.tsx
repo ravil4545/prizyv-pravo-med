@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -44,6 +44,9 @@ import {
   Plus,
   CheckSquare,
   Square,
+  ArrowRight,
+  ListChecks,
+  ShieldCheck,
 } from "lucide-react";
 import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
@@ -69,6 +72,7 @@ import { ru } from "date-fns/locale";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
 import SendDocToLawyerButton from "@/components/SendDocToLawyerButton";
 import { getOcrQuality, ocrLevelColor } from "@/lib/ocrQuality";
+import { withBrandPath } from "@/lib/brandPath";
 
 interface DocumentType {
   id: string;
@@ -84,6 +88,7 @@ interface DocumentPart {
 
 interface DocumentMeta {
   parts?: DocumentPart[];
+  is_questionnaire?: boolean;
 }
 
 interface MedicalDocument {
@@ -129,7 +134,9 @@ function SignedDocumentViewer({ fileUrl }: { fileUrl: string }) {
 
 export default function MedicalDocumentsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const cabinetPath = (target: string) => withBrandPath(location.pathname, target);
   const { canUploadDocument, incrementDocumentUploads, isActive, remainingDocUploads } = useSubscription();
   const demo = useDemoMode();
   const [user, setUser] = useState<any>(null);
@@ -338,7 +345,7 @@ export default function MedicalDocumentsPage() {
         description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
         variant: "destructive",
       });
-      navigate("/auth");
+      navigate(cabinetPath("/auth"));
       return null;
     }
 
@@ -350,7 +357,7 @@ export default function MedicalDocumentsPage() {
         description: "Не удалось создать временную сессию. Попробуйте зарегистрироваться.",
         variant: "destructive",
       });
-      navigate("/auth");
+      navigate(cabinetPath("/auth"));
       return null;
     }
     setUser(data.user);
@@ -779,7 +786,7 @@ export default function MedicalDocumentsPage() {
           description: "Зарегистрируйтесь для получения 3 бесплатных загрузок.",
           variant: "destructive",
         });
-        navigate("/auth");
+        navigate(cabinetPath("/auth"));
         return;
       }
     } else if (!canUploadDocument()) {
@@ -1629,8 +1636,8 @@ export default function MedicalDocumentsPage() {
     })
     .sort((a, b) => {
       // Pin questionnaire documents at the top
-      const aIsQuestionnaire = (a.meta as any)?.is_questionnaire === true;
-      const bIsQuestionnaire = (b.meta as any)?.is_questionnaire === true;
+      const aIsQuestionnaire = a.meta?.is_questionnaire === true;
+      const bIsQuestionnaire = b.meta?.is_questionnaire === true;
       if (aIsQuestionnaire && !bIsQuestionnaire) return -1;
       if (!aIsQuestionnaire && bIsQuestionnaire) return 1;
 
@@ -1659,6 +1666,28 @@ export default function MedicalDocumentsPage() {
       const comparison = aVal.localeCompare(bVal);
       return sortDirection === "asc" ? comparison : -comparison;
     });
+
+  const analyzedDocuments = documents.filter(
+    (doc) => doc.ai_fitness_category || doc.ai_category_chance !== null || doc.ai_explanation,
+  );
+  const bestDocument = [...analyzedDocuments]
+    .filter((doc) => doc.ai_category_chance !== null)
+    .sort((a, b) => (b.ai_category_chance || 0) - (a.ai_category_chance || 0))[0];
+  const hasQuestionnaire = documents.some((doc) => doc.meta?.is_questionnaire === true);
+  const uniqueRecommendations = [
+    ...new Set(documents.flatMap((doc) => doc.ai_recommendations || [])),
+  ].slice(0, 4);
+  const documentNextActions = [
+    documents.length === 0 ? "Загрузите хотя бы одну свежую выписку, заключение или снимок." : null,
+    analyzedDocuments.length === 0 ? "Запустите AI-анализ, чтобы увидеть категорию и привязку к статьям." : null,
+    !hasQuestionnaire ? "Заполните опросник: жалобы и симптомы часто не видны в справках." : null,
+    bestDocument && bestDocument.ai_category_chance !== null && (bestDocument.ai_category_chance || 0) < 50
+      ? "Добавьте более свежие обследования или документы с функциональными нарушениями."
+      : null,
+    uniqueRecommendations.length === 0 && analyzedDocuments.length > 0
+      ? "Задайте ИИ вопрос: какие документы усилят позицию по этому диагнозу."
+      : null,
+  ].filter((item): item is string => Boolean(item));
 
   if (loading) {
     return (
@@ -1691,7 +1720,7 @@ export default function MedicalDocumentsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate(cabinetPath("/dashboard"))}
               >
                 Назад
               </Button>
@@ -1864,6 +1893,106 @@ export default function MedicalDocumentsPage() {
               )}
             </CardContent>
           </Card>
+
+          {documents.length > 0 && (
+            <Card className="mb-6 border-gold/30 bg-gradient-to-br from-gold/5 via-card to-background">
+              <CardContent className="p-5 md:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-gold-deep" />
+                      <span className="section-number">Результат по досье</span>
+                    </div>
+                    <h2 className="font-serif text-xl font-semibold text-foreground">
+                      Не просто список файлов, а понятная позиция по делу
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                      После каждой загрузки кабинет показывает, что уже можно использовать,
+                      чего не хватает и какой следующий шаг принесет больше пользы.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="rounded-md px-2.5 py-1.5">
+                      {analyzedDocuments.length}/{documents.length} проанализировано
+                    </Badge>
+                    <Badge variant={getCategoryColor(bestDocument?.ai_fitness_category || null)} className="rounded-md px-2.5 py-1.5">
+                      {bestDocument?.ai_fitness_category ? `Кат. ${bestDocument.ai_fitness_category}` : "Категория не ясна"}
+                    </Badge>
+                    <Badge variant="outline" className="rounded-md px-2.5 py-1.5">
+                      {bestDocument?.ai_category_chance !== null && bestDocument?.ai_category_chance !== undefined
+                        ? `${bestDocument.ai_category_chance}% шанс В`
+                        : "Шанс не рассчитан"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-gold-deep" />
+                      <p className="text-sm font-semibold text-foreground">Что уже видно</p>
+                    </div>
+                    {bestDocument ? (
+                      <div className="space-y-2">
+                        <p className="text-sm">
+                          Самый сильный документ: <span className="font-medium">{bestDocument.title || "документ без названия"}</span>
+                        </p>
+                        {bestDocument.ai_explanation && (
+                          <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                            {bestDocument.ai_explanation}
+                          </p>
+                        )}
+                        {uniqueRecommendations.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {uniqueRecommendations.slice(0, 3).map((recommendation) => (
+                              <Badge key={recommendation} variant="secondary" className="max-w-full truncate">
+                                {recommendation}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Документы загружены. Когда анализ завершится, здесь появится категория,
+                        шанс и объяснение, что можно использовать для позиции.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ListChecks className="h-4 w-4 text-gold-deep" />
+                      <p className="text-sm font-semibold text-foreground">Следующие действия</p>
+                    </div>
+                    <div className="space-y-2">
+                      {(documentNextActions.length > 0
+                        ? documentNextActions.slice(0, 4)
+                        : ["Задайте ИИ уточняющий вопрос или передайте досье юристу для проверки позиции."]
+                      ).map((action, index) => (
+                        <div key={action} className="flex gap-2 text-sm text-muted-foreground">
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold-deep">
+                            {index + 1}
+                          </span>
+                          <span>{action}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => navigate(cabinetPath("/dashboard/ai-chat"))}>
+                        <Brain className="mr-1.5 h-4 w-4" />
+                        Спросить ИИ
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => navigate("/lawyers")}>
+                        Передать юристу
+                        <ArrowRight className="ml-1.5 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Filters */}
           <Card className="mb-6">
@@ -2321,7 +2450,7 @@ export default function MedicalDocumentsPage() {
                                               className="w-full text-xs sm:text-sm"
                                               onClick={() =>
                                                 navigate(
-                                                  `/medical-history?article=${doc.disease_articles_565?.article_number}`,
+                                                  cabinetPath(`/medical-history?article=${doc.disease_articles_565?.article_number}`),
                                                 )
                                               }
                                             >

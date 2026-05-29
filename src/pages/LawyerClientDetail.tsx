@@ -25,6 +25,7 @@ import {
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
   ShieldCheck, Lock, FileSignature, MoreVertical, UserMinus, Trash2, AlertTriangle,
+  ArrowRight, ListChecks,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -473,6 +474,22 @@ const LawyerClientDetail = () => {
     setPreviewLoading(false);
   };
 
+  const bestDocument = [...medDocs]
+    .filter((doc) => doc.ai_category_chance !== null || doc.ai_fitness_category)
+    .sort((a, b) => (b.ai_category_chance || 0) - (a.ai_category_chance || 0))[0];
+  const daysUntilConscription = client?.conscription_date
+    ? Math.ceil((new Date(client.conscription_date).getTime() - Date.now()) / 86400000)
+    : null;
+  const urgentByDate = daysUntilConscription !== null && daysUntilConscription <= 14;
+  const lawyerNextActions = [
+    !client?.client_user_id ? "Отправьте клиенту код или ссылку, чтобы он привязал кабинет." : null,
+    client?.client_user_id && !hasDocAccess ? "Запросите доступ к досье: без него не видно меддокументы и AI-анализы." : null,
+    hasDocAccess && medDocs.length === 0 ? "Попросите клиента загрузить первые медицинские документы." : null,
+    hasDocAccess && medDocs.length > 0 && !bestDocument ? "Запустите AI-анализ документов или полный анализ дела." : null,
+    !form.conscription_date ? "Поставьте ближайшую дату комиссии, суда или призыва." : null,
+    form.priority === "urgent" || urgentByDate ? "Зафиксируйте срочный план: что сделать сегодня, завтра и до комиссии." : null,
+  ].filter((item): item is string => Boolean(item));
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -705,6 +722,107 @@ const LawyerClientDetail = () => {
             );
           })()}
         </div>
+
+        <Card className="mb-4 border-gold/30 bg-gradient-to-br from-gold/5 via-card to-background">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="section-number mb-1">CRM · рабочая сводка</p>
+                <CardTitle className="text-lg font-serif">Что делать с этим клиентом дальше</CardTitle>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={urgentByDate || form.priority === "urgent" ? "destructive" : "outline"}>
+                  {urgentByDate
+                    ? `Срок: ${daysUntilConscription} дн.`
+                    : form.conscription_date
+                      ? "Дата указана"
+                      : "Нет дедлайна"}
+                </Badge>
+                <Badge variant={hasDocAccess ? "outline" : "secondary"}>
+                  {hasDocAccess ? `${medDocs.length} док.` : "Доступ закрыт"}
+                </Badge>
+                <Badge variant="outline">
+                  {bestDocument?.ai_fitness_category ? `Кат. ${bestDocument.ai_fitness_category}` : "AI без вывода"}
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border bg-background/70 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Позиция</p>
+                <p className="mt-1 text-sm font-semibold">
+                  {bestDocument
+                    ? `${bestDocument.ai_category_chance ?? 0}% по лучшему документу`
+                    : "Недостаточно данных"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                  {bestDocument?.title || "Нужны документы клиента или полный анализ дела."}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-background/70 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Связь</p>
+                <p className="mt-1 text-sm font-semibold">
+                  {client?.client_user_id ? "Кабинет привязан" : "Клиент еще вне кабинета"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {hasDocAccess
+                    ? "Можно смотреть документы и готовить позицию."
+                    : "Доступ к документам нужно получить отдельно."}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-background/70 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
+                <p className="mt-1 text-sm font-semibold">
+                  {lawyerNextActions[0] || "Можно переходить к документам"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Сводка помогает не открывать все вкладки перед каждым ответом клиенту.
+                </p>
+              </div>
+            </div>
+
+            {lawyerNextActions.length > 0 && (
+              <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-gold-deep" />
+                  <p className="text-sm font-semibold">Короткий план</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {lawyerNextActions.slice(0, 4).map((action, index) => (
+                    <div key={action} className="flex gap-2 text-sm text-muted-foreground">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold-deep">
+                        {index + 1}
+                      </span>
+                      <span>{action}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {client?.client_user_id && !hasDocAccess && (
+                <Button size="sm" onClick={requestDocAccess} disabled={requestingAccess}>
+                  {requestingAccess ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageSquare className="mr-1.5 h-4 w-4" />}
+                  Запросить доступ
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/chat/${clientId}`)}>
+                <MessageSquare className="mr-1.5 h-4 w-4" />
+                Написать клиенту
+              </Button>
+              <Button size="sm" variant="outline" onClick={runAiAnalysis} disabled={aiLoading || !isPro}>
+                {aiLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Brain className="mr-1.5 h-4 w-4" />}
+                Полный анализ
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+                Документ по шаблону
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs defaultValue="overview">
           <TabsList className="mb-4 w-full sm:w-auto">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -36,9 +36,11 @@ import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
 import AICaseSummary from "@/components/dashboard/AICaseSummary";
 import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
+import CasePlanCard from "@/components/dashboard/CasePlanCard";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
 import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
+import { withBrandPath } from "@/lib/brandPath";
 
 interface DashboardCard {
   title: string;
@@ -56,10 +58,12 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
   const { unreadCount } = useUnreadMessages();
   const { isLawyer } = useLawyerProfile();
+  const cabinetPath = (target: string) => withBrandPath(location.pathname, target);
 
   // Кабинеты независимы: юрист тоже может пользоваться обычным личным
   // кабинетом. Авто-редирект на /lawyer убран — вход в кабинет юриста
@@ -203,7 +207,7 @@ const DashboardPage = () => {
             <div className="flex items-center gap-3">
               {!isDemoMode && (
                 <button
-                  onClick={() => navigate("/profile")}
+                  onClick={() => navigate(cabinetPath("/profile"))}
                   aria-label="Профиль"
                   className="h-11 w-11 rounded-full bg-gold/15 hover:bg-gold/25 transition-colors flex items-center justify-center flex-shrink-0"
                 >
@@ -236,6 +240,11 @@ const DashboardPage = () => {
               <NotificationsInbox />
             </div>
           )}
+
+          {/* ── План дела — первый экран должен отвечать «что делать дальше» ── */}
+          <div className="mb-5">
+            <CasePlanCard />
+          </div>
 
           {/* ── AI-сводка по делу — главный блок ───────────────────────── */}
           {!isDemoMode && (
@@ -299,7 +308,7 @@ const DashboardPage = () => {
               </div>
 
               <div
-                onClick={() => navigate("/client/messages")}
+                onClick={() => navigate(cabinetPath("/client/messages"))}
                 className={cn(
                   "cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
                   "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
@@ -349,7 +358,7 @@ const DashboardPage = () => {
                 return (
                   <Card
                     key={card.path}
-                    onClick={() => navigate(card.path)}
+                    onClick={() => navigate(cabinetPath(card.path))}
                     className={cn(
                       "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
                       isFeatured
@@ -400,7 +409,7 @@ const DashboardPage = () => {
                 return (
                   <Card
                     key={card.path}
-                    onClick={() => navigate(card.path)}
+                    onClick={() => navigate(cabinetPath(card.path))}
                     className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border/50"
                   >
                     <CardContent className="p-4">
@@ -460,19 +469,20 @@ const DashboardPage = () => {
           {!isDemoMode && (
             <div className="mb-8">
               <Card
-                onClick={() => navigate("/family")}
-                className="cursor-pointer border-border/50 hover:border-gold/40 transition-colors group"
-              >
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-gold/15 transition-colors">
-                    <Users className="h-4 w-4 text-foreground group-hover:text-gold-deep transition-colors" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-foreground">Семейный доступ</p>
-                    <p className="text-xs text-muted-foreground">
-                      Пригласить родителей видеть ваше дело (только просмотр)
-                    </p>
-                  </div>
+                 onClick={() => navigate(cabinetPath("/family"))}
+                 className="cursor-pointer border-gold/30 bg-gradient-to-br from-gold/5 to-card hover:border-gold/50 transition-colors group"
+               >
+                 <CardContent className="p-4 flex items-start gap-3">
+                   <div className="h-10 w-10 rounded-lg bg-gold/15 flex items-center justify-center group-hover:bg-gold/25 transition-colors">
+                     <Users className="h-4 w-4 text-gold-deep transition-colors" />
+                   </div>
+                   <div className="flex-1 min-w-0">
+                     <p className="font-semibold text-sm text-foreground">Семья как второй контур контроля</p>
+                     <p className="text-xs text-muted-foreground leading-relaxed">
+                       Родители или близкие видят план, дедлайны и могут помогать с оплатой.
+                       Медицинские данные открываются только в выбранных рамках.
+                     </p>
+                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
                 </CardContent>
               </Card>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -37,11 +37,16 @@ import {
   Mail,
   Calendar,
   Eye,
+  Clock3,
+  ListChecks,
+  ShieldCheck,
+  WalletCards,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoader } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { withBrandPath } from "@/lib/brandPath";
 
 interface FamilyInvite {
   id: string;
@@ -72,7 +77,9 @@ export default function FamilyAccessPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<FamilyInvite | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const cabinetPath = (target: string) => withBrandPath(location.pathname, target);
 
   const [form, setForm] = useState({
     email: "",
@@ -94,7 +101,7 @@ export default function FamilyAccessPage() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      navigate("/auth");
+      navigate(cabinetPath("/auth"));
       return;
     }
     setUser({ id: session.user.id, email: session.user.email });
@@ -213,12 +220,16 @@ export default function FamilyAccessPage() {
     );
   }
 
+  const acceptedCount = invites.filter((invite) => invite.status === "accepted").length;
+  const waitingCount = invites.filter((invite) => invite.status === "invited").length;
+  const activeCount = acceptedCount + waitingCount;
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8 pb-24 md:pb-12">
-        <div className="max-w-3xl mx-auto">
-          <Button variant="ghost" onClick={() => navigate("/dashboard")} className="mb-6">
+        <div className="max-w-4xl mx-auto">
+          <Button variant="ghost" onClick={() => navigate(cabinetPath("/dashboard"))} className="mb-6">
             <ArrowLeft className="h-4 w-4 mr-2" /> Назад в кабинет
           </Button>
 
@@ -226,11 +237,12 @@ export default function FamilyAccessPage() {
             <div>
               <p className="section-number mb-1">Семья</p>
               <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight">
-                Семейный доступ
+                Семейный контроль дела
               </h1>
               <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-                Пригласите родителей или близких видеть ваше дело: документы, AI-анализ и события.
-                Только просмотр — менять они ничего не смогут. Приглашение действует 30 дней.
+                Подключите родителей или близких, которые помогают держать сроки,
+                оплачивать консультации и не терять документы. Вы сами выбираете,
+                что им видно.
               </p>
             </div>
             <Button
@@ -242,13 +254,66 @@ export default function FamilyAccessPage() {
             </Button>
           </div>
 
+          <div className="mb-6 grid gap-3 md:grid-cols-3">
+            <Card className="border-gold/30 bg-gold/[0.04]">
+              <CardContent className="p-4">
+                <Clock3 className="mb-3 h-5 w-5 text-gold-deep" />
+                <p className="text-sm font-semibold">Сроки без паники</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Семья видит комиссии, суды и обследования, чтобы ничего не пропустить.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <WalletCards className="mb-3 h-5 w-5 text-gold-deep" />
+                <p className="text-sm font-semibold">Плательщик понимает ценность</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Близким проще оплатить помощь, когда они видят план и прогресс дела.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <ShieldCheck className="mb-3 h-5 w-5 text-gold-deep" />
+                <p className="text-sm font-semibold">Доступ под контролем</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Это просмотр, а не управление. Любой доступ можно отозвать сразу.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="mb-6 border-border/60 bg-muted/20">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/15">
+                  <ListChecks className="h-5 w-5 text-gold-deep" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Семейный контур</p>
+                  <p className="text-xs text-muted-foreground">
+                    {activeCount > 0
+                      ? `${acceptedCount} принято · ${waitingCount} ожидает`
+                      : "Никто из близких пока не подключен"}
+                  </p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
+                <UserPlus className="mr-1.5 h-4 w-4" />
+                Добавить близкого
+              </Button>
+            </CardContent>
+          </Card>
+
           {invites.length === 0 ? (
             <Card className="text-center py-16 border-border/50">
               <CardContent>
                 <Users className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
                 <p className="text-foreground font-medium">Приглашений ещё нет</p>
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                  Добавьте близких — они смогут следить за вашим делом без вашего участия
+                  Добавьте близких — они увидят план, дедлайны и смогут помочь с оплатой,
+                  не вмешиваясь в управление делом
                 </p>
                 <Button
                   onClick={() => setDialogOpen(true)}

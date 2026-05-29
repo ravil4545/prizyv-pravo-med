@@ -160,10 +160,13 @@ const App = () => (
                 <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
                 <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
                 <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                <Route path="/u/:slug/medical-history" element={<MedicalHistoryPage />} />
+                <Route path="/u/:slug/medical-questionnaire" element={<MedicalQuestionnairePage />} />
                 <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
                 <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
                 <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
                 <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
+                <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
                 <Route path="/u/:slug/profile" element={<ProfilePage />} />
 
                 <Route path="/" element={<Index />} />
