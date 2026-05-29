@@ -603,6 +603,42 @@ const LawyerClientDetail = () => {
           </Card>
         )}
 
+        {/* Шапка ключевых фактов — read-only, видна на ВСЕХ вкладках (Этап 3).
+            Раньше диагноз/категория/дата призыва жили только во вкладке «Обзор»
+            как инпуты — на других вкладках их не было видно. */}
+        {client && (
+          <div className="mb-4 flex flex-wrap gap-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Диагноз:</span>
+              <span className="font-medium">{client.diagnosis || "—"}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+              <span className="text-muted-foreground">Категория:</span>
+              <span className="font-medium">{client.expected_category || "—"}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Призыв:</span>
+              <span className="font-medium">
+                {(() => {
+                  if (!client.conscription_date) return "—";
+                  const d = new Date(client.conscription_date);
+                  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+                  const ds = d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+                  return days < 0 ? `${ds} · прошёл` : days === 0 ? `${ds} · сегодня` : `${ds} · через ${days} дн.`;
+                })()}
+              </span>
+            </span>
+            {client.client_birth_year && (
+              <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+                <span className="text-muted-foreground">Г.р.:</span>
+                <span className="font-medium">{client.client_birth_year}</span>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Статус привязки — полный switch по link_state (8 значений).
             Один источник правды о связи теперь визуально показывается одним
             блоком: либо InviteCodeCard (когда клиента ещё нет / отвалился /
