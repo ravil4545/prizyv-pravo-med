@@ -12,19 +12,22 @@ import {
   Crown,
   ChevronRight,
   Check,
+  Scale,
 } from "lucide-react";
 import { differenceInDays, differenceInMonths, format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useSubscription } from "@/hooks/useSubscription";
 import { cn } from "@/lib/utils";
+import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 
 type NotificationKind =
   | "lawyer-message"
   | "ai-ready"
   | "doc-stale"
   | "case-upcoming"
-  | "subscription-expiring";
+  | "subscription-expiring"
+  | "case-stage";
 
 interface Notification {
   id: string;
@@ -46,6 +49,7 @@ const kindMeta: Record<
   "doc-stale": { icon: AlertTriangle, color: "text-seal", bgColor: "bg-seal/10" },
   "case-upcoming": { icon: Calendar, color: "text-gold-deep", bgColor: "bg-gold/15" },
   "subscription-expiring": { icon: Crown, color: "text-seal", bgColor: "bg-seal/10" },
+  "case-stage": { icon: Scale, color: "text-ink", bgColor: "bg-ink/10" },
 };
 
 const urgencyOrder = { high: 0, medium: 1, low: 2 };
@@ -187,6 +191,36 @@ export default function NotificationsInbox() {
               urgency: daysLeft <= 2 ? "high" : "low",
             });
           }
+        }
+
+        // 5. Юрист сменил этап дела (с последнего просмотра дашборда)
+        try {
+          const { data: caseRow } = await (supabase as any)
+            .from("lawyer_clients")
+            .select("crm_stage, link_state")
+            .eq("client_user_id", userId)
+            .eq("link_state", "linked_active")
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (caseRow?.crm_stage) {
+            const key = `nepriziv_seen_stage_${userId}`;
+            const seen = localStorage.getItem(key);
+            if (seen && seen !== caseRow.crm_stage) {
+              collected.push({
+                id: "case-stage",
+                kind: "case-stage",
+                title: "Юрист обновил этап вашего дела",
+                description: `Текущий этап: ${CRM_STAGE_LABELS[caseRow.crm_stage] || caseRow.crm_stage}`,
+                ctaPath: "/client/messages",
+                ctaLabel: "Подробнее",
+                urgency: "medium",
+              });
+            }
+            localStorage.setItem(key, caseRow.crm_stage);
+          }
+        } catch {
+          /* необязательное уведомление — ошибки игнорируем */
         }
 
         // Сортируем по срочности
