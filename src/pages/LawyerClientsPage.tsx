@@ -33,6 +33,7 @@ interface LawyerClient {
   conscription_date: string | null; case_won: boolean; created_at: string; updated_at: string;
   // Новая модель связи (миграция 20260527005000):
   link_state?: string | null;
+  escalation_requested?: boolean | null;
   invite_code?: string | null;
   target_email?: string | null;
   requested_at?: string | null;
@@ -766,6 +767,9 @@ const LawyerClientsPage = () => {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{c.client_name}</span>
+                          {c.escalation_requested && (
+                            <Badge className="text-xs bg-rose-600 text-white border-rose-700">🔴 Просит юриста</Badge>
+                          )}
                           {isBurning(c) && (
                             <Badge className="text-xs bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 border-red-300">
                               🔥 Горит
@@ -883,6 +887,7 @@ const LawyerClientsPage = () => {
                                     )}
                                   </div>
                                   <div className="flex flex-wrap gap-1">
+                                    {c.escalation_requested && <Badge className="text-[10px] px-1 py-0 bg-rose-600 text-white border-rose-700">🔴 Юрист</Badge>}
                                     {c.priority === "urgent" && <Badge variant="destructive" className="text-[10px] px-1 py-0">Срочно</Badge>}
                                     {c.priority === "high" && <Badge variant="secondary" className="text-[10px] px-1 py-0">Высокий</Badge>}
                                     {c.case_won && <Badge className="text-[10px] px-1 py-0 bg-green-100 text-green-700">ВБ</Badge>}

@@ -67,6 +67,21 @@ const LawyerClientDetail = () => {
   const { toast } = useToast();
 
   const [client, setClient] = useState<Record<string, any> | null>(null);
+  const [clearingEscalation, setClearingEscalation] = useState(false);
+
+  const handleClearEscalation = async () => {
+    setClearingEscalation(true);
+    const { error } = await (supabase as any).rpc("lawyer_clear_escalation", {
+      p_lawyer_client_id: clientId,
+    });
+    setClearingEscalation(false);
+    if (error) {
+      toast({ title: "Не удалось обновить", description: error.message, variant: "destructive" });
+      return;
+    }
+    setClient((prev: any) => ({ ...prev, escalation_requested: false }));
+    toast({ title: "Взято в работу", description: "Запрос снят. Свяжитесь с клиентом в чате." });
+  };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -557,6 +572,36 @@ const LawyerClientDetail = () => {
             </DropdownMenu>
           </div>
         </div>
+
+        {client?.escalation_requested && (
+          <Card className="mb-4 border-rose-300 bg-rose-50 dark:bg-rose-950/30">
+            <CardContent className="py-3 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0 text-sm">
+                <span className="font-semibold text-rose-700 dark:text-rose-300">
+                  Клиент просит подключения живого юриста
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}— дело передано из ИИ-чата. Сводка диалога — во вкладке «История».
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleClearEscalation}
+                disabled={clearingEscalation}
+                className="flex-shrink-0"
+              >
+                {clearingEscalation ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                )}
+                Взять в работу
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Статус привязки — полный switch по link_state (8 значений).
             Один источник правды о связи теперь визуально показывается одним
