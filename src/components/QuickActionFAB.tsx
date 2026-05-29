@@ -16,9 +16,12 @@ const QuickActionFAB = () => {
 
   if (!isMobile) return null;
 
-  // Hidden on certain pages
-  const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password", "/dashboard/ai-chat", "/dashboard/medical-documents"];
-  if (hiddenRoutes.some(r => location.pathname.startsWith(r))) return null;
+  // Показываем публичные CTA только на маркетинговых/справочных страницах.
+  // В кабинетах и чатах они перекрывают рабочие действия и спорят с нижней
+  // навигацией, особенно на мобильном.
+  const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password", "/dashboard", "/client", "/lawyer", "/admin", "/profile", "/family"];
+  const isBrandedCabinet = /\/dashboard(\/|$)/.test(location.pathname);
+  if (hiddenRoutes.some(r => location.pathname.startsWith(r)) || isBrandedCabinet) return null;
 
   const actions = [
     {

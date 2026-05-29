@@ -329,10 +329,26 @@ const LawyersDirectoryPage = () => {
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 border border-dashed border-ink/20">
               <Briefcase className="h-10 w-10 text-ink/30 mx-auto mb-3" />
-              <p className="font-serif text-xl text-ink mb-2">Юристы не найдены</p>
-              <p className="text-sm text-ink-soft">
-                {search || tierFilter !== "all" ? "Попробуйте другой запрос" : "Скоро здесь появятся юристы — Александра уже подключена."}
+              <p className="font-serif text-xl text-ink mb-2">
+                {search || tierFilter !== "all" ? "Юристы не найдены" : "Каталог пока заполняется"}
               </p>
+              <p className="text-sm text-ink-soft max-w-md mx-auto">
+                {search || tierFilter !== "all"
+                  ? "Попробуйте убрать фильтр или написать город/фамилию иначе."
+                  : "Вы всё равно можете получить разбор ситуации сейчас: оставьте заявку или откройте личный кабинет с ИИ-анализом документов."}
+              </p>
+              <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
+                <Button
+                  onClick={() => { window.location.href = "tel:+79253500533"; }}
+                  className="bg-ink text-paper hover:bg-gold hover:text-ink"
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Получить разбор
+                </Button>
+                <Button variant="outline" onClick={() => navigate("/dashboard")}>
+                  Открыть кабинет
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

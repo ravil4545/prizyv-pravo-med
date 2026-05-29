@@ -38,6 +38,7 @@ import AICaseSummary from "@/components/dashboard/AICaseSummary";
 import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
+import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 
 interface DashboardCard {
   title: string;
@@ -254,6 +255,15 @@ const DashboardPage = () => {
           {!isDemoMode && !isLawyer && (
             <div className="mb-6">
               <ClientLawyerRequests />
+            </div>
+          )}
+
+          {/* ── Код от юриста — быстрый путь связать CRM юриста и кабинет клиента.
+              Компонент существовал, но не был выведен в кабинет: пользователь
+              слышал про код в подсказках, а поля для ввода не видел. */}
+          {!isDemoMode && !isLawyer && (
+            <div className="mb-6">
+              <LawyerInviteRedeem />
             </div>
           )}
 

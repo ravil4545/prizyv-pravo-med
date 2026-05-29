@@ -32,8 +32,9 @@ const MobileBottomNav = () => {
   const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
-  // Юристам — навигация по их кабинету. Клиенту/гостю — клиентский набор.
-  const isLawyerArea = location.pathname.startsWith("/lawyer");
+  // Юристам — навигация по их кабинету. Важно: /lawyers — это публичный
+  // каталог юристов для клиентов, а не рабочая зона /lawyer.
+  const isLawyerArea = location.pathname === "/lawyer" || location.pathname.startsWith("/lawyer/");
   const showLawyerNav = isLawyer || isLawyerArea;
 
   const navItems = showLawyerNav
