@@ -54,6 +54,77 @@ const AIChatDashboardPage = () => {
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
+  // ── Эскалация ИИ → живой юрист ──────────────────────────────────────────
+  const [linkedCard, setLinkedCard] = useState<{ id: string; escalation_requested: boolean } | null>(null);
+  const [escalating, setEscalating] = useState(false);
+
+  useEffect(() => {
+    if (!user || isDemoMode) { setLinkedCard(null); return; }
+    let cancelled = false;
+    (async () => {
+      // Клиент видит свою карточку у юриста (RLS «Client views own lawyer entry»).
+      const { data } = await (supabase as any)
+        .from("lawyer_clients")
+        .select("id, escalation_requested, link_state")
+        .eq("client_user_id", user.id)
+        .in("link_state", ["linked_active", "pending_client_approval"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) {
+        setLinkedCard(data ? { id: data.id, escalation_requested: !!data.escalation_requested } : null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, isDemoMode]);
+
+  const buildEscalationSummary = () => {
+    const lines = messages.slice(-12).map((m) =>
+      `${m.role === "user" ? "Клиент" : "ИИ"}: ${m.content.replace(/\s+/g, " ").slice(0, 400)}`,
+    );
+    return (
+      "Клиент запросил передачу дела живому юристу из ИИ-чата.\n\nПоследние сообщения диалога:\n" +
+      lines.join("\n")
+    ).slice(0, 3500);
+  };
+
+  const handleEscalate = async () => {
+    if (isDemoMode || !user) {
+      toast({ title: "Нужен аккаунт", description: "Зарегистрируйтесь, чтобы передать дело юристу." });
+      navigate("/auth");
+      return;
+    }
+    if (!linkedCard) {
+      toast({
+        title: "Сначала выберите юриста",
+        description: "Откройте каталог юристов и подключитесь — потом сможете передать дело.",
+      });
+      navigate("/lawyers");
+      return;
+    }
+    setEscalating(true);
+    try {
+      const { error } = await (supabase as any).rpc("client_escalate_to_lawyer", {
+        p_lawyer_client_id: linkedCard.id,
+        p_summary: buildEscalationSummary(),
+      });
+      if (error) throw error;
+      setLinkedCard({ ...linkedCard, escalation_requested: true });
+      toast({
+        title: "Дело передано юристу",
+        description: "Юрист увидит ваш запрос и сводку диалога и свяжется с вами в чате.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Не удалось передать",
+        description: e?.message || "Попробуйте позже",
+        variant: "destructive",
+      });
+    } finally {
+      setEscalating(false);
+    }
+  };
+
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       if (scrollAreaRef.current) {
@@ -550,6 +621,28 @@ const AIChatDashboardPage = () => {
               <span className="hidden sm:inline">Назад в личный кабинет</span>
               <span className="sm:hidden">Назад</span>
             </Button>
+            {!isDemoMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEscalate}
+                disabled={escalating || !!linkedCard?.escalation_requested}
+                className="ml-auto text-xs sm:text-sm"
+                title="Передать дело и сводку диалога живому юристу"
+              >
+                {escalating ? (
+                  <Loader2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                ) : (
+                  <UserPlus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {linkedCard?.escalation_requested ? "Юрист уведомлён" : "Передать дело юристу"}
+                </span>
+                <span className="sm:hidden">
+                  {linkedCard?.escalation_requested ? "Передано" : "Юристу"}
+                </span>
+              </Button>
+            )}
           </div>
 
           <Card className="flex flex-col h-[calc(100vh-240px)] md:h-[calc(100vh-180px)]">
