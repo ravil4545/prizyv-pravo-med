@@ -39,6 +39,7 @@ import NotificationsInbox from "@/components/dashboard/NotificationsInbox";
 import CasePlanCard from "@/components/dashboard/CasePlanCard";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
+import ClientCaseStatusCard from "@/components/ClientCaseStatusCard";
 import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 import { withBrandPath } from "@/lib/brandPath";
 
@@ -257,6 +258,13 @@ const DashboardPage = () => {
           {!isDemoMode && (
             <div className="mb-6">
               <CaseRoadmap />
+            </div>
+          )}
+
+          {/* ── Статус дела у юриста глазами клиента (этап + эскалация) ──── */}
+          {!isDemoMode && !isLawyer && (
+            <div className="mb-6">
+              <ClientCaseStatusCard />
             </div>
           )}
 
