@@ -102,8 +102,8 @@ const LawyerClientsPage = () => {
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isLawyer) { navigate("/dashboard"); return; }
-    loadCounts();
-  }, [user, profileLoading, isLawyer]);
+    loadCountsRef.current();
+  }, [user, profileLoading, isLawyer, navigate]);
 
   // (Пере)загрузка первой страницы при смене любого серверного фильтра либо
   // режима (в канбане фильтр по этапу не применяется — доска показывает все).
@@ -131,32 +131,49 @@ const LawyerClientsPage = () => {
 
   // Серверные фильтры выборки. Поиск, этап (только список), приоритет, архив —
   // всё уходит в запрос, чтобы не тянуть всю таблицу в память при росте базы.
-  const applyFilters = (q: any) => {
-    q = q.eq("lawyer_id", user!.id);
+  type LawyerClientsQuery = {
+    eq: (column: string, value: unknown) => LawyerClientsQuery;
+    filter: (column: string, operator: string, value: string) => LawyerClientsQuery;
+    gte: (column: string, value: unknown) => LawyerClientsQuery;
+    lte: (column: string, value: unknown) => LawyerClientsQuery;
+    order: (column: string, options?: { ascending?: boolean }) => LawyerClientsQuery;
+    or: (filters: string) => LawyerClientsQuery;
+    range: (from: number, to: number) => LawyerClientsQuery;
+    then: PromiseLike<{ data: LawyerClient[] | null; count: number | null }>["then"];
+  };
+
+  const lawyerClientsTable = (supabase as unknown as {
+    from: (table: "lawyer_clients") => {
+      select: (columns: string, options?: { count?: "exact"; head?: boolean }) => LawyerClientsQuery;
+    };
+  }).from("lawyer_clients");
+
+  const applyFilters = <T extends LawyerClientsQuery>(q: T): T => {
+    let query = q.eq("lawyer_id", user!.id) as T;
     if (!showArchived) {
       // Активные карточки: linked_active / code_sent / pending + старые NULL.
-      q = q.or("link_state.is.null,link_state.in.(linked_active,code_sent,pending_client_approval)");
+      query = query.or("link_state.is.null,link_state.in.(linked_active,code_sent,pending_client_approval)") as T;
     }
-    if (viewMode === "list" && stageFilter !== "all") q = q.eq("crm_stage", stageFilter);
-    if (priorityFilter !== "all") q = q.eq("priority", priorityFilter);
+    if (viewMode === "list" && stageFilter !== "all") query = query.eq("crm_stage", stageFilter) as T;
+    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter) as T;
     const term = debouncedSearch.trim();
     if (term) {
       // Экранируем символы, ломающие синтаксис or()/ilike.
       const safe = term.replace(/[%,()]/g, " ");
-      q = q.or(
+      query = query.or(
         `client_name.ilike.%${safe}%,client_phone.ilike.%${safe}%,` +
           `client_email.ilike.%${safe}%,diagnosis.ilike.%${safe}%,expected_category.ilike.%${safe}%`,
-      );
+      ) as T;
     }
-    return q;
+    return query;
   };
 
   const loadCounts = async () => {
     const [allRes, archRes] = await Promise.all([
-      supabase.from("lawyer_clients").select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
-      supabase.from("lawyer_clients").select("*", { count: "exact", head: true })
+      lawyerClientsTable.select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
+      lawyerClientsTable.select("*", { count: "exact", head: true })
         .eq("lawyer_id", user!.id)
-        .in("link_state", ["archived", "declined", "unlinked", "unlinked_by_client", "unlinked_by_lawyer"]),
+        .filter("link_state", "in", "(archived,declined,unlinked,unlinked_by_client,unlinked_by_lawyer)"),
     ]);
     setTotalAll(allRes.count ?? 0);
     setArchivedCount(archRes.count ?? 0);
@@ -168,7 +185,7 @@ const LawyerClientsPage = () => {
 
     const from = nextPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
-    const pagePromise = applyFilters(supabase.from("lawyer_clients").select("*", { count: "exact" }))
+    const pagePromise = applyFilters(lawyerClientsTable.select("*", { count: "exact" }))
       .order("updated_at", { ascending: false })
       .range(from, to);
 
@@ -182,7 +199,7 @@ const LawyerClientsPage = () => {
       const in14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
       const [pageRes, burningRes] = await Promise.all([
         pagePromise,
-        applyFilters(supabase.from("lawyer_clients").select("*"))
+        applyFilters(lawyerClientsTable.select("*"))
           .eq("case_won", false)
           .gte("conscription_date", today)
           .lte("conscription_date", in14),
@@ -216,7 +233,11 @@ const LawyerClientsPage = () => {
 
   const changeViewMode = (mode: "list" | "kanban") => {
     setViewMode(mode);
-    try { localStorage.setItem("lawyer_clients_view", mode); } catch {}
+    try {
+      localStorage.setItem("lawyer_clients_view", mode);
+    } catch {
+      console.warn("Could not persist lawyer clients view mode");
+    }
   };
 
   const moveClientToStage = async (clientId: string, newStage: string) => {

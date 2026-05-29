@@ -33,7 +33,7 @@ export interface UploadAck {
   analysisPromise?: Promise<{
     category?: string | null;
     explanation?: string | null;
-  } | void>;
+  }>;
 }
 
 interface DocumentUploadWizardProps {
@@ -211,13 +211,14 @@ const DocumentUploadWizard = ({
       // Передаём родителю — он отвечает за upload в Storage и insert в БД,
       // и может вернуть analysisPromise (тогда покажем анимацию ИИ-анализа
       // прямо в слоте, не блокируя переход к следующему документу).
-      const ack = await onUpload({
+      const uploadAck = await onUpload({
         blob,
         title: title.trim() || `Документ_${new Date().toISOString().slice(0, 10)}`,
         pages: allPages.length,
         sourceFiles: files,
         firstPageBase64: allPages[0]?.base64,
       });
+      const ack: UploadAck = uploadAck || {};
 
       const finalTitle = title.trim() || "Документ";
       const hasAnalysis = !!ack?.analysisPromise;

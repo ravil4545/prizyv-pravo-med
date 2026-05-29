@@ -1674,12 +1674,89 @@ export type Database = {
     }
     Functions: {
       accept_family_invite: { Args: { p_token: string }; Returns: Json }
+      claim_lawyer_invite: {
+        Args: { p_code: string }
+        Returns: {
+          lawyer_client_id: string
+          lawyer_id: string
+          client_name: string
+        }[]
+      }
+      client_accept_request: {
+        Args: { p_lawyer_client_id: string }
+        Returns: {
+          lawyer_client_id: string
+          lawyer_id: string
+        }[]
+      }
+      client_connect_to_lawyer: {
+        Args: { p_lawyer_id: string; p_grant_access?: boolean }
+        Returns: {
+          lawyer_client_id: string
+          access_active: boolean
+        }[]
+      }
+      client_decline_request: {
+        Args: { p_lawyer_client_id: string }
+        Returns: boolean
+      }
+      client_pending_requests: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          lawyer_client_id: string
+          lawyer_id: string
+          lawyer_name: string | null
+          lawyer_specialization: string | null
+          lawyer_photo_url: string | null
+          requested_at: string
+          client_name_in_crm: string
+        }[]
+      }
+      client_revoke_lawyer_access: {
+        Args: { p_lawyer_id: string }
+        Returns: boolean
+      }
+      client_unlink_from_lawyer: {
+        Args: { p_lawyer_client_id: string }
+        Returns: {
+          lawyer_client_id: string
+          new_invite_code: string | null
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      lawyer_delete_client: {
+        Args: { p_lawyer_client_id: string }
+        Returns: boolean
+      }
+      lawyer_request_client: {
+        Args: {
+          p_client_name: string
+          p_target_email?: string | null
+          p_client_phone?: string | null
+        }
+        Returns: {
+          lawyer_client_id: string
+          link_state: string
+          invite_code: string | null
+          found_account: boolean
+        }[]
+      }
+      lawyer_revoke_request: {
+        Args: { p_lawyer_client_id: string }
+        Returns: boolean
+      }
+      lawyer_unlink_client: {
+        Args: { p_lawyer_client_id: string }
+        Returns: {
+          lawyer_client_id: string
+          new_invite_code: string | null
+        }[]
       }
       match_rag_chunks: {
         Args: {
@@ -1695,6 +1772,10 @@ export type Database = {
           similarity: number
           target_category: string
         }[]
+      }
+      regenerate_lawyer_invite: {
+        Args: { p_lawyer_client_id: string }
+        Returns: string
       }
     }
     Enums: {

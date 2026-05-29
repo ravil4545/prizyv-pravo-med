@@ -40,11 +40,10 @@ export function RagChat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const location = useLocation();
 
+  const isCabinetRoute = /\/(dashboard|client|lawyer)(\/|$)/.test(location.pathname);
   const hidden =
     HIDDEN_ROUTES.some((r) => location.pathname.startsWith(r)) ||
-    /\/dashboard(\/|$)/.test(location.pathname) ||
-    location.pathname.startsWith("/lawyer/") ||
-    location.pathname.startsWith("/client/");
+    isCabinetRoute;
 
   useEffect(() => {
     if (!hidden && open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
