@@ -94,19 +94,22 @@ export function useDemoMode() {
     trackDemoUsage(updated);
   }, [usage]);
 
+  // Телеметрия пишется через edge-функцию track-demo (service role).
+  // Прямой доступ к demo_visitors закрыт RLS — см. миграцию
+  // 20260529120000_demo_visitors_lock_rls.sql.
   const trackDemoUsage = async (currentUsage: DemoUsage) => {
     try {
-      const demoId = getDemoId();
-      await supabase.from("demo_visitors").upsert({
-        anonymous_user_id: demoId,
-        document_uploads_used: currentUsage.document_uploads_used,
-        ai_questions_used: currentUsage.ai_questions_used,
-        last_visit_at: new Date().toISOString(),
-        user_agent: navigator.userAgent,
-        browser: getBrowser(),
-        os: getOS(),
-        device_type: getDeviceType(),
-      }, { onConflict: "anonymous_user_id" });
+      await supabase.functions.invoke("track-demo", {
+        body: {
+          anonymous_user_id: getDemoId(),
+          document_uploads_used: currentUsage.document_uploads_used,
+          ai_questions_used: currentUsage.ai_questions_used,
+          user_agent: navigator.userAgent,
+          browser: getBrowser(),
+          os: getOS(),
+          device_type: getDeviceType(),
+        },
+      });
     } catch (e) {
       console.error("Demo tracking error:", e);
     }
@@ -115,18 +118,9 @@ export function useDemoMode() {
   // Track initial visit
   useEffect(() => {
     if (isDemoMode && isAuthenticated !== null) {
-      const demoId = getDemoId();
-      supabase.from("demo_visitors").upsert({
-        anonymous_user_id: demoId,
-        document_uploads_used: usage.document_uploads_used,
-        ai_questions_used: usage.ai_questions_used,
-        last_visit_at: new Date().toISOString(),
-        user_agent: navigator.userAgent,
-        browser: getBrowser(),
-        os: getOS(),
-        device_type: getDeviceType(),
-      }, { onConflict: "anonymous_user_id" }).then(() => {});
+      trackDemoUsage(usage);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDemoMode, isAuthenticated]);
 
   const remainingDemoDocs = Math.max(0, demoDocLimit - usage.document_uploads_used);

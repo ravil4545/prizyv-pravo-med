@@ -680,12 +680,21 @@ ${examinationsList}
 
     // Обновляем документ в базе данных если есть documentId
     if (documentId) {
-      // Сначала получаем текущий документ чтобы проверить meta
+      // Сначала получаем текущий документ чтобы проверить владельца и meta
       const { data: currentDoc } = await supabase
         .from("medical_documents_v2")
-        .select("meta, title")
+        .select("meta, title, user_id")
         .eq("id", documentId)
         .single();
+
+      // ── IDOR-защита: документ должен принадлежать вызывающему пользователю ──
+      // userId из тела запроса НЕ доверяем — сверяем владельца с user.id из токена.
+      if (!currentDoc || currentDoc.user_id !== authData.user.id) {
+        return new Response(
+          JSON.stringify({ error: "Документ не найден или доступ запрещён" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
 
       const hasParts =
         currentDoc?.meta?.parts && Array.isArray(currentDoc.meta.parts) && currentDoc.meta.parts.length > 1;
