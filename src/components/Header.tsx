@@ -59,9 +59,8 @@ const Header = () => {
   const { isLawyer } = useLawyerProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Шапка ВСЕГДА ведёт в обычный личный кабинет — он общий для всех
-  // (включая юристов). Вход в кабинет юриста вынесен в подвал сайта.
-  const cabinetPath = "/dashboard";
+  const cabinetPath = isLawyer ? "/lawyer" : "/dashboard";
+  const cabinetLabel = isLawyer ? "Кабинет юриста" : "Личный кабинет";
 
   // Иконка «Сообщения» ведёт в инбокс по роли: у юриста чаты с клиентами
   // живут в /lawyer/chats, у клиента — в /client/messages. Раньше всех вело
@@ -192,7 +191,7 @@ const Header = () => {
                     : "text-primary hover:bg-primary/8"
                 )}
               >
-                Кабинет
+                {cabinetLabel}
               </Link>
             )}
           </nav>
@@ -224,7 +223,7 @@ const Header = () => {
 
             {/* Limits indicator — visible on md+ */}
             <Link
-              to={user ? "/dashboard" : "/auth"}
+              to={user ? cabinetPath : "/auth"}
               className="hidden md:inline-flex mr-1 hover:opacity-80 transition-opacity"
               aria-label="Ваши лимиты"
             >
@@ -288,15 +287,9 @@ const Header = () => {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate(cabinetPath)}>
-                    <User className="h-4 w-4 mr-2" />
-                    Личный кабинет
+                    {isLawyer ? <Briefcase className="h-4 w-4 mr-2" /> : <User className="h-4 w-4 mr-2" />}
+                    {cabinetLabel}
                   </DropdownMenuItem>
-                  {isLawyer && (
-                    <DropdownMenuItem onClick={() => navigate("/lawyer")}>
-                      <Briefcase className="h-4 w-4 mr-2" />
-                      Кабинет юриста
-                    </DropdownMenuItem>
-                  )}
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="h-4 w-4 mr-2" />
                     Профиль и настройки
@@ -365,18 +358,8 @@ const Header = () => {
                           : "bg-primary/5 text-primary hover:bg-primary/10"
                       )}
                     >
-                      <User className="h-5 w-5" />
-                      Личный кабинет
-                    </Link>
-                  )}
-                  {user && isLawyer && (
-                    <Link
-                      to="/lawyer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-medium text-foreground/80 hover:bg-muted transition-colors mb-1"
-                    >
-                      <Briefcase className="h-5 w-5" />
-                      Кабинет юриста
+                      {isLawyer ? <Briefcase className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                      {cabinetLabel}
                     </Link>
                   )}
                   {user && (

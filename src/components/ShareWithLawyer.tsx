@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { withBrandPath } from "@/lib/brandPath";
 import {
   Shield, FileText, Brain, Users, User, Info, ShieldOff, ShieldCheck,
   ChevronDown, ChevronUp, Loader2, MoreVertical, UserMinus, AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -69,6 +72,8 @@ interface LawyerProfileBrief {
 const ShareWithLawyer = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [lawyers, setLawyers] = useState<LawyerEntry[]>([]);
   const [grants, setGrants] = useState<AccessGrant[]>([]);
   const [profiles, setProfiles] = useState<Record<string, LawyerProfileBrief>>({});
@@ -149,7 +154,7 @@ const ShareWithLawyer = () => {
         .select("user_id, full_name, photo_url, brand_subtitle, specialization, brand_about, bio, brand_phone, brand_telegram, brand_whatsapp, brand_email, slug")
         .in("user_id", ids);
       const map: Record<string, LawyerProfileBrief> = {};
-      (profRows || []).forEach((p: any) => { map[p.user_id] = p; });
+      ((profRows || []) as LawyerProfileBrief[]).forEach((p) => { map[p.user_id] = p; });
       setProfiles(map);
     }
     setLoading(false);
@@ -224,6 +229,8 @@ const ShareWithLawyer = () => {
 
   const activeCount = lawyers.filter((l) => isGranted(l.lawyer_id)).length;
   const allActive = lawyers.length > 0 && activeCount === lawyers.length;
+  const chatPath = (lawyerClientId: string) =>
+    withBrandPath(location.pathname, `/client/chat/${lawyerClientId}`);
 
   // Пока грузим — ничего не показываем (не мигаем спиннером в кабинете).
   if (loading) return null;
@@ -331,7 +338,7 @@ const ShareWithLawyer = () => {
             return (
               <div
                 key={l.id}
-                className="flex items-center gap-3 p-3 rounded-lg border bg-card"
+                className="flex flex-col gap-3 p-3 rounded-lg border bg-card sm:flex-row sm:items-center"
               >
                 {/* Интерактивная плашка: avatar + имя + subtitle.
                     Клик открывает компактную визитку юриста (Popover). */}
@@ -344,7 +351,6 @@ const ShareWithLawyer = () => {
                     >
                       <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center font-semibold text-sm">
                         {prof?.photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={prof.photo_url} alt={displayName} className="h-full w-full object-cover" />
                         ) : (
                           displayName.charAt(0).toUpperCase()
@@ -373,7 +379,6 @@ const ShareWithLawyer = () => {
                           <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 to-violet-500/5 border-b">
                             <div className="h-14 w-14 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-lg">
                               {prof?.photo_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
                                 <img src={prof.photo_url} alt={displayName} className="h-full w-full object-cover" />
                               ) : (
                                 displayName.charAt(0).toUpperCase()
@@ -457,7 +462,16 @@ const ShareWithLawyer = () => {
                 </Popover>
 
                 {/* Switch + badge + меню действий */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5"
+                    onClick={() => navigate(chatPath(l.id))}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Чат
+                  </Button>
                   {granted ? (
                     <Badge variant="outline" className="text-[10px] gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
                       <ShieldCheck className="h-3 w-3" /> Открыт

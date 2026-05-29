@@ -179,6 +179,14 @@ export default function CasePlanCard() {
         priority: state.bestChance !== null && state.bestChance < 50 ? "high" : "medium",
         preserveBrand: false,
       });
+    } else {
+      next.push({
+        title: "Открыть чат с юристом",
+        description: "Быстрый доступ к переписке, вложениям и управлению доступом к досье.",
+        path: "/client/messages",
+        icon: MessageSquare,
+        priority: "medium",
+      });
     }
 
     if (state.familyViewers === 0) {

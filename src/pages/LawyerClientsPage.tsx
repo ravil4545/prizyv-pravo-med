@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, MessageSquare, ChevronRight,
   Phone, Calendar, AlertTriangle, Crown, Filter,
-  LayoutList, KanbanSquare, BookOpen, Ticket,
+  LayoutList, KanbanSquare, BookOpen, Ticket, ShieldCheck, ShieldOff,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
@@ -49,8 +49,10 @@ const LawyerClientsPage = () => {
   const { toast } = useToast();
 
   const [clients, setClients] = useState<LawyerClient[]>([]);
+  const [docAccessByClient, setDocAccessByClient] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   // filteredTotal — размер текущей (отфильтрованной) серверной выборки;
   // totalAll/archivedCount — общие счётчики для шапки и тоггла «архив».
@@ -91,6 +93,8 @@ const LawyerClientsPage = () => {
   });
 
   const PAGE_SIZE = 30;
+  const ACTIVE_LINK_STATE_FILTER = "link_state.is.null,link_state.in.(linked_active,code_sent,pending_client_approval,unlinked)";
+  const ARCHIVED_LINK_STATE_FILTER = "(archived,declined,unlinked_by_client,unlinked_by_lawyer)";
 
   // Дебаунс поиска — серверный ilike дёргаем не на каждый символ.
   useEffect(() => {
@@ -129,6 +133,41 @@ const LawyerClientsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isLawyer]);
 
+  useEffect(() => {
+    const lawyerId = user?.id;
+    if (!lawyerId || clients.length === 0) {
+      setDocAccessByClient({});
+      return;
+    }
+
+    const clientUserIds = Array.from(
+      new Set(clients.map((client) => client.client_user_id).filter(Boolean) as string[]),
+    );
+    if (clientUserIds.length === 0) {
+      setDocAccessByClient({});
+      return;
+    }
+
+    let cancelled = false;
+    supabase
+      .from("client_document_access")
+      .select("client_user_id, is_active")
+      .eq("lawyer_id", lawyerId)
+      .in("client_user_id", clientUserIds)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const next: Record<string, boolean> = {};
+        (data || []).forEach((row) => {
+          next[row.client_user_id] = !!row.is_active;
+        });
+        setDocAccessByClient(next);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clients, user?.id]);
+
   // Серверные фильтры выборки. Поиск, этап (только список), приоритет, архив —
   // всё уходит в запрос, чтобы не тянуть всю таблицу в память при росте базы.
   type LawyerClientsQuery = {
@@ -139,7 +178,7 @@ const LawyerClientsPage = () => {
     order: (column: string, options?: { ascending?: boolean }) => LawyerClientsQuery;
     or: (filters: string) => LawyerClientsQuery;
     range: (from: number, to: number) => LawyerClientsQuery;
-    then: PromiseLike<{ data: LawyerClient[] | null; count: number | null }>["then"];
+    then: PromiseLike<{ data: LawyerClient[] | null; count: number | null; error?: { message: string } | null }>["then"];
   };
 
   const lawyerClientsTable = (supabase as unknown as {
@@ -151,8 +190,9 @@ const LawyerClientsPage = () => {
   const applyFilters = <T extends LawyerClientsQuery>(q: T): T => {
     let query = q.eq("lawyer_id", user!.id) as T;
     if (!showArchived) {
-      // Активные карточки: linked_active / code_sent / pending + старые NULL.
-      query = query.or("link_state.is.null,link_state.in.(linked_active,code_sent,pending_client_approval)") as T;
+      // В рабочем списке оставляем и старые unlinked-карточки: это обычные CRM-карточки
+      // без привязанного кабинета, а не архив.
+      query = query.or(ACTIVE_LINK_STATE_FILTER) as T;
     }
     if (viewMode === "list" && stageFilter !== "all") query = query.eq("crm_stage", stageFilter) as T;
     if (priorityFilter !== "all") query = query.eq("priority", priorityFilter) as T;
@@ -169,59 +209,76 @@ const LawyerClientsPage = () => {
   };
 
   const loadCounts = async () => {
-    const [allRes, archRes] = await Promise.all([
-      lawyerClientsTable.select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
-      lawyerClientsTable.select("*", { count: "exact", head: true })
-        .eq("lawyer_id", user!.id)
-        .filter("link_state", "in", "(archived,declined,unlinked,unlinked_by_client,unlinked_by_lawyer)"),
-    ]);
-    setTotalAll(allRes.count ?? 0);
-    setArchivedCount(archRes.count ?? 0);
+    try {
+      const [allRes, archRes] = await Promise.all([
+        lawyerClientsTable.select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
+        lawyerClientsTable.select("*", { count: "exact", head: true })
+          .eq("lawyer_id", user!.id)
+          .filter("link_state", "in", ARCHIVED_LINK_STATE_FILTER),
+      ]);
+      if (allRes.error) throw new Error(allRes.error.message);
+      if (archRes.error) throw new Error(archRes.error.message);
+      setTotalAll(allRes.count ?? 0);
+      setArchivedCount(archRes.count ?? 0);
+    } catch (error) {
+      console.warn("Could not load lawyer client counts", error);
+    }
   };
 
   const loadClients = async (reset: boolean) => {
     const nextPage = reset ? 0 : page + 1;
     if (reset) setLoading(true); else setLoadingMore(true);
+    setLoadError(null);
 
-    const from = nextPage * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    const pagePromise = applyFilters(lawyerClientsTable.select("*", { count: "exact" }))
-      .order("updated_at", { ascending: false })
-      .range(from, to);
+    try {
+      const from = nextPage * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const pagePromise = applyFilters(lawyerClientsTable.select("*", { count: "exact" }))
+        .order("updated_at", { ascending: false })
+        .range(from, to);
 
-    let rows: LawyerClient[] = [];
-    let total = 0;
-    if (reset) {
-      // На первой странице дополнительно тянем «горящие» дела (≤14 дней до
-      // призыва, не выиграно) — чтобы они не утонули на дальних страницах.
-      // Клиентская сортировка ниже поднимет их наверх.
-      const today = new Date().toISOString().slice(0, 10);
-      const in14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
-      const [pageRes, burningRes] = await Promise.all([
-        pagePromise,
-        applyFilters(lawyerClientsTable.select("*"))
-          .eq("case_won", false)
-          .gte("conscription_date", today)
-          .lte("conscription_date", in14),
-      ]);
-      rows = [...((pageRes.data as LawyerClient[]) || []), ...((burningRes.data as LawyerClient[]) || [])];
-      total = pageRes.count ?? 0;
-    } else {
-      const pageRes = await pagePromise;
-      rows = (pageRes.data as LawyerClient[]) || [];
-      total = pageRes.count ?? 0;
+      let rows: LawyerClient[] = [];
+      let total = 0;
+      if (reset) {
+        // На первой странице дополнительно тянем «горящие» дела (≤14 дней до
+        // призыва, не выиграно) — чтобы они не утонули на дальних страницах.
+        // Клиентская сортировка ниже поднимет их наверх.
+        const today = new Date().toISOString().slice(0, 10);
+        const in14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+        const [pageRes, burningRes] = await Promise.all([
+          pagePromise,
+          applyFilters(lawyerClientsTable.select("*"))
+            .eq("case_won", false)
+            .gte("conscription_date", today)
+            .lte("conscription_date", in14),
+        ]);
+        if (pageRes.error) throw new Error(pageRes.error.message);
+        if (burningRes.error) throw new Error(burningRes.error.message);
+        rows = [...((pageRes.data as LawyerClient[]) || []), ...((burningRes.data as LawyerClient[]) || [])];
+        total = pageRes.count ?? 0;
+      } else {
+        const pageRes = await pagePromise;
+        if (pageRes.error) throw new Error(pageRes.error.message);
+        rows = (pageRes.data as LawyerClient[]) || [];
+        total = pageRes.count ?? 0;
+      }
+
+      setFilteredTotal(total);
+      setClients((prev) => {
+        const base = reset ? [] : prev;
+        const seen = new Set(base.map((c) => c.id));
+        const merged = [...base];
+        rows.forEach((r) => { if (!seen.has(r.id)) { merged.push(r); seen.add(r.id); } });
+        return merged;
+      });
+      setPage(nextPage);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось загрузить клиентов";
+      setLoadError(message);
+      if (reset) setClients([]);
+    } finally {
+      if (reset) setLoading(false); else setLoadingMore(false);
     }
-
-    setFilteredTotal(total);
-    setClients((prev) => {
-      const base = reset ? [] : prev;
-      const seen = new Set(base.map((c) => c.id));
-      const merged = [...base];
-      rows.forEach((r) => { if (!seen.has(r.id)) { merged.push(r); seen.add(r.id); } });
-      return merged;
-    });
-    setPage(nextPage);
-    if (reset) setLoading(false); else setLoadingMore(false);
   };
 
   // Realtime-обработчик (канал подписан один раз) должен вызывать всегда свежие
@@ -400,6 +457,15 @@ const LawyerClientsPage = () => {
             title="Клиент ещё не ввёл код приглашения — кликните, чтобы открыть код">
             <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
             {compact ? "Код" : "Код не использован"}
+          </Badge>
+        );
+      case "unlinked":
+        return (
+          <Badge variant="outline" className={`${cls} border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50`}
+            onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
+            title="Карточка есть в CRM, но кабинет клиента ещё не привязан. Откройте карточку и отправьте код приглашения.">
+            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+            {compact ? "Без связи" : "Кабинет не привязан"}
           </Badge>
         );
       case "declined":
@@ -655,11 +721,40 @@ const LawyerClientsPage = () => {
         {/* Client list / kanban */}
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full mb-2" />)
+        ) : loadError ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+              <p className="font-medium">Не удалось загрузить клиентов</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">{loadError}</p>
+              <Button className="mt-4" variant="outline" onClick={() => loadClients(true)}>
+                Повторить
+              </Button>
+            </CardContent>
+          </Card>
         ) : viewMode === "list" ? (
           filtered.length === 0 ? (
             <div className="text-center py-16">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">{search || stageFilter !== "all" ? "Клиенты не найдены" : "Нет клиентов. Добавьте первого."}</p>
+              <p className="text-muted-foreground">
+                {search || stageFilter !== "all" || priorityFilter !== "all"
+                  ? "Клиенты не найдены по текущим фильтрам"
+                  : totalAll > 0
+                    ? "Карточки есть, но сейчас скрыты архивом или фильтрами"
+                    : "Нет клиентов. Добавьте первого."}
+              </p>
+              {totalAll > 0 && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setSearch("");
+                    setStageFilter("all");
+                    setPriorityFilter("all");
+                    setShowArchived(true);
+                  }}>
+                    Показать все карточки
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -680,6 +775,19 @@ const LawyerClientsPage = () => {
                           {c.priority === "high" && <Badge variant="secondary" className="text-xs">Высокий</Badge>}
                           {c.case_won && <Badge className="text-xs bg-green-100 text-green-700">✓ ВБ получен</Badge>}
                           {renderLinkBadge(c)}
+                          {c.client_user_id && (
+                            docAccessByClient[c.client_user_id] ? (
+                              <Badge variant="outline" className="text-[10px] gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
+                                <ShieldCheck className="h-3 w-3" />
+                                Данные открыты
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                <ShieldOff className="h-3 w-3" />
+                                Нет доступа к досье
+                              </Badge>
+                            )
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
                           {c.client_phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.client_phone}</span>}
@@ -694,8 +802,16 @@ const LawyerClientsPage = () => {
                         </span>
                         <div className="relative">
                           <Button variant="ghost" size="icon" className="h-8 w-8"
-                            onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/chat/${c.id}`); }}>
-                            <MessageSquare className={unreadByConv[c.id] ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+                            title={c.client_user_id ? "Открыть чат" : "Открыть карточку и отправить приглашение"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(c.client_user_id ? `/lawyer/chat/${c.id}` : `/lawyer/clients/${c.id}`);
+                            }}>
+                            {c.client_user_id ? (
+                              <MessageSquare className={unreadByConv[c.id] ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+                            ) : (
+                              <Ticket className="h-4 w-4 text-amber-600" />
+                            )}
                           </Button>
                           {unreadByConv[c.id] > 0 && (
                             <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 pointer-events-none">
@@ -771,6 +887,15 @@ const LawyerClientsPage = () => {
                                     {c.priority === "high" && <Badge variant="secondary" className="text-[10px] px-1 py-0">Высокий</Badge>}
                                     {c.case_won && <Badge className="text-[10px] px-1 py-0 bg-green-100 text-green-700">ВБ</Badge>}
                                     {renderLinkBadge(c, true)}
+                                    {c.client_user_id && (
+                                      <Badge variant="outline" className={`text-[10px] px-1 py-0 gap-0.5 ${
+                                        docAccessByClient[c.client_user_id]
+                                          ? "border-emerald-400 text-emerald-700 dark:text-emerald-300"
+                                          : "text-muted-foreground"
+                                      }`}>
+                                        {docAccessByClient[c.client_user_id] ? "Доступ" : "Нет досье"}
+                                      </Badge>
+                                    )}
                                   </div>
                                   {c.client_phone && (
                                     <p className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -793,9 +918,17 @@ const LawyerClientsPage = () => {
                                       variant="ghost"
                                       size="icon"
                                       className="h-6 w-6"
-                                      onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/chat/${c.id}`); }}
+                                      title={c.client_user_id ? "Открыть чат" : "Открыть карточку и отправить приглашение"}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(c.client_user_id ? `/lawyer/chat/${c.id}` : `/lawyer/clients/${c.id}`);
+                                      }}
                                     >
-                                      <MessageSquare className="h-3.5 w-3.5" />
+                                      {c.client_user_id ? (
+                                        <MessageSquare className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <Ticket className="h-3.5 w-3.5 text-amber-600" />
+                                      )}
                                     </Button>
                                   </div>
                                 </CardContent>
