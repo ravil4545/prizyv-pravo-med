@@ -41,3 +41,6 @@ verify_jwt = true
 
 [functions.lawyer-case-assistant]
 verify_jwt = true
+
+[functions.lawyer-build-plan]
+verify_jwt = true

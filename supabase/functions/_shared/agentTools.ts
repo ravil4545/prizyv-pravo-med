@@ -32,6 +32,13 @@ export interface ToolContext {
   // Карта id документа → таблица-источник. Ключи задают «белый список» для
   // read_document (всё, чего здесь нет, читать нельзя).
   docSources: Record<string, "medical_documents_v2" | "lawyer_client_med_docs">;
+  // Якорь для write-инструментов планировщика (P3). Берётся ТОЛЬКО из
+  // проверенного контекста вызывающей функции, НЕ из аргументов модели —
+  // так модель не может записать план в чужое дело.
+  lawyerClientId?: string;
+  lawyerId?: string;
+  // Гейт записи: write-инструменты исполняются, только если true И есть якорь.
+  enableWrites?: boolean;
 }
 
 // ── Определения инструментов (OpenAI function schema) ─────────────────────
@@ -120,12 +127,72 @@ export const AGENT_TOOLS: LlmTool[] = [
   },
 ];
 
+// Write-инструменты планировщика A3 (P3). Передаются модели ТОЛЬКО когда
+// вызывающая функция включает запись (ctx.enableWrites + якорь дела).
+export const PLANNER_WRITE_TOOLS: LlmTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "update_examination_plan",
+      description:
+        "Сохранить план дообследования по делу (анализы/обследования/консультации). Вызывай ОДИН раз с полным списком пунктов. По умолчанию заменяет прежний ИИ-план (ручные пункты юриста сохраняются).",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            description: "Пункты плана дообследования.",
+            items: {
+              type: "object",
+              properties: {
+                item_type: { type: "string", enum: ["analysis", "examination", "specialist"], description: "Тип: анализ / инструментальное обследование / консультация специалиста." },
+                name: { type: "string", description: "Что именно (полное название анализа/обследования/специальности)." },
+                reason: { type: "string", description: "Зачем нужно (1 предложение)." },
+              },
+              required: ["item_type", "name"],
+            },
+          },
+          replace: { type: "boolean", description: "true (по умолчанию) — заменить прежний ИИ-план дела." },
+        },
+        required: ["items"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_action_plan",
+      description:
+        "Сохранить тактический план действий юриста по делу (шаги/задачи). Вызывай ОДИН раз с полным списком. По умолчанию заменяет прежний ИИ-план (ручные задачи сохраняются).",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            description: "Шаги тактического плана в порядке выполнения.",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Краткая формулировка шага." },
+                description: { type: "string", description: "Детали/как сделать (опционально)." },
+                priority: { type: "string", enum: ["low", "normal", "high"], description: "Приоритет." },
+              },
+              required: ["title"],
+            },
+          },
+          replace: { type: "boolean", description: "true (по умолчанию) — заменить прежний ИИ-план дела." },
+        },
+        required: ["items"],
+      },
+    },
+  },
+];
+
 // Отложенные инструменты (P3/P4): схемы существуют, но по умолчанию НЕ
-// передаются модели. Включатся вместе с таблицами планов/шаблонов.
+// передаются модели. save_extraction — нужна точка persist'а (A1/Gemini-путь);
+// create_template_draft — это A5/шаблоны (P4).
 export const DEFERRED_TOOL_NAMES = [
   "save_extraction",
-  "update_examination_plan",
-  "update_action_plan",
   "create_template_draft",
 ] as const;
 
@@ -224,14 +291,73 @@ export async function runTool(
       };
     }
 
-    // Отложенные write/plan-инструменты: контракт есть, исполнение — в P3/P4.
+    case "update_examination_plan": {
+      if (!ctx.enableWrites || !ctx.lawyerClientId || !ctx.lawyerId) {
+        return { deferred: true, message: "Запись плана недоступна в этом контексте." };
+      }
+      const raw = Array.isArray(args.items) ? args.items.slice(0, 30) : [];
+      const valid = raw
+        .map((it) => it as Record<string, unknown>)
+        .filter((it) =>
+          it && typeof it.name === "string" && String(it.name).trim() &&
+          ["analysis", "examination", "specialist"].includes(String(it.item_type))
+        )
+        .map((it) => ({
+          lawyer_client_id: ctx.lawyerClientId,
+          lawyer_id: ctx.lawyerId,
+          item_type: String(it.item_type),
+          name: String(it.name).slice(0, 300),
+          reason: it.reason ? String(it.reason).slice(0, 500) : null,
+          source: "ai",
+          created_by: ctx.lawyerId,
+        }));
+      if (!valid.length) return { error: "Нет валидных пунктов плана дообследования." };
+      const replace = args.replace !== false;
+      if (replace) {
+        await sb.from("examination_plan_items").delete()
+          .eq("lawyer_client_id", ctx.lawyerClientId).eq("source", "ai");
+      }
+      const { error } = await sb.from("examination_plan_items").insert(valid);
+      if (error) return { error: error.message };
+      return { saved: valid.length, replaced: replace };
+    }
+
+    case "update_action_plan": {
+      if (!ctx.enableWrites || !ctx.lawyerClientId || !ctx.lawyerId) {
+        return { deferred: true, message: "Запись плана недоступна в этом контексте." };
+      }
+      const raw = Array.isArray(args.items) ? args.items.slice(0, 30) : [];
+      const valid = raw
+        .map((it) => it as Record<string, unknown>)
+        .filter((it) => it && typeof it.title === "string" && String(it.title).trim())
+        .map((it, idx) => ({
+          lawyer_client_id: ctx.lawyerClientId,
+          lawyer_id: ctx.lawyerId,
+          title: String(it.title).slice(0, 300),
+          description: it.description ? String(it.description).slice(0, 800) : null,
+          priority: ["low", "normal", "high"].includes(String(it.priority)) ? String(it.priority) : "normal",
+          order_index: idx,
+          source: "ai",
+          created_by: ctx.lawyerId,
+        }));
+      if (!valid.length) return { error: "Нет валидных задач плана действий." };
+      const replace = args.replace !== false;
+      if (replace) {
+        await sb.from("action_plan_items").delete()
+          .eq("lawyer_client_id", ctx.lawyerClientId).eq("source", "ai");
+      }
+      const { error } = await sb.from("action_plan_items").insert(valid);
+      if (error) return { error: error.message };
+      return { saved: valid.length, replaced: replace };
+    }
+
+    // Отложено: save_extraction (нужна точка persist'а на A1/Gemini-пути),
+    // create_template_draft (A5/шаблоны — P4).
     case "save_extraction":
-    case "update_examination_plan":
-    case "update_action_plan":
     case "create_template_draft":
       return {
         deferred: true,
-        message: `Инструмент «${name}» будет включён в P3/P4 (нужны таблицы планов/шаблонов). Сейчас не выполняется.`,
+        message: `Инструмент «${name}» включится позже (P3 persist / P4 шаблоны). Сейчас не выполняется.`,
       };
 
     default:
