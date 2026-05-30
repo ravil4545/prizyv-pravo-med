@@ -93,6 +93,27 @@ export interface ContextCrm {
   caseWon: boolean | null;
 }
 
+export interface ContextExamItem {
+  itemType: string; // analysis|examination|specialist
+  name: string;
+  reason: string | null;
+  status: string;
+  source: string; // ai|lawyer
+}
+
+export interface ContextActionItem {
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  source: string;
+}
+
+export interface ContextPlans {
+  examination: ContextExamItem[];
+  action: ContextActionItem[];
+}
+
 export interface ContextBundle {
   scope: "client" | "lawyer";
   client: ContextClient;
@@ -100,6 +121,7 @@ export interface ContextBundle {
   documents: ContextDocument[];
   chatHistory: ContextChatMessage[];
   caseEvents: ContextCaseEvent[];
+  plans: ContextPlans | null; // план дообследования/действий (scope=lawyer)
   meta: {
     assembledAtIso: string;
     documentCount: number;
@@ -293,6 +315,7 @@ export async function assembleClientContext(
       description: (e.description as string) ?? null,
       outcome: (e.outcome as string) ?? null,
     })),
+    plans: null, // планы привязаны к карточке CRM, не к user_id
     meta: {
       assembledAtIso: nowIso(),
       documentCount: documents.length,
@@ -405,8 +428,8 @@ export async function assembleLawyerClientContext(
     }
   }
 
-  // Заметки по делу + переписка юрист↔клиент → единая лента истории.
-  const [{ data: notes }, { data: chatMsgs }] = await Promise.all([
+  // Заметки + переписка + сохранённые планы (P3) → одним пакетом.
+  const [{ data: notes }, { data: chatMsgs }, { data: examItems }, { data: actItems }] = await Promise.all([
     sb
       .from("case_notes")
       .select("content, note_type, created_at, author_id")
@@ -419,7 +442,36 @@ export async function assembleLawyerClientContext(
       .eq("lawyer_client_id", lawyerClientId)
       .order("created_at", { ascending: false })
       .limit(maxChat),
+    sb
+      .from("examination_plan_items")
+      .select("item_type, name, reason, status, source")
+      .eq("lawyer_client_id", lawyerClientId)
+      .order("created_at", { ascending: true })
+      .limit(40),
+    sb
+      .from("action_plan_items")
+      .select("title, description, status, priority, source")
+      .eq("lawyer_client_id", lawyerClientId)
+      .order("order_index", { ascending: true })
+      .limit(40),
   ]);
+
+  const plans: ContextPlans = {
+    examination: (examItems || []).map((e: Record<string, unknown>) => ({
+      itemType: e.item_type as string,
+      name: e.name as string,
+      reason: (e.reason as string) ?? null,
+      status: e.status as string,
+      source: e.source as string,
+    })),
+    action: (actItems || []).map((a: Record<string, unknown>) => ({
+      title: a.title as string,
+      description: (a.description as string) ?? null,
+      status: a.status as string,
+      priority: a.priority as string,
+      source: a.source as string,
+    })),
+  };
 
   const chatHistory: ContextChatMessage[] = (chatMsgs || [])
     .reverse()
@@ -488,6 +540,7 @@ export async function assembleLawyerClientContext(
     documents,
     chatHistory: [...noteMsgs, ...chatHistory],
     caseEvents: [],
+    plans,
     meta: {
       assembledAtIso: nowIso(),
       documentCount: documents.length,
@@ -500,7 +553,7 @@ export async function assembleLawyerClientContext(
 // ── сериализация под промпт (бюджет символов под TPM Groq) ────────────────
 
 export interface SerializeOpts {
-  include?: Array<"client" | "crm" | "documents" | "chat" | "events">;
+  include?: Array<"client" | "crm" | "plans" | "documents" | "chat" | "events">;
   maxChars?: number; // общий бюджет блока контекста
   docTextChars?: number; // сколько сырого текста на документ
   maxChatMessages?: number;
@@ -512,7 +565,7 @@ export interface SerializeOpts {
  * контекст до ~6000 символов, отдавая приоритет фактам дела и свежим документам.
  */
 export function serializeBundle(b: ContextBundle, opts: SerializeOpts = {}): string {
-  const include = opts.include ?? ["client", "crm", "documents", "chat", "events"];
+  const include = opts.include ?? ["client", "crm", "plans", "documents", "chat", "events"];
   const maxChars = opts.maxChars ?? 6000;
   const docTextChars = opts.docTextChars ?? 600;
   const maxChat = opts.maxChatMessages ?? 8;
@@ -540,6 +593,23 @@ export function serializeBundle(b: ContextBundle, opts: SerializeOpts = {}): str
     if (m.conscriptionDate) lines.push(`Дата призыва: ${m.conscriptionDate}`);
     if (m.notes) lines.push(`Заметки: ${capText(m.notes, 400)}`);
     if (lines.length > 1) parts.push(lines.join("\n"));
+  }
+
+  if (include.includes("plans") && b.plans && (b.plans.examination.length || b.plans.action.length)) {
+    const lines = ["=== ТЕКУЩИЙ ПЛАН ==="];
+    if (b.plans.examination.length) {
+      lines.push("Дообследование:");
+      for (const e of b.plans.examination.slice(0, 15)) {
+        lines.push(`  • [${e.status}] ${e.name}${e.reason ? ` — ${capText(e.reason, 160)}` : ""}`);
+      }
+    }
+    if (b.plans.action.length) {
+      lines.push("Действия:");
+      for (const a of b.plans.action.slice(0, 15)) {
+        lines.push(`  • [${a.status}/${a.priority}] ${a.title}`);
+      }
+    }
+    parts.push(lines.join("\n"));
   }
 
   if (include.includes("documents") && b.documents.length) {
