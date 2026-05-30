@@ -420,6 +420,13 @@ const LawyerClientDetail = () => {
           content: `Этап изменён: ${CRM_STAGES.find((s) => s.value === prevStage)?.label} → ${CRM_STAGES.find((s) => s.value === form.crm_stage)?.label}`,
           note_type: "stage_change",
         });
+        // Дублируем смену этапа системным сообщением в чат — клиент видит её
+        // прямо в переписке («единая лента дела»).
+        await (supabase as any).from("lawyer_chat_messages").insert({
+          lawyer_client_id: clientId, sender_id: user!.id,
+          message_type: "system",
+          content: `Этап дела изменён: ${CRM_STAGES.find((s) => s.value === prevStage)?.label || prevStage} → ${CRM_STAGES.find((s) => s.value === form.crm_stage)?.label || form.crm_stage}`,
+        });
         loadNotes();
       }
       toast({ title: "Сохранено" });

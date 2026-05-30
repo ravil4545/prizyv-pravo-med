@@ -415,6 +415,15 @@ const ClientChatPage = () => {
                     {msgs.map((m) => {
                       const isOwn = m.sender_id === user!.id;
                       const fileSrc = attachmentUrls[m.id];
+                      if (m.message_type === "system") {
+                        return (
+                          <div key={m.id} className="flex justify-center my-2">
+                            <span className="text-[11px] text-muted-foreground bg-muted/60 rounded-full px-3 py-1 max-w-[85%] text-center">
+                              {m.content}
+                            </span>
+                          </div>
+                        );
+                      }
                       return (
                         <div key={m.id} className={cn("flex mb-1 items-end gap-1 group", isOwn ? "flex-row-reverse" : "")}>
                           {/* Edit button for own text messages */}
