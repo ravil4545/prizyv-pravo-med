@@ -40,6 +40,7 @@ import CasePlanCard from "@/components/dashboard/CasePlanCard";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
 import ClientCaseStatusCard from "@/components/ClientCaseStatusCard";
+import PdnConsentGate from "@/components/PdnConsentGate";
 import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 import { withBrandPath } from "@/lib/brandPath";
 
@@ -201,6 +202,7 @@ const DashboardPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <PdnConsentGate />
       <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
         <div className="max-w-5xl mx-auto">
           {/* ── Шапка — серифный editorial-стиль ───────────────────────── */}
