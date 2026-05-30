@@ -328,6 +328,13 @@ export type Database = {
             referencedRelation: "lawyer_clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "case_notes_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       chat_conversations: {
@@ -858,6 +865,7 @@ export type Database = {
           is_read: boolean
           lawyer_client_id: string
           message_type: string
+          recipient_id: string | null
           sender_id: string
         }
         Insert: {
@@ -871,6 +879,7 @@ export type Database = {
           is_read?: boolean
           lawyer_client_id: string
           message_type?: string
+          recipient_id?: string | null
           sender_id: string
         }
         Update: {
@@ -884,6 +893,7 @@ export type Database = {
           is_read?: boolean
           lawyer_client_id?: string
           message_type?: string
+          recipient_id?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -892,6 +902,13 @@ export type Database = {
             columns: ["lawyer_client_id"]
             isOneToOne: false
             referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lawyer_chat_messages_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -950,6 +967,13 @@ export type Database = {
             referencedRelation: "lawyer_clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lawyer_client_med_docs_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lawyer_clients: {
@@ -966,9 +990,16 @@ export type Database = {
           diagnosis: string | null
           expected_category: string | null
           id: string
+          invite_code: string | null
           lawyer_id: string
+          link_state: string
+          linked_at: string | null
           notes: string | null
           priority: string
+          requested_at: string | null
+          target_email: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
           updated_at: string
         }
         Insert: {
@@ -984,9 +1015,16 @@ export type Database = {
           diagnosis?: string | null
           expected_category?: string | null
           id?: string
+          invite_code?: string | null
           lawyer_id: string
+          link_state?: string
+          linked_at?: string | null
           notes?: string | null
           priority?: string
+          requested_at?: string | null
+          target_email?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -1002,9 +1040,16 @@ export type Database = {
           diagnosis?: string | null
           expected_category?: string | null
           id?: string
+          invite_code?: string | null
           lawyer_id?: string
+          link_state?: string
+          linked_at?: string | null
           notes?: string | null
           priority?: string
+          requested_at?: string | null
+          target_email?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1109,6 +1154,13 @@ export type Database = {
             columns: ["lawyer_client_id"]
             isOneToOne: false
             referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lawyer_template_uses_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -1671,15 +1723,46 @@ export type Database = {
         }
         Relationships: []
       }
+      lawyer_clients_enriched: {
+        Row: {
+          case_won: boolean | null
+          client_auth_email: string | null
+          client_birth_year: number | null
+          client_email: string | null
+          client_name: string | null
+          client_phone: string | null
+          client_user_id: string | null
+          conscription_date: string | null
+          created_at: string | null
+          crm_stage: string | null
+          diagnosis: string | null
+          display_name: string | null
+          expected_category: string | null
+          id: string | null
+          invite_code: string | null
+          lawyer_id: string | null
+          link_state: string | null
+          linked_at: string | null
+          notes: string | null
+          priority: string | null
+          profile_full_name: string | null
+          requested_at: string | null
+          target_email: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_family_invite: { Args: { p_token: string }; Returns: Json }
       claim_lawyer_invite: {
         Args: { p_code: string }
         Returns: {
+          client_name: string
           lawyer_client_id: string
           lawyer_id: string
-          client_name: string
         }[]
       }
       client_accept_request: {
@@ -1690,10 +1773,10 @@ export type Database = {
         }[]
       }
       client_connect_to_lawyer: {
-        Args: { p_lawyer_id: string; p_grant_access?: boolean }
+        Args: { p_grant_access?: boolean; p_lawyer_id: string }
         Returns: {
-          lawyer_client_id: string
           access_active: boolean
+          lawyer_client_id: string
         }[]
       }
       client_decline_request: {
@@ -1701,15 +1784,15 @@ export type Database = {
         Returns: boolean
       }
       client_pending_requests: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
+          client_name_in_crm: string
           lawyer_client_id: string
           lawyer_id: string
-          lawyer_name: string | null
-          lawyer_specialization: string | null
-          lawyer_photo_url: string | null
+          lawyer_name: string
+          lawyer_photo_url: string
+          lawyer_specialization: string
           requested_at: string
-          client_name_in_crm: string
         }[]
       }
       client_revoke_lawyer_access: {
@@ -1720,9 +1803,12 @@ export type Database = {
         Args: { p_lawyer_client_id: string }
         Returns: {
           lawyer_client_id: string
-          new_invite_code: string | null
+          new_invite_code: string
         }[]
       }
+      current_user_email: { Args: never; Returns: string }
+      generate_lawyer_invite_code: { Args: never; Returns: string }
+      get_user_email_safe: { Args: { p_user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1737,14 +1823,14 @@ export type Database = {
       lawyer_request_client: {
         Args: {
           p_client_name: string
-          p_target_email?: string | null
-          p_client_phone?: string | null
+          p_client_phone?: string
+          p_target_email?: string
         }
         Returns: {
+          found_account: boolean
+          invite_code: string
           lawyer_client_id: string
           link_state: string
-          invite_code: string | null
-          found_account: boolean
         }[]
       }
       lawyer_revoke_request: {
@@ -1755,7 +1841,7 @@ export type Database = {
         Args: { p_lawyer_client_id: string }
         Returns: {
           lawyer_client_id: string
-          new_invite_code: string | null
+          new_invite_code: string
         }[]
       }
       match_rag_chunks: {
