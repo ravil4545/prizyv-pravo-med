@@ -30,6 +30,7 @@ export interface LlmChatOpts {
   temperature?: number;
   stream?: boolean;
   responseFormat?: "json_object";
+  maxTokens?: number;
   signal?: AbortSignal;
   maxRetries?: number;
 }
@@ -48,12 +49,14 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     temperature = 0.3,
     stream = false,
     responseFormat,
+    maxTokens,
     signal,
     maxRetries = 3,
   } = opts;
 
   const payload: Record<string, unknown> = { model, messages, temperature, stream };
   if (responseFormat) payload.response_format = { type: responseFormat };
+  if (maxTokens) payload.max_tokens = maxTokens;
   const body = JSON.stringify(payload);
 
   let res!: Response;
