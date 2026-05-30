@@ -57,8 +57,24 @@ async function checkRpd(model: string): Promise<{ ok: boolean; count: number }> 
   }
 }
 
+// Сообщение чата. Допускает поля function-calling (tool_calls у ассистента,
+// tool_call_id/name у роли "tool") — Groq OpenAI-совместим.
+export interface LlmMessage {
+  role: string;
+  content: string | null;
+  // deno-lint-ignore no-explicit-any
+  tool_calls?: any[];
+  tool_call_id?: string;
+  name?: string;
+}
+
+export interface LlmTool {
+  type: "function";
+  function: { name: string; description?: string; parameters?: Record<string, unknown> };
+}
+
 export interface LlmChatOpts {
-  messages: { role: string; content: string }[];
+  messages: LlmMessage[];
   model?: string;
   temperature?: number;
   stream?: boolean;
@@ -66,6 +82,9 @@ export interface LlmChatOpts {
   maxTokens?: number;
   signal?: AbortSignal;
   maxRetries?: number;
+  // Function-calling (ТЗ §2.2): инструменты агентов + стратегия выбора.
+  tools?: LlmTool[];
+  toolChoice?: "auto" | "none" | "required";
 }
 
 /**
@@ -85,11 +104,17 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     maxTokens,
     signal,
     maxRetries = 3,
+    tools,
+    toolChoice,
   } = opts;
 
   const payload: Record<string, unknown> = { model, messages, temperature, stream };
   if (responseFormat) payload.response_format = { type: responseFormat };
   if (maxTokens) payload.max_tokens = maxTokens;
+  if (tools?.length) {
+    payload.tools = tools;
+    payload.tool_choice = toolChoice ?? "auto";
+  }
   const body = JSON.stringify(payload);
 
   // P0.1 (ТЗ §0.1): суточный лимит запросов. Инкрементим счётчик; при упоре
