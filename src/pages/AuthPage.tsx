@@ -60,7 +60,10 @@ const AuthPage = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}${nextPath}`
+          redirectTo: `${window.location.origin}${nextPath}`,
+          // prompt=select_account → Google всегда показывает выбор аккаунта,
+          // а не молча логинит последний использованный.
+          queryParams: provider === "google" ? { prompt: "select_account" } : undefined,
         }
       });
 

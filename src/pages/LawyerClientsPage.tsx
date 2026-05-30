@@ -794,11 +794,18 @@ const LawyerClientsPage = () => {
           // все колонки. Загруженный набор раскладываем по этапам.
           (() => {
             const kanbanClients = clients;
+            const knownStages = new Set(CRM_STAGES.map((s) => s.value));
             return (
               <div className="overflow-x-auto -mx-4 px-4 pb-4">
                 <div className="inline-flex gap-3 min-w-full items-start">
-                  {CRM_STAGES.map((stage) => {
-                    const stageClients = kanbanClients.filter((c) => c.crm_stage === stage.value);
+                  {CRM_STAGES.map((stage, stageIdx) => {
+                    // Клиент с неизвестным/пустым этапом не должен пропадать с доски —
+                    // кладём его в первую колонку (страховка «клиент не отображается»).
+                    const stageClients = kanbanClients.filter(
+                      (c) =>
+                        c.crm_stage === stage.value ||
+                        (stageIdx === 0 && !knownStages.has(c.crm_stage || "")),
+                    );
                     const isDropTarget = dragOverStage === stage.value;
                     return (
                       <div
