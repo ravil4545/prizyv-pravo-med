@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { withBrandPath } from "@/lib/brandPath";
+import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 import { Briefcase, ChevronRight, Clock, MessageSquare, Search, Ticket } from "lucide-react";
 
 interface Conversation {
@@ -23,19 +24,7 @@ interface Conversation {
   lastMessageAt: string | null;
 }
 
-const CRM_STAGE_LABELS: Record<string, string> = {
-  initial_contact: "Первичный контакт",
-  no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз",
-  examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз подтвержден",
-  waiting_documents: "Ждем документы",
-  documents_received: "Документы получены",
-  military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта",
-  courts: "Суды",
-  military_ticket: "Военный билет",
-};
+// Подписи этапов — единый источник: CRM_STAGE_LABELS из @/lib/crmStages.
 
 const ClientMessagesPage = () => {
   const { user } = useAuth();

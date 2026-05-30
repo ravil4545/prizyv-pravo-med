@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download,
   Briefcase, Check, CheckCheck, MessageSquare, ChevronRight, Image as ImageIcon, Pencil, X,
@@ -28,14 +29,7 @@ interface ConvEntry {
   lawyerName: string | null; unread: number;
 }
 
-const CRM_STAGE_LABELS: Record<string, string> = {
-  initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
-  has_diagnosis: "Есть диагноз", examinations: "Обследования",
-  diagnosis_confirmed: "Диагноз получен", waiting_documents: "Ожидание документов",
-  documents_received: "Документы получены", military_office: "Военкомат",
-  regional_commission: "Комиссия субъекта", courts: "Суды",
-  military_ticket: "Получение ВБ ✓",
-};
+// Подписи этапов — единый источник: CRM_STAGE_LABELS из @/lib/crmStages.
 
 const ClientChatPage = () => {
   const { lawyerClientId } = useParams<{ lawyerClientId: string }>();
