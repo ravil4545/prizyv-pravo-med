@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = (req?: Request) => {
   const requestOrigin = req?.headers.get("origin") || "";
@@ -49,9 +50,8 @@ serve(async (req) => {
 
     const { diagnosisName, diagnosisCode } = await req.json();
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+    if (!isLlmConfigured()) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const prompt = `Проанализируй следующий диагноз и определи предварительную категорию годности к военной службе согласно Расписанию болезней РФ:
@@ -78,29 +78,18 @@ ${diagnosisCode ? `Код МКБ-10: ${diagnosisCode}` : ""}
   "explanation": "краткое обоснование в 1-2 предложениях"
 }`;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Diagnosis Analysis",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Ты медицинский эксперт, специализирующийся на военно-врачебной экспертизе. Определяй категорию годности строго по Расписанию болезней. Отвечай в формате JSON.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.2,
-      }),
+    const response = await llmChat({
+      model: MODEL_MAIN,
+      temperature: 0.2,
+      responseFormat: "json_object",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Ты медицинский эксперт, специализирующийся на военно-врачебной экспертизе. Определяй категорию годности строго по Расписанию болезней. Отвечай в формате JSON.",
+        },
+        { role: "user", content: prompt },
+      ],
     });
 
     if (!response.ok) {

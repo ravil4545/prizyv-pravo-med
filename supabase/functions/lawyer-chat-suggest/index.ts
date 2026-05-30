@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = (req: Request): string => {
   const origin = req.headers.get("origin") || "";
@@ -55,8 +56,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Клиент не найден или нет доступа" }, { status: 403, headers: corsHeaders(req) });
     }
 
-    const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
 
     const CRM_STAGES: Record<string, string> = {
       initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
@@ -126,28 +126,20 @@ ${historyLines ? `\nПредыстория переписки (использу�
   ]
 }`;
 
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Lawyer Chat Suggest",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
-        messages: [
-          { role: "system", content: "Ты помощник юриста по военному праву РФ. Отвечай строго в JSON без markdown-обёртки." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.35,
-        max_tokens: 1200,
-      }),
+    const aiRes = await llmChat({
+      model: MODEL_MAIN,
+      temperature: 0.35,
+      maxTokens: 1200,
+      responseFormat: "json_object",
+      messages: [
+        { role: "system", content: "Ты помощник юриста по военному праву РФ. Отвечай строго в JSON без markdown-обёртки." },
+        { role: "user", content: prompt },
+      ],
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("OpenRouter error:", aiRes.status, errText);
+      console.error("[lawyer-chat-suggest] Groq error:", aiRes.status, errText);
       throw new Error(`AI сервис вернул ошибку: ${aiRes.status}`);
     }
 

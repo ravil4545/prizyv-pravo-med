@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.track-demo]
 verify_jwt = false
+
+[functions.get-context]
+verify_jwt = true
+
+[functions.lawyer-case-assistant]
+verify_jwt = true
+
+[functions.lawyer-build-plan]
+verify_jwt = true

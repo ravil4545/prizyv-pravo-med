@@ -6,6 +6,7 @@
 // и просит модель сравнить с типовым «идеальным» пакетом для ожидаемой категории.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = (req: Request): string => {
   const origin = req.headers.get("origin") || "";
@@ -80,8 +81,7 @@ Deno.serve(async (req) => {
       docs = (data || []) as typeof docs;
     }
 
-    const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
 
     const docList = docs.length === 0
       ? "(документов нет)"
@@ -114,23 +114,15 @@ ${docList}
   "next_actions": ["...", "..."]
 }`;
 
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Lawyer Ready Check",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
-        messages: [
-          { role: "system", content: "Ты эксперт по ВВЭ. Отвечай строго в JSON без markdown-обёртки." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 900,
-      }),
+    const aiRes = await llmChat({
+      model: MODEL_MAIN,
+      temperature: 0.2,
+      maxTokens: 900,
+      responseFormat: "json_object",
+      messages: [
+        { role: "system", content: "Ты эксперт по ВВЭ. Отвечай строго в JSON без markdown-обёртки." },
+        { role: "user", content: prompt },
+      ],
     });
 
     if (!aiRes.ok) {

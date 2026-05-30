@@ -41,6 +41,8 @@ import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
 import InviteCodeCard from "@/components/InviteCodeCard";
+import LawyerCasePlanner from "@/components/LawyerCasePlanner";
+import LawyerCaseAssistant from "@/components/LawyerCaseAssistant";
 
 const stripMarkdown = (s: string) =>
   s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
@@ -917,8 +919,15 @@ const LawyerClientDetail = () => {
             <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Обзор</TabsTrigger>
             <TabsTrigger value="documents"><FileText className="h-4 w-4 mr-1.5" />Документы</TabsTrigger>
             <TabsTrigger value="analysis"><Brain className="h-4 w-4 mr-1.5" />ИИ-анализ</TabsTrigger>
+            <TabsTrigger value="strategy"><ListChecks className="h-4 w-4 mr-1.5" />Стратегия</TabsTrigger>
             <TabsTrigger value="timeline"><ClipboardList className="h-4 w-4 mr-1.5" />История</TabsTrigger>
           </TabsList>
+
+          {/* ── TAB: Strategy (планировщик A3 + ассистент дела) ──────────── */}
+          <TabsContent value="strategy" className="space-y-4">
+            <LawyerCasePlanner lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
+            <LawyerCaseAssistant lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
+          </TabsContent>
 
           {/* ── TAB: Overview ────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-4">

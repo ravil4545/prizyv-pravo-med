@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = () => {
   const origin = Deno.env.get("ALLOWED_ORIGIN");
@@ -19,9 +20,8 @@ serve(async (req) => {
   try {
     const { city, address, region } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!isLlmConfigured()) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const isMoscow = city?.toLowerCase().includes("москва") || region?.toLowerCase().includes("москва");
@@ -67,27 +67,18 @@ ${
   "prosecutor_office": "название прокуратуры"
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Ты помощник, который помогает найти точную информацию о государственных структурах России. Отвечай строго в формате JSON без дополнительного текста.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-      }),
+    const response = await llmChat({
+      model: MODEL_MAIN,
+      temperature: 0.3,
+      responseFormat: "json_object",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Ты помощник, который помогает найти точную информацию о государственных структурах России. Отвечай строго в формате JSON без дополнительного текста.",
+        },
+        { role: "user", content: prompt },
+      ],
     });
 
     if (!response.ok) {

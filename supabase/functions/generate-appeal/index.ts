@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 /**
  * generate-appeal — генерирует черновик жалобы на отрицательное решение призывной комиссии.
@@ -192,8 +193,7 @@ serve(async (req) => {
 
     // Lovable AI Gateway вместо OpenRouter — тот же ключ что в
     // analyze-medical-document, Lovable оплачивает usage.
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    if (!isLlmConfigured()) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -203,23 +203,16 @@ serve(async (req) => {
     const systemPrompt =
       appealLevel === "court" ? APPEAL_COURT_PROMPT : APPEAL_SUBJECT_PROMPT;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `Составь жалобу на основе следующего контекста.\n\n${context}\n\nВерни ТОЛЬКО текст документа, готовый к копированию в Word. Без вводных фраз.`,
-          },
-        ],
-        max_tokens: 4000,
-      }),
+    const aiResp = await llmChat({
+      model: MODEL_MAIN,
+      maxTokens: 4000,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Составь жалобу на основе следующего контекста.\n\n${context}\n\nВерни ТОЛЬКО текст документа, готовый к копированию в Word. Без вводных фраз.`,
+        },
+      ],
     });
 
     if (!aiResp.ok) {
