@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.track-demo]
 verify_jwt = false
+
+[functions.get-context]
+verify_jwt = true
