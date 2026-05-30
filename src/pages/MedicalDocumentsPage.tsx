@@ -936,9 +936,13 @@ export default function MedicalDocumentsPage() {
           await incrementDocumentUploads();
         }
 
-        // Запускаем AI анализ на первой странице
+        // Запускаем AI анализ по ВСЕМ страницам документа (раньше — только 1-я).
         if (insertedDoc && enhancedImages.length > 0) {
-          analyzeDocument(insertedDoc.id, enhancedImages[0].base64);
+          analyzeDocument(
+            insertedDoc.id,
+            enhancedImages[0].base64,
+            enhancedImages.slice(1).map((i) => i.base64),
+          );
         }
       } else {
         // Одностраничный режим - каждый файл отдельно
@@ -1128,7 +1132,7 @@ export default function MedicalDocumentsPage() {
     toast({ title: toastTitle, description: toastDescription, variant: "destructive" });
   };
 
-  const analyzeDocument = async (documentId: string, imageBase64?: string) => {
+  const analyzeDocument = async (documentId: string, imageBase64?: string, extraImages?: string[]) => {
     setAnalyzingId(documentId);
 
     try {
@@ -1189,8 +1193,10 @@ export default function MedicalDocumentsPage() {
         });
       }
 
+      // Все страницы документа: первая (base64) + дополнительные (extraImages).
+      const images = [base64, ...(extraImages ?? [])].filter(Boolean).slice(0, 6);
       const { data, error } = await supabase.functions.invoke("analyze-medical-document", {
-        body: { imageBase64: base64, documentId, userId: currentUserId },
+        body: { imageBase64: base64, images, documentId, userId: currentUserId },
       });
 
       if (error) throw error;

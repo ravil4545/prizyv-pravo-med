@@ -104,7 +104,7 @@ serve(async (req) => {
       });
     }
 
-    const { imageBase64, documentId, userId, manualText, isHandwritten } = await req.json();
+    const { imageBase64, images, documentId, userId, manualText, isHandwritten } = await req.json();
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
@@ -521,27 +521,33 @@ ${examinationsList}
   "suggestedTitle": "предложенное название документа на основе содержания"
 }`;
 
-      // Extract base64 data without data URL prefix if present
-      let base64Data = imageBase64.includes("base64,") ? imageBase64.split("base64,")[1] : imageBase64;
+      // Собираем страницы: новый параметр images[] (все страницы ОДНОГО документа)
+      // с обратной совместимостью со старым одиночным imageBase64.
+      const rawImages: string[] = (Array.isArray(images) && images.length ? images : [imageBase64])
+        .filter((x: unknown): x is string => typeof x === "string" && x.length > 0)
+        .slice(0, 6); // ограничиваем стоимость/размер запроса к ИИ
 
-      // Clean base64 string - remove any whitespace or newlines
-      base64Data = base64Data.replace(/\s/g, "");
+      const cleanImages = rawImages
+        .map((img: string) => (img.includes("base64,") ? img.split("base64,")[1] : img).replace(/\s/g, ""))
+        .filter((b: string) => b && b.length >= 100);
 
-      // Validate base64 length
-      console.log("Image base64 length:", base64Data.length);
-
-      if (!base64Data || base64Data.length < 100) {
+      if (cleanImages.length === 0) {
         throw new Error("Invalid image data: base64 string is too short or empty");
       }
 
-      // Check if base64 is valid
+      // Проверяем валидность base64 на первой странице
       try {
-        // Test decode a small portion to verify it's valid base64
-        atob(base64Data.substring(0, 100));
+        atob(cleanImages[0].substring(0, 100));
       } catch (e) {
         console.error("Invalid base64 encoding");
         throw new Error("Invalid base64 image data");
       }
+      console.log("Images for analysis:", cleanImages.length, "first length:", cleanImages[0].length);
+
+      // При нескольких страницах просим ИИ анализировать их как единый документ.
+      const promptForPages = cleanImages.length > 1
+        ? prompt + "\n\nВНИМАНИЕ: ниже НЕСКОЛЬКО страниц ОДНОГО медицинского документа. Проанализируй их ВМЕСТЕ как единый документ, объединяя диагнозы и данные со всех страниц."
+        : prompt;
 
       requestBody = {
         model: "google/gemini-2.5-flash",
@@ -549,16 +555,11 @@ ${examinationsList}
           {
             role: "user",
             content: [
-              {
-                type: "text",
-                text: prompt,
-              },
-              {
+              { type: "text", text: promptForPages },
+              ...cleanImages.map((b: string) => ({
                 type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Data}`,
-                },
-              },
+                image_url: { url: `data:image/jpeg;base64,${b}` },
+              })),
             ],
           },
         ],
