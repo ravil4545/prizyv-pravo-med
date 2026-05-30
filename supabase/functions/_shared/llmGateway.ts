@@ -15,14 +15,47 @@
 //     проверка перед вызовом, чтобы не упереться в потолок незаметно.
 // ════════════════════════════════════════════════════════════════════════
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const GROQ_BASE_URL = Deno.env.get("GROQ_BASE_URL") || "https://api.groq.com/openai/v1";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") || "";
+const RPD_LIMIT = Number(Deno.env.get("GROQ_RPD_LIMIT") || "1000");
 
 // Модели — из каталога Groq, переопределяются через env (см. ТЗ §0.3).
 export const MODEL_MAIN = Deno.env.get("GROQ_MODEL_MAIN") || "llama-3.3-70b-versatile";
 export const MODEL_FAST = Deno.env.get("GROQ_MODEL_FAST") || "llama-3.1-8b-instant";
 
 export const isLlmConfigured = (): boolean => !!GROQ_API_KEY;
+
+// ── Суточный RPD-счётчик (best-effort, fail-open) ───────────────────────────
+let _sb: ReturnType<typeof createClient> | null = null;
+function getServiceClient() {
+  if (_sb) return _sb;
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  _sb = createClient(url, key);
+  return _sb;
+}
+
+// Инкрементит суточный счётчик модели и возвращает {ok, count}. При любой
+// ошибке БД — fail-open (ok=true), чтобы счётчик не блокировал ИИ.
+async function checkRpd(model: string): Promise<{ ok: boolean; count: number }> {
+  try {
+    const c = getServiceClient();
+    if (!c) return { ok: true, count: 0 };
+    const { data, error } = await c.rpc("llm_increment_rpd", { p_model: model });
+    if (error) {
+      console.error("[LLMGateway] RPD rpc error:", error.message);
+      return { ok: true, count: 0 };
+    }
+    const count = Number(data) || 0;
+    return { ok: count <= RPD_LIMIT, count };
+  } catch (e) {
+    console.error("[LLMGateway] RPD check failed:", e instanceof Error ? e.message : e);
+    return { ok: true, count: 0 };
+  }
+}
 
 export interface LlmChatOpts {
   messages: { role: string; content: string }[];
@@ -58,6 +91,17 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
   if (responseFormat) payload.response_format = { type: responseFormat };
   if (maxTokens) payload.max_tokens = maxTokens;
   const body = JSON.stringify(payload);
+
+  // P0.1 (ТЗ §0.1): суточный лимит запросов. Инкрементим счётчик; при упоре
+  // отдаём синтетический 429 (caller обработает как обычный rate-limit).
+  const rpd = await checkRpd(model);
+  if (!rpd.ok) {
+    console.warn(`[LLMGateway] RPD limit ${rpd.count}/${RPD_LIMIT} for ${model}`);
+    return new Response(
+      JSON.stringify({ error: "Дневной лимит запросов к ИИ исчерпан. Попробуйте позже." }),
+      { status: 429, headers: { "Content-Type": "application/json" } },
+    );
+  }
 
   let res!: Response;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
