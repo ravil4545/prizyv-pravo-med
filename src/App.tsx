@@ -12,6 +12,7 @@ import { BrandingProvider } from "./contexts/BrandingContext";
 import { ChatPresenceProvider } from "./contexts/ChatPresenceContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import RoleGuard from "./components/RoleGuard";
+import AdminGuard from "./components/AdminGuard";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth } from "./lib/analytics";
 
@@ -200,12 +201,12 @@ const App = () => (
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/offer" element={<OfferPage />} />
                 <Route path="/requisites" element={<RequisitesPage />} />
-                <Route path="/admin/forum" element={<AdminForumPage />} />
-                <Route path="/admin/blog" element={<AdminBlogPage />} />
-                <Route path="/admin/testimonials" element={<AdminTestimonialsPage />} />
-                <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
-                <Route path="/admin/articles" element={<AdminArticlesPage />} />
-                <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route path="/admin/forum" element={<AdminGuard><AdminForumPage /></AdminGuard>} />
+                <Route path="/admin/blog" element={<AdminGuard><AdminBlogPage /></AdminGuard>} />
+                <Route path="/admin/testimonials" element={<AdminGuard><AdminTestimonialsPage /></AdminGuard>} />
+                <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
+                <Route path="/admin/articles" element={<AdminGuard><AdminArticlesPage /></AdminGuard>} />
+                <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
                 <Route path="/profile" element={<ProfilePage />} />
                 {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard */}
                 <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
