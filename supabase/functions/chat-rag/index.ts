@@ -22,7 +22,9 @@ const supabase = createClient(
 );
 
 const JINA_KEY        = Deno.env.get("JINA_API_KEY");
-const OPENROUTER_KEY  = Deno.env.get("OPENROUTER_API_KEY");
+// Единый ИИ-провайдер с основным чатом — Lovable AI Gateway (Gemini),
+// надёжнее бесплатного nemotron (OpenRouter часто отдавал 429).
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 const messageSchema = z.object({
@@ -106,9 +108,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!JINA_KEY || !OPENROUTER_KEY) {
+    if (!JINA_KEY || !LOVABLE_API_KEY) {
       return Response.json(
-        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "OPENROUTER_API_KEY не настроен" },
+        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "LOVABLE_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -171,6 +173,7 @@ Deno.serve(async (req) => {
 - Если нужной информации нет — честно скажи и предложи личную консультацию: +7 (925) 350-05-33
 - Язык: русский, понятный призывнику 18 лет, без юридического жаргона
 - НЕ указывай проценты ("шанс 75%") — только факты: "при данном диагнозе положена категория В"
+- Ты справочный ИИ, НЕ лицензированный юрист и НЕ ВВК; окончательное решение о годности принимает ВВК. Гарантий исхода не давай.
 - В конце каждого ответа: ⚠️ Это справочная информация, не замена юридической консультации
 
 ФОРМАТ (стиль Telegram/WhatsApp):
@@ -187,17 +190,15 @@ ${sysCtx}`;
       ? `Найденные материалы по теме:\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
       : `Вопрос: ${message}`;
 
-    // 4. Call nemotron via OpenRouter
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // 4. Единый провайдер с основным чатом — Lovable AI Gateway (Gemini).
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Knowledge Base Chat",
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
+        model: "google/gemini-2.5-flash",
         stream: true,
         messages: [
           { role: "system", content: systemText },
@@ -210,18 +211,12 @@ ${sysCtx}`;
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("[chat-rag] OpenRouter error:", aiRes.status, errText);
+      console.error("[chat-rag] Lovable AI Gateway error:", aiRes.status, errText);
 
       if (aiRes.status === 429) {
         return Response.json(
           { error: "Превышен лимит запросов. Попробуйте через минуту." },
           { status: 429, headers: corsHeaders },
-        );
-      }
-      if (aiRes.status === 402) {
-        return Response.json(
-          { error: "Требуется пополнение баланса OpenRouter." },
-          { status: 402, headers: corsHeaders },
         );
       }
 
