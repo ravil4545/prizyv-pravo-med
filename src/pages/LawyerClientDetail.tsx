@@ -40,7 +40,7 @@ import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
 import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
-import InviteCodeCard from "@/components/InviteCodeCard";
+import LawyerShareLinkCard from "@/components/LawyerShareLinkCard";
 import LawyerCasePlanner from "@/components/LawyerCasePlanner";
 import LawyerCaseAssistant from "@/components/LawyerCaseAssistant";
 
@@ -648,10 +648,10 @@ const LawyerClientDetail = () => {
           </div>
         )}
 
-        {/* Статус привязки — полный switch по link_state (8 значений).
-            Один источник правды о связи теперь визуально показывается одним
-            блоком: либо InviteCodeCard (когда клиента ещё нет / отвалился /
-            отклонил — все эти сценарии хотят свежий код), либо статус-плашка. */}
+        {/* Статус привязки — полный switch по link_state.
+            Один источник правды о связи: либо LawyerShareLinkCard (когда клиент
+            ещё не подключился / отвязался — нужно дать ссылку для подключения),
+            либо статус-плашка. Кодов больше нет — связь инициирует клиент. */}
         <div className="mb-4">
           {(() => {
             const state = client?.link_state || (client?.client_user_id ? "linked_active" : "unlinked");
@@ -775,16 +775,11 @@ const LawyerClientDetail = () => {
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         История чата и заметки сохранены. Чтобы возобновить работу — отправьте
-                        клиенту новый код приглашения.
+                        клиенту ссылку для подключения, он снова откроет доступ.
                       </p>
                     </div>
                   </div>
-                  <InviteCodeCard
-                    lawyerClientId={clientId!}
-                    inviteCode={client?.invite_code}
-                    clientName={client?.client_name}
-                    onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
-                  />
+                  <LawyerShareLinkCard lawyerUserId={user!.id} slug={(profile as any)?.slug} />
                 </div>
               );
             }
@@ -801,15 +796,9 @@ const LawyerClientDetail = () => {
               );
             }
 
-            // unlinked / code_sent — стандартный invite-flow (есть код или нужно создать).
-            return (
-              <InviteCodeCard
-                lawyerClientId={clientId!}
-                inviteCode={client?.invite_code}
-                clientName={client?.client_name}
-                onCodeRegenerated={(newCode) => setClient((prev: any) => ({ ...prev, invite_code: newCode }))}
-              />
-            );
+            // unlinked — клиент ещё не подключился. Даём ссылку для подключения
+            // (client-initiated): клиент откроет её и включит доступ сам.
+            return <LawyerShareLinkCard lawyerUserId={user!.id} slug={(profile as any)?.slug} />;
           })()}
         </div>
 

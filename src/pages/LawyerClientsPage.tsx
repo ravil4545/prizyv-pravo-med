@@ -18,11 +18,10 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, MessageSquare, ChevronRight,
   Phone, Calendar, AlertTriangle, Crown, Filter,
-  LayoutList, KanbanSquare, BookOpen, Ticket, ShieldCheck, ShieldOff,
+  LayoutList, KanbanSquare, BookOpen, Ticket, ShieldCheck, ShieldOff, Share2,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
-import InviteCodeCard from "@/components/InviteCodeCard";
 import { useChatPresence } from "@/contexts/ChatPresenceContext";
 
 interface LawyerClient {
@@ -79,12 +78,6 @@ const LawyerClientsPage = () => {
   });
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
-  // Модалка с кодом приглашения, показываемая сразу после создания клиента —
-  // юрист видит код, кнопки «Скопировать» / «WhatsApp» / «Telegram» в момент,
-  // когда это нужно (не надо лезть в карточку и искать).
-  const [createdInvite, setCreatedInvite] = useState<{
-    lawyerClientId: string; code: string | null; clientName: string;
-  } | null>(null);
 
   const [form, setForm] = useState({
     client_name: "", client_phone: "", client_email: "",
@@ -359,79 +352,48 @@ const LawyerClientsPage = () => {
     }
     setSaving(true);
 
-    // Шаг 1. Создаём карточку через RPC lawyer_request_client. RPC сам решит:
-    //   • email известен сайту → запрос-приглашение клиенту (pending_client_approval),
-    //     клиент примет его одной кнопкой в своём кабинете;
-    //   • иначе → invite_code (code_sent), юрист отправит код вручную.
-    const { data: rpcData, error: rpcError } = await supabase.rpc("lawyer_request_client", {
-      p_client_name: form.client_name.trim(),
-      p_target_email: form.client_email?.trim() || null,
-      p_client_phone: form.client_phone?.trim() || null,
-    });
-    if (rpcError) {
-      setSaving(false);
-      toast({ title: "Не удалось создать клиента", description: rpcError.message, variant: "destructive" });
-      return;
-    }
-    const rpc = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-    if (!rpc?.lawyer_client_id) {
-      setSaving(false);
-      toast({ title: "Не удалось создать клиента", variant: "destructive" });
-      return;
-    }
-
-    // Шаг 2. Доп.поля (диагноз/категория/заметки/...) сохраняем UPDATE'ом —
-    // RPC принимает только базовые поля, остальное штатным RLS-апдейтом
-    // от юриста-владельца.
-    const extra = {
-      client_birth_year: form.client_birth_year ? parseInt(form.client_birth_year) : null,
-      crm_stage: form.crm_stage,
-      diagnosis: form.diagnosis || null,
-      expected_category: form.expected_category || null,
-      notes: form.notes || null,
-      priority: form.priority,
-      conscription_date: form.conscription_date || null,
-    };
-    const { data: updated, error: updErr } = await supabase
+    // Client-initiated модель: юрист создаёт ТОЛЬКО карточку для своего учёта
+    // (link_state='unlinked'), без кода и без запроса. Доступ к данным клиента
+    // появляется, когда клиент сам подключится и включит доступ (каталог/ссылка
+    // на профиль юриста). RLS «Lawyer manages own clients» разрешает этот INSERT.
+    const { data: created, error: insErr } = await supabase
       .from("lawyer_clients")
-      .update(extra)
-      .eq("id", rpc.lawyer_client_id)
+      .insert({
+        lawyer_id: user!.id,
+        client_name: form.client_name.trim(),
+        client_phone: form.client_phone?.trim() || null,
+        client_email: form.client_email?.trim() || null,
+        client_birth_year: form.client_birth_year ? parseInt(form.client_birth_year) : null,
+        crm_stage: form.crm_stage,
+        diagnosis: form.diagnosis || null,
+        expected_category: form.expected_category || null,
+        notes: form.notes || null,
+        priority: form.priority,
+        conscription_date: form.conscription_date || null,
+        link_state: "unlinked",
+      } as any)
       .select()
       .single();
 
     setSaving(false);
-    if (updErr) {
-      // Карточка создана, но extra-поля не подтянулись — не фатально, юрист
-      // дозаполнит в карточке клиента. Просто предупреждаем.
-      toast({ title: "Клиент создан, но не все поля сохранились", description: updErr.message });
+    if (insErr || !created) {
+      toast({ title: "Не удалось создать клиента", description: insErr?.message, variant: "destructive" });
+      return;
     }
 
-    const inserted = (updated || { id: rpc.lawyer_client_id }) as LawyerClient & {
-      invite_code?: string | null; link_state?: string | null;
-    };
+    const inserted = created as LawyerClient;
     setClients((prev) => [inserted, ...prev]);
     setTotalAll((n) => n + 1);
     setFilteredTotal((n) => n + 1);
     setAddOpen(false);
-    const savedName = form.client_name.trim();
     setForm({ client_name: "", client_phone: "", client_email: "", client_birth_year: "",
       crm_stage: "initial_contact", diagnosis: "", expected_category: "", notes: "", priority: "normal",
       conscription_date: "", client_email_link: "" });
-
-    if (rpc.found_account) {
-      // Аккаунт клиента найден — запрос отправлен, ждём accept.
-      toast({
-        title: "Запрос отправлен клиенту",
-        description: `${savedName} увидит запрос в своём кабинете на nepriziv.ru и подтвердит его одной кнопкой.`,
-      });
-    } else {
-      // Аккаунта нет — даём юристу код для отправки клиенту вручную.
-      setCreatedInvite({
-        lawyerClientId: rpc.lawyer_client_id,
-        code: rpc.invite_code ?? null,
-        clientName: savedName,
-      });
-    }
+    toast({
+      title: "Карточка клиента создана",
+      description: "Чтобы видеть документы и данные клиента — отправьте ему ссылку для подключения (кнопка в карточке клиента).",
+    });
+    navigate(`/lawyer/clients/${inserted.id}`);
   };
 
   // Бейдж состояния связи. Один helper для списка и канбана — чтобы было
@@ -606,10 +568,9 @@ const LawyerClientsPage = () => {
                       placeholder="client@email.com"
                     />
                     <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                      Если email уже зарегистрирован на nepriziv.ru — клиент увидит ваш запрос
-                      в своём кабинете и подтвердит его одной кнопкой. Если email неизвестен или
-                      не указан — будет сгенерирован 8-символьный код приглашения для отправки
-                      клиенту любым способом.
+                      Email и телефон — для вашего учёта. Доступ к документам клиента появится,
+                      когда он сам подключится: отправьте ему ссылку из карточки клиента — он
+                      войдёт и включит доступ из своего кабинета (без кодов).
                     </p>
                   </div>
                   <div><Label>Этап CRM</Label>
@@ -647,18 +608,13 @@ const LawyerClientsPage = () => {
                   </div>
                   <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-2">
                     <p className="text-xs font-medium flex items-center gap-1.5">
-                      <Ticket className="h-3.5 w-3.5 text-primary" /> Что произойдёт после создания
+                      <Share2 className="h-3.5 w-3.5 text-primary" /> Что произойдёт после создания
                     </p>
                     <ul className="text-[11px] text-muted-foreground space-y-1 leading-relaxed list-disc list-inside">
+                      <li>Создаётся карточка для вашего учёта (диагноз, заметки, этап) — пока без доступа к данным клиента.</li>
                       <li>
-                        <strong>email указан и есть в системе</strong> → клиенту прилетит запрос на
-                        подключение. Он принимает его одной кнопкой в кабинете — автоматически
-                        открывается доступ к меддокам, ИИ-анализам и чату.
-                      </li>
-                      <li>
-                        <strong>email не указан или не зарегистрирован</strong> → появится
-                        8-символьный код приглашения. Отправьте клиенту любым способом — он введёт
-                        код в кабинете и привяжется.
+                        В карточке появится <strong>ссылка для подключения</strong>. Отправьте её клиенту —
+                        он откроет ссылку, войдёт и включит доступ к документам сам. Никаких кодов.
                       </li>
                     </ul>
                   </div>
@@ -958,51 +914,6 @@ const LawyerClientsPage = () => {
         )}
       </main>
       <Footer />
-
-      {/* Модалка с invite-кодом — показываем сразу после создания клиента,
-          чтобы юрист в один клик отправил код в WhatsApp/Telegram/email. */}
-      <Dialog
-        open={!!createdInvite}
-        onOpenChange={(open) => { if (!open) setCreatedInvite(null); }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Клиент добавлен — отправьте ему код</DialogTitle>
-          </DialogHeader>
-          {createdInvite && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Карточка клиента <strong>{createdInvite.clientName}</strong> создана.
-                Отправьте ему код приглашения — после ввода он автоматически привяжется
-                и откроет вам доступ к своим медицинским документам.
-              </p>
-              <InviteCodeCard
-                lawyerClientId={createdInvite.lawyerClientId}
-                inviteCode={createdInvite.code}
-                clientName={createdInvite.clientName}
-                onCodeRegenerated={(newCode) =>
-                  setCreatedInvite((prev) => (prev ? { ...prev, code: newCode } : prev))
-                }
-              />
-              <div className="flex gap-2 justify-end pt-1">
-                <Button variant="ghost" size="sm" onClick={() => setCreatedInvite(null)}>
-                  Закрыть
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const id = createdInvite.lawyerClientId;
-                    setCreatedInvite(null);
-                    navigate(`/lawyer/clients/${id}`);
-                  }}
-                >
-                  Открыть карточку
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

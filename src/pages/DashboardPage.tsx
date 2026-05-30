@@ -40,7 +40,6 @@ import CasePlanCard from "@/components/dashboard/CasePlanCard";
 import ClientLawyerRequests from "@/components/ClientLawyerRequests";
 import ShareWithLawyer from "@/components/ShareWithLawyer";
 import ClientCaseStatusCard from "@/components/ClientCaseStatusCard";
-import LawyerInviteRedeem from "@/components/LawyerInviteRedeem";
 import { withBrandPath } from "@/lib/brandPath";
 
 interface DashboardCard {
@@ -275,14 +274,9 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {/* ── Код от юриста — быстрый путь связать CRM юриста и кабинет клиента.
-              Компонент существовал, но не был выведен в кабинет: пользователь
-              слышал про код в подсказках, а поля для ввода не видел. */}
-          {!isDemoMode && !isLawyer && (
-            <div className="mb-6">
-              <LawyerInviteRedeem />
-            </div>
-          )}
+          {/* Подключение к юристу — client-initiated: клиент находит юриста в
+              каталоге /lawyers (или по ссылке юриста) и включает доступ тумблером.
+              Кодов/индивидуальных номеров больше нет. */}
 
           {/* ── Мои юристы: тумблер доступа к данным + визитка ──────────────
               Показывается только если у клиента уже есть юристы (иначе компонент
