@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Users, Search, ArrowLeft, Eye, Briefcase } from "lucide-react";
+import { Loader2, Users, Search, ArrowLeft, Eye, Briefcase, Crown } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserRow {
@@ -28,6 +28,7 @@ interface UserRow {
   payment_link_clicked_at: string | null;
   is_lawyer: boolean;
   lawyer_active: boolean;
+  lawyer_tier: "basic" | "pro" | null;
 }
 
 interface DemoVisitorRow {
@@ -94,7 +95,7 @@ const AdminUsersPage = () => {
       const [profilesRes, subsRes, lawyersRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, phone"),
         supabase.from("user_subscriptions").select("*"),
-        supabase.from("lawyer_profiles").select("user_id, is_active"),
+        supabase.from("lawyer_profiles").select("user_id, is_active, subscription_tier"),
       ]);
 
       const profilesMap = new Map<string, any>();
@@ -103,8 +104,10 @@ const AdminUsersPage = () => {
       const subsMap = new Map<string, any>();
       subsRes.data?.forEach(s => subsMap.set(s.user_id, s));
 
-      const lawyersMap = new Map<string, { is_active: boolean }>();
-      lawyersRes.data?.forEach((l: any) => lawyersMap.set(l.user_id, { is_active: !!l.is_active }));
+      const lawyersMap = new Map<string, { is_active: boolean; subscription_tier: string }>();
+      lawyersRes.data?.forEach((l: any) =>
+        lawyersMap.set(l.user_id, { is_active: !!l.is_active, subscription_tier: l.subscription_tier || "basic" }),
+      );
 
       const userRows: UserRow[] = (authUsers || []).map((au: any) => {
         const profile = profilesMap.get(au.id);
@@ -125,6 +128,7 @@ const AdminUsersPage = () => {
           payment_link_clicked_at: sub?.payment_link_clicked_at || null,
           is_lawyer: !!lawyer,
           lawyer_active: lawyer?.is_active || false,
+          lawyer_tier: lawyer ? ((lawyer.subscription_tier as "basic" | "pro") || "basic") : null,
         };
       });
 
@@ -240,6 +244,37 @@ const AdminUsersPage = () => {
     }
   };
 
+  // Переключить тариф юриста basic↔pro. Доступно только для уже назначенных
+  // юристов (строка в lawyer_profiles существует). Pro у юриста = ИИ-анализ,
+  // планировщик и ассистент дела + снятие лимита на число клиентов.
+  const toggleLawyerPro = async (userId: string, currentTier: "basic" | "pro" | null) => {
+    try {
+      const willBePro = currentTier !== "pro";
+      const nextTier = willBePro ? "pro" : "basic";
+      const { error } = await supabase
+        .from("lawyer_profiles")
+        .update(
+          {
+            subscription_tier: nextTier,
+            // Информационно: срок Pro (на гейт isPro не влияет, но удобно видеть).
+            subscription_until: willBePro
+              ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+              : null,
+          } as any,
+        )
+        .eq("user_id", userId);
+      if (error) throw error;
+
+      setUsers(prev =>
+        prev.map(u => (u.id === userId ? { ...u, lawyer_tier: nextTier } : u)),
+      );
+      toast.success(willBePro ? "Юристу включён Pro" : "Юрист переведён на Basic");
+    } catch (error: any) {
+      console.error("Error toggling lawyer pro:", error);
+      toast.error(error.message || "Ошибка при изменении тарифа юриста");
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     const q = search.toLowerCase();
     return (
@@ -317,7 +352,7 @@ const AdminUsersPage = () => {
                           <TableHead>Статус</TableHead>
                           <TableHead>Оплачено до</TableHead>
                           <TableHead>Режим</TableHead>
-                          <TableHead>Юрист</TableHead>
+                          <TableHead>Юрист · тариф</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -366,17 +401,37 @@ const AdminUsersPage = () => {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Switch
-                                    checked={user.lawyer_active}
-                                    onCheckedChange={() => toggleLawyerStatus(user.id, user.lawyer_active)}
-                                    aria-label="Назначить юристом"
-                                  />
-                                  {user.lawyer_active && (
-                                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-400 text-amber-700 dark:text-amber-300">
-                                      <Briefcase className="h-3 w-3" />
-                                      Юрист
-                                    </Badge>
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={user.lawyer_active}
+                                      onCheckedChange={() => toggleLawyerStatus(user.id, user.lawyer_active)}
+                                      aria-label="Назначить юристом"
+                                    />
+                                    {user.lawyer_active && (
+                                      <Badge variant="outline" className="text-[10px] gap-1 border-amber-400 text-amber-700 dark:text-amber-300">
+                                        <Briefcase className="h-3 w-3" />
+                                        Юрист
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {/* Тариф юриста basic↔pro — только для назначенных юристов */}
+                                  {user.is_lawyer && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">Basic</span>
+                                      <Switch
+                                        checked={user.lawyer_tier === "pro"}
+                                        onCheckedChange={() => toggleLawyerPro(user.id, user.lawyer_tier)}
+                                        aria-label="Pro-тариф юриста"
+                                      />
+                                      <span className="text-xs text-muted-foreground">Pro</span>
+                                      {user.lawyer_tier === "pro" && (
+                                        <Badge variant="outline" className="text-[10px] gap-1 border-gold/50 text-gold-deep">
+                                          <Crown className="h-3 w-3" />
+                                          Pro
+                                        </Badge>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </TableCell>
