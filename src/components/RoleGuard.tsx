@@ -14,17 +14,10 @@ interface RoleGuardProps {
 }
 
 /**
- * Кабинет клиента и кабинет юриста — РАЗНЫЕ сущности, но один человек может
- * пользоваться обоими (юрист тоже обычный пользователь сайта).
- *
- * Поэтому:
- *   • /dashboard/* (role="client") — доступен любому залогиненному, включая
- *     юриста. Вход — через шапку сайта.
- *   • /lawyer/*    (role="lawyer") — только активному юристу. Вход — через
- *     подвал сайта. Не-юриста отправляем в обычный кабинет.
- *
- * Раньше клиента-юриста насильно перекидывало с /dashboard на /lawyer — это
- * мешало юристу пользоваться обычным кабинетом. Убрано.
+ * Одна роль на аккаунт: кабинеты клиента и юриста РАЗДЕЛЬНЫ.
+ *   • /lawyer/*    (role="lawyer") — только активному юристу; остальных → /dashboard.
+ *   • /dashboard/* (role="client") — у юриста клиентского кабинета НЕТ: юриста → /lawyer.
+ * Вход — через кнопку «Кабинет» в шапке (всплывашка выбора, CabinetChooserDialog).
  */
 const RoleGuard = ({ role, children, authRedirect }: RoleGuardProps) => {
   const location = useLocation();
@@ -43,20 +36,24 @@ const RoleGuard = ({ role, children, authRedirect }: RoleGuardProps) => {
       return;
     }
 
-    // Кабинет юриста — только для активных юристов. Остальных в обычный кабинет.
+    // Кабинет юриста — только для активных юристов. Остальных в личный кабинет.
     if (role === "lawyer" && !isLawyer) {
       navigate("/dashboard", { replace: true });
       return;
     }
-    // role === "client": пускаем всех залогиненных (в т.ч. юристов) — кабинеты
-    // независимы, насильно никого не перекидываем.
+    // Одна роль на аккаунт: у юриста нет клиентского кабинета — уводим в /lawyer.
+    if (role === "client" && isLawyer) {
+      navigate("/lawyer", { replace: true });
+      return;
+    }
   }, [loading, user, isLawyer, role, location.pathname, location.search, navigate, authRedirect]);
 
   // Skeleton пока решаем куда отправить
   const shouldShowSkeleton =
     loading ||
     !user ||
-    (role === "lawyer" && !isLawyer);
+    (role === "lawyer" && !isLawyer) ||
+    (role === "client" && isLawyer);
 
   if (shouldShowSkeleton) {
     return (

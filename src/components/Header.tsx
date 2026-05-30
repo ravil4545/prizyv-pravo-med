@@ -20,6 +20,7 @@ import { useBranding } from "@/contexts/BrandingContext";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
+import CabinetChooserDialog from "@/components/CabinetChooserDialog";
 
 const initials = (full: string): string => {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -58,9 +59,11 @@ const Header = () => {
   const { unreadCount } = useUnreadMessages();
   const { isLawyer } = useLawyerProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cabinetChooserOpen, setCabinetChooserOpen] = useState(false);
 
+  // Кабинеты раздельны: кнопка «Кабинет» открывает всплывашку выбора.
+  // cabinetPath нужен лишь для второстепенных ссылок (лимиты/сообщения).
   const cabinetPath = isLawyer ? "/lawyer" : "/dashboard";
-  const cabinetLabel = isLawyer ? "Кабинет юриста" : "Личный кабинет";
 
   // Иконка «Сообщения» ведёт в инбокс по роли: у юриста чаты с клиентами
   // живут в /lawyer/chats, у клиента — в /client/messages. Раньше всех вело
@@ -103,6 +106,7 @@ const Header = () => {
   };
 
   return (
+    <>
     <header className="sticky top-0 z-50 w-full border-b border-ink/10 bg-paper">
       <div className="container mx-auto px-3 sm:px-4 lg:px-12">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2">
@@ -182,17 +186,18 @@ const Header = () => {
               </DropdownMenuContent>
             </DropdownMenu>
             {user && (
-              <Link
-                to={cabinetPath}
+              <button
+                type="button"
+                onClick={() => setCabinetChooserOpen(true)}
                 className={cn(
                   "px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  isActive(cabinetPath)
+                  isActive("/dashboard") || isActive("/lawyer")
                     ? "text-primary bg-primary/10"
                     : "text-primary hover:bg-primary/8"
                 )}
               >
-                {cabinetLabel}
-              </Link>
+                Кабинет
+              </button>
             )}
           </nav>
 
@@ -286,9 +291,9 @@ const Header = () => {
                     {user.email}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate(cabinetPath)}>
+                  <DropdownMenuItem onClick={() => setTimeout(() => setCabinetChooserOpen(true), 0)}>
                     {isLawyer ? <Briefcase className="h-4 w-4 mr-2" /> : <User className="h-4 w-4 mr-2" />}
-                    {cabinetLabel}
+                    Кабинет
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="h-4 w-4 mr-2" />
@@ -348,19 +353,19 @@ const Header = () => {
                 {/* Nav links */}
                 <nav className="flex flex-col p-2 flex-1 overflow-y-auto">
                   {user && (
-                    <Link
-                      to={cabinetPath}
-                      onClick={() => setMobileMenuOpen(false)}
+                    <button
+                      type="button"
+                      onClick={() => { setMobileMenuOpen(false); setTimeout(() => setCabinetChooserOpen(true), 0); }}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-semibold transition-colors mb-2",
-                        isActive(cabinetPath)
+                        "flex items-center gap-3 px-4 py-3.5 rounded-xl text-base font-semibold transition-colors mb-2 w-full text-left",
+                        isActive("/dashboard") || isActive("/lawyer")
                           ? "bg-primary/10 text-primary"
                           : "bg-primary/5 text-primary hover:bg-primary/10"
                       )}
                     >
                       {isLawyer ? <Briefcase className="h-5 w-5" /> : <User className="h-5 w-5" />}
-                      {cabinetLabel}
-                    </Link>
+                      Кабинет
+                    </button>
                   )}
                   {user && (
                     <Link
@@ -446,6 +451,8 @@ const Header = () => {
         </div>
       </div>
     </header>
+    <CabinetChooserDialog open={cabinetChooserOpen} onOpenChange={setCabinetChooserOpen} />
+    </>
   );
 };
 
