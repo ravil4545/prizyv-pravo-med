@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { llmChat, MODEL_FAST, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 // ─── CORS (same pattern as other functions in this project) ──────────────────
 const getAllowedOrigin = (req: Request): string => {
@@ -21,10 +22,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const JINA_KEY        = Deno.env.get("JINA_API_KEY");
-// Единый ИИ-провайдер с основным чатом — Lovable AI Gateway (Gemini),
-// надёжнее бесплатного nemotron (OpenRouter часто отдавал 429).
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const JINA_KEY = Deno.env.get("JINA_API_KEY");
+// Текстовый агент (RAG-виджет) теперь через единый LLMGateway (Groq).
+// Vision не нужен — это чисто текстовый RAG-чат по базе знаний.
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 const messageSchema = z.object({
@@ -108,9 +108,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!JINA_KEY || !LOVABLE_API_KEY) {
+    if (!JINA_KEY || !isLlmConfigured()) {
       return Response.json(
-        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "LOVABLE_API_KEY не настроен" },
+        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "GROQ_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -190,28 +190,21 @@ ${sysCtx}`;
       ? `Найденные материалы по теме:\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
       : `Вопрос: ${message}`;
 
-    // 4. Единый провайдер с основным чатом — Lovable AI Gateway (Gemini).
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        stream: true,
-        messages: [
-          { role: "system", content: systemText },
-          // Conversation history (last 6 turns to keep context manageable)
-          ...history.slice(-6),
-          { role: "user", content: userContent },
-        ],
-      }),
+    // 4. Текстовый LLM через единый LLMGateway (Groq, лёгкая/быстрая модель).
+    const aiRes = await llmChat({
+      model: MODEL_FAST,
+      stream: true,
+      messages: [
+        { role: "system", content: systemText },
+        // Conversation history (last 6 turns to keep context manageable)
+        ...history.slice(-6),
+        { role: "user", content: userContent },
+      ],
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("[chat-rag] Lovable AI Gateway error:", aiRes.status, errText);
+      console.error("[chat-rag] Groq error:", aiRes.status, errText);
 
       if (aiRes.status === 429) {
         return Response.json(
