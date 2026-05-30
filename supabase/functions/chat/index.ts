@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 // CORS configuration - allow production and preview origins
 const getAllowedOrigin = (req?: Request) => {
@@ -88,9 +89,8 @@ serve(async (req) => {
     // Lovable AI Gateway — единый провайдер для всех edge-функций
     // (analyze-medical-document, parse-summons, generate-appeal — все на нём).
     // Lovable оплачивает usage, лимиты гораздо щедрее чем у OpenRouter free.
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!isLlmConfigured()) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     let systemPrompt = `Вы — виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
@@ -241,7 +241,7 @@ ${medicalContext}`;
     // Единый провайдер — Lovable AI Gateway. Тот же, что в
     // analyze-medical-document, parse-summons, generate-appeal.
     // gemini-2.5-flash достаточно быстрая и хорошо знает русский.
-    const PRIMARY_MODEL = "google/gemini-2.5-flash";
+    const PRIMARY_MODEL = MODEL_MAIN;
     const TIMEOUT_MS = 50_000; // запас под клиентский 60 сек
 
     let content = "";
@@ -255,16 +255,9 @@ ${medicalContext}`;
     console.log("[Chat] Calling Lovable Gateway, model:", PRIMARY_MODEL, "messages:", messages.length);
 
     try {
-      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: PRIMARY_MODEL,
-          messages: [{ role: "system", content: systemPrompt }, ...messages],
-        }),
+      const r = await llmChat({
+        model: PRIMARY_MODEL,
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
         signal: ctrl.signal,
       });
       clearTimeout(t);
@@ -279,7 +272,7 @@ ${medicalContext}`;
         const c: string = data?.choices?.[0]?.message?.content || "";
         if (c && c.trim()) {
           content = c;
-          usedModel = `lovable/${PRIMARY_MODEL}`;
+          usedModel = `groq/${PRIMARY_MODEL}`;
         } else {
           lastErrorText = "empty content";
         }
