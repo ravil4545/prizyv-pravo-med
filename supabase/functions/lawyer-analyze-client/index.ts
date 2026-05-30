@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = (req: Request): string => {
   const origin = req.headers.get("origin") || "";
@@ -112,8 +113,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
 
     // Build document summary for prompt
     const docSummary = docs.map((d, i) => {
@@ -190,22 +190,15 @@ ${docSummary}
   "lawyer_recommendations": ["...", "..."]
 }`;
 
-    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://nepriziv.ru",
-        "X-Title": "nepriziv.ru Lawyer Analysis",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
-        messages: [
-          { role: "system", content: "Ты эксперт по военно-врачебной экспертизе. Отвечай строго в JSON." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.1,
-      }),
+    const aiRes = await llmChat({
+      model: MODEL_MAIN,
+      temperature: 0.1,
+      maxTokens: 2000,
+      responseFormat: "json_object",
+      messages: [
+        { role: "system", content: "Ты эксперт по военно-врачебной экспертизе. Отвечай строго в JSON." },
+        { role: "user", content: prompt },
+      ],
     });
 
     if (!aiRes.ok) {
