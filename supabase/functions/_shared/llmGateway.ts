@@ -145,9 +145,12 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     // 429 (лимит) / 503 — транзиентные: ждём и повторяем.
     if ((res.status === 429 || res.status === 503) && attempt < maxRetries) {
       const retryAfter = Number(res.headers.get("retry-after"));
+      // Groq часто кладёт задержку только в ТЕЛО ответа («try again in 5.6s»),
+      // а не в заголовок retry-after → тогда он NaN. Минутное TPM-окно за 1–4с
+      // не освобождается, поэтому фолбэк длиннее: 5с, 8с, 11с (потолок 15с).
       const waitSec = Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter, 10)
-        : Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        ? Math.min(retryAfter, 15)
+        : Math.min(2 + attempt * 3, 15);
       await new Promise((r) => setTimeout(r, waitSec * 1000));
       continue;
     }

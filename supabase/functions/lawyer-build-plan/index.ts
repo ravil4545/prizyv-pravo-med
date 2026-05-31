@@ -73,7 +73,10 @@ Deno.serve(async (req) => {
 
     // Context Bundle (проверка владения карточкой — внутри ассемблера).
     const bundle = await assembleLawyerClientContext(serviceClient, lawyerClientId, user.id);
-    const contextBlock = serializeBundle(bundle, { maxChars: 5000, docTextChars: 500 });
+    // Бюджет контекста урезан под free-tier TPM Groq (12000 ток/мин): агент
+    // многораундовый, каждый раунд пересылает растущую историю — компактный
+    // контекст не даёт прогону упереться в лимит.
+    const contextBlock = serializeBundle(bundle, { maxChars: 3500, docTextChars: 400 });
 
     const userMsg = (typeof instruction === "string" && instruction.trim())
       ? instruction.slice(0, 1000)
@@ -98,8 +101,8 @@ Deno.serve(async (req) => {
         messages,
         model: MODEL_MAIN,
         temperature: 0.2,
-        maxTokens: 2000,
-        maxRounds: 5,
+        maxTokens: 1400,
+        maxRounds: 4,
         tools: [...AGENT_TOOLS, ...PLANNER_WRITE_TOOLS],
       },
     );

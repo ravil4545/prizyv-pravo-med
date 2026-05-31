@@ -67,7 +67,9 @@ Deno.serve(async (req) => {
 
     // Context Bundle (проверка владения карточкой — внутри ассемблера).
     const bundle = await assembleLawyerClientContext(serviceClient, lawyerClientId, user.id);
-    const contextBlock = serializeBundle(bundle, { maxChars: 5000, docTextChars: 500 });
+    // Бюджет контекста урезан под free-tier TPM Groq (12000 ток/мин) — см.
+    // комментарий в lawyer-build-plan.
+    const contextBlock = serializeBundle(bundle, { maxChars: 3500, docTextChars: 400 });
 
     const messages: LlmMessage[] = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -78,7 +80,7 @@ Deno.serve(async (req) => {
     const result = await runWithTools(
       serviceClient,
       { scope: "lawyer", docSources: docSourcesFromBundle(bundle.documents) },
-      { messages, model: MODEL_MAIN, temperature: 0.2, maxTokens: 1500, maxRounds: 4 },
+      { messages, model: MODEL_MAIN, temperature: 0.2, maxTokens: 1100, maxRounds: 3 },
     );
 
     return Response.json(

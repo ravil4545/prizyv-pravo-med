@@ -24,8 +24,12 @@ import { llmChat, type LlmMessage, type LlmTool, MODEL_MAIN } from "./llmGateway
 // deno-lint-ignore no-explicit-any
 type Sb = any;
 
-const RB_BODY_CAP = 3000;
-const DOC_TEXT_CAP = 3500;
+// Обрезка результатов инструментов. Намеренно небольшая: результат вызова
+// дописывается в историю диалога и ПЕРЕСЫЛАЕТСЯ моделью каждый следующий раунд,
+// поэтому крупные тела статей РБ/документов быстро выжигают минутный TPM-лимит
+// Groq (free-tier 12000 ток/мин). 1400/1600 достаточно для сути, без раздувания.
+const RB_BODY_CAP = 1400;
+const DOC_TEXT_CAP = 1600;
 
 export interface ToolContext {
   scope: "client" | "lawyer";
