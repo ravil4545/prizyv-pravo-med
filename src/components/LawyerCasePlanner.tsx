@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { extractFnError } from "@/lib/edgeError";
 import { Sparkles, Loader2, Stethoscope, ListChecks, AlertCircle } from "lucide-react";
 
 // Планировщик A3: показывает сохранённые examination_plan_items / action_plan_items
@@ -87,7 +88,7 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         body: { lawyerClientId },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await extractFnError(res.error));
       setExam((res.data?.examinationPlan as ExamItem[]) || []);
       setActions((res.data?.actionPlan as ActionItem[]) || []);
       setSummary(res.data?.summary || "");

@@ -55,7 +55,7 @@ const LawyerCaseAssistant = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         body: { lawyerClientId, question: text },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await extractFnError(res.error));
       setAnswer(res.data?.answer || "Пустой ответ.");
       setToolsUsed((res.data?.toolsUsed as string[]) || []);
     } catch (err) {
