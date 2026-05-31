@@ -24,17 +24,28 @@ export const useLawyerProfile = () => {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { setLoading(false); return; }
+    // Сбрасываем профиль предыдущего аккаунта: иначе после смены пользователя
+    // (logout → login другим) isLawyer оставался от старого аккаунта и
+    // RoleGuard мог увести нового клиента в /lawyer.
+    if (!user) { setProfile(null); setLoading(false); return; }
 
+    let cancelled = false;
     supabase
       .from("lawyer_profiles")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle()
       .then(({ data }) => {
+        if (cancelled) return;
         setProfile(data as unknown as LawyerProfile | null);
         setLoading(false);
+      }, () => {
+        // Ошибка запроса (например, сбой сети) не должна оставлять кабинет
+        // навсегда на скелетоне — снимаем loading, профиль остаётся прежним/пустым.
+        if (cancelled) return;
+        setLoading(false);
       });
+    return () => { cancelled = true; };
   }, [user?.id, authLoading]);
 
   // Роль юриста активна, только если запись существует И is_active = true.
