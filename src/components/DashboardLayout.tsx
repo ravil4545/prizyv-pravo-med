@@ -13,7 +13,7 @@ interface CabinetNavItem {
 
 const NAV_ITEMS: CabinetNavItem[] = [
   { label: "Главная", to: "/dashboard", icon: Home },
-  { label: "Мой календарь", to: "/dashboard/calendar", icon: Calendar, soon: true },
+  { label: "Мой календарь", to: "/dashboard/calendar", icon: Calendar },
   { label: "Мои документы", to: "/dashboard/medical-documents", icon: FileHeart },
   { label: "Чат с ИИ", to: "/dashboard/ai-chat", icon: MessageSquare },
   { label: "База знаний", to: "/dashboard/templates", icon: BookOpen },

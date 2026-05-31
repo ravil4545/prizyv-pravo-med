@@ -83,6 +83,7 @@ const MedicalDocumentsPage = lazy(() => import("./pages/MedicalDocumentsPage"));
 const MedicalHistoryPage = lazy(() => import("./pages/MedicalHistoryPage"));
 const MedicalQuestionnairePage = lazy(() => import("./pages/MedicalQuestionnairePage"));
 const CaseTrackingPage = lazy(() => import("./pages/CaseTrackingPage"));
+const CalendarPage = lazy(() => import("./pages/CalendarPage"));
 const SuccessCasesPage = lazy(() => import("./pages/SuccessCasesPage"));
 const CommissariatDirectoryPage = lazy(() => import("./pages/CommissariatDirectoryPage"));
 const CommissariatDetailPage = lazy(() => import("./pages/CommissariatDetailPage"));
@@ -163,6 +164,7 @@ const App = () => (
                   <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
                   <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
                   <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                  <Route path="/u/:slug/dashboard/calendar" element={<CalendarPage />} />
                   <Route path="/u/:slug/medical-history" element={<MedicalHistoryPage />} />
                   <Route path="/u/:slug/medical-questionnaire" element={<MedicalQuestionnairePage />} />
                   <Route path="/u/:slug/profile" element={<ProfilePage />} />
@@ -197,6 +199,7 @@ const App = () => (
                   <Route path="/medical-history" element={<RoleGuard role="client"><MedicalHistoryPage /></RoleGuard>} />
                   <Route path="/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
                   <Route path="/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
+                  <Route path="/dashboard/calendar" element={<RoleGuard role="client"><CalendarPage /></RoleGuard>} />
                   <Route path="/profile" element={<ProfilePage />} />
                 </Route>
                 <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
