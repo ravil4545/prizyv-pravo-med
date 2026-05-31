@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
+import { registerCyrillicFont } from "@/lib/cyrillicPdfFont";
 
 interface QuestionSection {
   id: string;
@@ -182,6 +183,10 @@ export default function MedicalQuestionnairePage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["1"]));
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set());
+  // Редактирование ранее заполненного опросника: id записи + дата, которые
+  // подгружаем при входе. Если задан — сохранение ОБНОВЛЯЕТ запись, а не плодит новую.
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -195,7 +200,72 @@ export default function MedicalQuestionnairePage() {
       return;
     }
     setUser(session.user);
+    await loadExistingQuestionnaire(session.user.id);
     setLoading(false);
+  };
+
+  // Парсер ответов из raw_text (для старых опросников без meta.answers).
+  // Формат генерации: «<id>. <вопрос>» затем «Ответ: <текст>» (возможно
+  // многострочный) до пустой строки. Многострочные ответы аккумулируем.
+  const parseAnswersFromRawText = (raw: string): Record<string, string> => {
+    const out: Record<string, string> = {};
+    const lines = raw.split("\n");
+    let curId: string | null = null;
+    let collecting = false;
+    let buf: string[] = [];
+    const flush = () => {
+      if (curId && buf.length) {
+        const val = buf.join("\n").trim();
+        if (val && val !== "Не заполнено") out[curId] = val;
+      }
+      buf = [];
+      collecting = false;
+    };
+    for (const line of lines) {
+      const qm = line.match(/^(\d+\.\d+)\.\s/);
+      if (qm) { flush(); curId = qm[1]; continue; }
+      const am = line.match(/^Ответ:\s?(.*)$/);
+      if (am) { collecting = true; buf = [am[1]]; continue; }
+      if (collecting) {
+        if (line.trim() === "") flush();
+        else buf.push(line);
+      }
+    }
+    flush();
+    return out;
+  };
+
+  // Подгружаем последний сохранённый опросник пользователя, чтобы его можно
+  // было дозаполнить/исправить, а не начинать с нуля.
+  const loadExistingQuestionnaire = async (userId: string) => {
+    const { data } = await supabase
+      .from("medical_documents_v2")
+      .select("id, raw_text, meta, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    const q = (data || []).find(
+      (d: any) => (d.meta as Record<string, unknown> | null)?.is_questionnaire === true,
+    );
+    if (!q) return;
+    let loaded: Record<string, string> = {};
+    const metaAnswers = (q.meta as Record<string, any> | null)?.answers;
+    if (metaAnswers && typeof metaAnswers === "object") {
+      loaded = metaAnswers as Record<string, string>;
+    } else if (q.raw_text) {
+      loaded = parseAnswersFromRawText(q.raw_text);
+    }
+    if (Object.keys(loaded).length > 0) {
+      setAnswers(loaded);
+      setEditingDocId(q.id);
+      setEditingDate(q.created_at ? new Date(q.created_at).toLocaleDateString("ru-RU") : null);
+      // Разворачиваем все разделы, где есть ответы — чтобы юзер сразу видел заполненное.
+      const filledSections = new Set<string>();
+      questionnaireSections.forEach((s) => {
+        if (s.questions.some((qq) => loaded[qq.id]?.trim())) filledSections.add(s.id);
+      });
+      if (filledSections.size > 0) setExpandedSections(filledSections);
+    }
   };
 
   const setAnswer = (questionId: string, value: string) => {
@@ -261,9 +331,18 @@ export default function MedicalQuestionnairePage() {
 
     try {
       const documentText = generateDocumentText();
+      const dateStr = new Date().toLocaleDateString("ru-RU");
+      const fileSafeDate = dateStr.replace(/\./g, "-");
 
-      // 1. Create PDF for storage
+      // 1. PDF с кириллическим шрифтом (иначе jsPDF Helvetica → крякозябры).
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      try {
+        await registerCyrillicFont(pdf); // регистрирует и выставляет шрифт "CyrillicPdf"
+      } catch (fontErr) {
+        // Без шрифта кириллица сломается — предупреждаем, но не валим процесс.
+        console.warn("Не удалось загрузить кириллический шрифт для PDF:", fontErr);
+        toast.warning("Не удалось загрузить шрифт для PDF — текст может отображаться некорректно. DOCX будет корректным.");
+      }
       pdf.setFontSize(10);
       const pageWidth = pdf.internal.pageSize.getWidth();
       const margin = 15;
@@ -272,16 +351,10 @@ export default function MedicalQuestionnairePage() {
 
       const lines = documentText.split("\n");
       for (const line of lines) {
-        if (y > 270) {
-          pdf.addPage();
-          y = 20;
-        }
+        if (y > 270) { pdf.addPage(); y = 20; }
         const splitLines = pdf.splitTextToSize(line, maxWidth);
         for (const sl of splitLines) {
-          if (y > 270) {
-            pdf.addPage();
-            y = 20;
-          }
+          if (y > 270) { pdf.addPage(); y = 20; }
           pdf.text(sl, margin, y);
           y += 5;
         }
@@ -290,30 +363,61 @@ export default function MedicalQuestionnairePage() {
       const pdfBlob = pdf.output("blob");
       const fileName = `${user.id}/questionnaire_${Date.now()}.pdf`;
 
-      // 2. Upload PDF to storage
+      // 2. Upload PDF в storage
       const { error: uploadError } = await supabase.storage
         .from("medical-documents")
         .upload(fileName, pdfBlob, { contentType: "application/pdf" });
-
       if (uploadError) throw uploadError;
 
-      // 3. Create medical document record with questionnaire marker
-      const { data: insertedDoc, error: insertError } = await supabase
-        .from("medical_documents_v2")
-        .insert({
-          user_id: user.id,
-          title: `Медицинский опросник от ${new Date().toLocaleDateString("ru-RU")}`,
-          file_url: fileName,
-          is_classified: false,
-          raw_text: documentText,
-          meta: { is_questionnaire: true, filled_count: filledCount, total_questions: totalQuestions },
-        })
-        .select()
-        .single();
+      // 3. Сохраняем запись. При редактировании — ОБНОВЛЯЕМ существующую
+      //    (не плодим дубль), иначе создаём новую. meta.answers — для
+      //    последующего точного редактирования.
+      const metaPayload = {
+        is_questionnaire: true,
+        filled_count: filledCount,
+        total_questions: totalQuestions,
+        answers,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (insertError) throw insertError;
+      let docId = editingDocId;
+      if (editingDocId) {
+        const { error: updErr } = await supabase
+          .from("medical_documents_v2")
+          .update({
+            title: `Медицинский опросник (обновлён ${dateStr})`,
+            file_url: fileName,
+            raw_text: documentText,
+            meta: metaPayload,
+          })
+          .eq("id", editingDocId);
+        if (updErr) throw updErr;
+      } else {
+        const { data: insertedDoc, error: insertError } = await supabase
+          .from("medical_documents_v2")
+          .insert({
+            user_id: user.id,
+            title: `Медицинский опросник от ${dateStr}`,
+            file_url: fileName,
+            is_classified: false,
+            raw_text: documentText,
+            meta: metaPayload,
+          })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        docId = insertedDoc?.id ?? null;
+        setEditingDocId(docId);
+      }
 
-      // 4. Download DOCX for user (non-blocking)
+      // 4. Скачиваем для пользователя ОБА файла: PDF (локально из jsPDF —
+      //    он уже с кириллицей) и DOCX (с бэка, Word-шрифт кириллицу держит).
+      try {
+        pdf.save(`medical_questionnaire_${fileSafeDate}.pdf`);
+      } catch (e) {
+        console.warn("PDF download error (non-critical):", e);
+      }
+
       try {
         const response = await fetch(
           `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
@@ -331,34 +435,38 @@ export default function MedicalQuestionnairePage() {
             }),
           }
         );
-
         if (response.ok) {
           const docxBlob = await response.blob();
           const docxUrl = URL.createObjectURL(docxBlob);
           const a = document.createElement("a");
           a.href = docxUrl;
-          a.download = `medical_questionnaire_${new Date().toLocaleDateString("ru-RU").replace(/\./g, "-")}.docx`;
+          a.download = `medical_questionnaire_${fileSafeDate}.docx`;
           a.click();
           URL.revokeObjectURL(docxUrl);
         } else {
-          console.warn("DOCX generation failed, skipping download");
+          console.warn("DOCX generation failed:", response.status);
+          toast.warning("DOCX не сформировался — PDF сохранён. Попробуйте ещё раз позже.");
         }
       } catch (docxErr) {
         console.warn("DOCX download error (non-critical):", docxErr);
       }
 
-      toast.success("Опросник сохранён! Запускаем AI-анализ...");
+      toast.success(
+        editingDocId
+          ? "Опросник обновлён! Скачаны PDF и DOCX. Запускаем AI-анализ..."
+          : "Опросник сохранён! Скачаны PDF и DOCX. Запускаем AI-анализ...",
+      );
 
-      // 5. Trigger AI analysis (non-blocking)
-      if (insertedDoc) {
+      // 5. AI-анализ (non-blocking)
+      if (docId) {
         supabase.functions.invoke("analyze-medical-document", {
           body: {
             manualText: documentText,
-            documentId: insertedDoc.id,
+            documentId: docId,
             userId: user.id,
             isHandwritten: true,
           },
-        }).then(({ data, error }) => {
+        }).then(({ error }) => {
           if (error) {
             console.error("AI analysis error:", error);
             toast.error("Ошибка AI-анализа опросника");
@@ -400,6 +508,12 @@ export default function MedicalQuestionnairePage() {
             <p className="text-sm text-muted-foreground mt-1">
               Заполнено: {filledCount} из {totalQuestions} вопросов • {completedSections.size} из {questionnaireSections.length} разделов
             </p>
+            {editingDocId && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Редактируется ранее заполненный опросник{editingDate ? ` от ${editingDate}` : ""} — изменения обновят его, а не создадут новый.
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
@@ -477,7 +591,9 @@ export default function MedicalQuestionnairePage() {
         <div className="sticky bottom-20 md:bottom-4 mt-6 bg-background border rounded-xl p-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs sm:text-sm text-muted-foreground">
-              После отправки документ будет загружен в «Медицинские документы» и проанализирован ИИ
+              {editingDocId
+                ? "Изменения обновят существующий опросник. Скачаются PDF и DOCX, запустится AI-анализ."
+                : "После отправки: загрузка в «Медицинские документы», скачивание PDF и DOCX, AI-анализ."}
             </p>
             <Button
               onClick={handleSubmit}
@@ -492,7 +608,7 @@ export default function MedicalQuestionnairePage() {
               ) : (
                 <>
                   <Save className="h-4 w-4" />
-                  Сохранить и загрузить ({filledCount}/{totalQuestions})
+                  {editingDocId ? "Обновить" : "Сохранить"} · PDF+DOCX ({filledCount}/{totalQuestions})
                 </>
               )}
             </Button>
