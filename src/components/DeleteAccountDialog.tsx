@@ -69,8 +69,12 @@ const DeleteAccountDialog = ({ triggerLabel = "Удалить аккаунт", c
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
         {children || (
-          <Button variant="destructive" size="sm" className="gap-1.5">
-            <Trash2 className="h-3.5 w-3.5" />
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto gap-1.5 p-0 text-xs font-normal text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-3 w-3" />
             {triggerLabel}
           </Button>
         )}

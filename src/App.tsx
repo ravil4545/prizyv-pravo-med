@@ -13,6 +13,7 @@ import { ChatPresenceProvider } from "./contexts/ChatPresenceContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import RoleGuard from "./components/RoleGuard";
 import AdminGuard from "./components/AdminGuard";
+import DashboardLayout from "./components/DashboardLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth } from "./lib/analytics";
 
@@ -156,19 +157,22 @@ const App = () => (
                 <Route path="/u/:slug/auth" element={<AuthPage />} />
                 <Route path="/u/:slug/register" element={<RegisterPage />} />
                 <Route path="/u/:slug/login" element={<LoginPage />} />
-                <Route path="/u/:slug/dashboard" element={<DashboardPage />} />
-                <Route path="/u/:slug/dashboard/ai-chat" element={<AIChatDashboardPage />} />
-                <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
-                <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
-                <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
-                <Route path="/u/:slug/medical-history" element={<MedicalHistoryPage />} />
-                <Route path="/u/:slug/medical-questionnaire" element={<MedicalQuestionnairePage />} />
+                <Route element={<DashboardLayout />}>
+                  <Route path="/u/:slug/dashboard" element={<DashboardPage />} />
+                  <Route path="/u/:slug/dashboard/ai-chat" element={<AIChatDashboardPage />} />
+                  <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
+                  <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
+                  <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
+                  <Route path="/u/:slug/medical-history" element={<MedicalHistoryPage />} />
+                  <Route path="/u/:slug/medical-questionnaire" element={<MedicalQuestionnairePage />} />
+                  <Route path="/u/:slug/profile" element={<ProfilePage />} />
+                </Route>
                 <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
                 <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
                 <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
                 <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
                 <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
-                <Route path="/u/:slug/profile" element={<ProfilePage />} />
+                {/* /u/:slug/profile теперь внутри DashboardLayout (см. блок выше) */}
 
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<AuthPage />} />
@@ -183,15 +187,19 @@ const App = () => (
                 <Route path="/forum" element={<ForumPage />} />
                 <Route path="/blog" element={<BlogPage />} />
                 <Route path="/blog/:slug" element={<BlogDetailPage />} />
-                {/* Клиентский кабинет — юристов отсюда редиректит на /lawyer */}
-                <Route path="/dashboard" element={<RoleGuard role="client"><DashboardPage /></RoleGuard>} />
-                <Route path="/dashboard/templates" element={<RoleGuard role="client"><UserTemplatesPage /></RoleGuard>} />
-                <Route path="/dashboard/ai-chat" element={<RoleGuard role="client"><AIChatDashboardPage /></RoleGuard>} />
-                <Route path="/dashboard/medical-documents" element={<RoleGuard role="client"><MedicalDocumentsPage /></RoleGuard>} />
+                {/* Клиентский кабинет — юристов отсюда редиректит на /lawyer.
+                    Обёрнут в DashboardLayout — единое боковое меню (Sidebar). */}
+                <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<RoleGuard role="client"><DashboardPage /></RoleGuard>} />
+                  <Route path="/dashboard/templates" element={<RoleGuard role="client"><UserTemplatesPage /></RoleGuard>} />
+                  <Route path="/dashboard/ai-chat" element={<RoleGuard role="client"><AIChatDashboardPage /></RoleGuard>} />
+                  <Route path="/dashboard/medical-documents" element={<RoleGuard role="client"><MedicalDocumentsPage /></RoleGuard>} />
+                  <Route path="/medical-history" element={<RoleGuard role="client"><MedicalHistoryPage /></RoleGuard>} />
+                  <Route path="/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
+                  <Route path="/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                </Route>
                 <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
-                <Route path="/medical-history" element={<RoleGuard role="client"><MedicalHistoryPage /></RoleGuard>} />
-                <Route path="/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
-                <Route path="/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
                 <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
@@ -207,7 +215,7 @@ const App = () => (
                 <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
                 <Route path="/admin/articles" element={<AdminGuard><AdminArticlesPage /></AdminGuard>} />
                 <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
-                <Route path="/profile" element={<ProfilePage />} />
+                {/* /profile теперь внутри DashboardLayout (см. блок клиентского кабинета) */}
                 {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard */}
                 <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
                 <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />

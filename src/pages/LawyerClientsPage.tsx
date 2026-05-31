@@ -801,7 +801,7 @@ const LawyerClientsPage = () => {
           // все колонки. Загруженный набор раскладываем по этапам.
           (() => {
             const kanbanClients = clients;
-            const knownStages = new Set(CRM_STAGES.map((s) => s.value));
+            const knownStages = new Set<string>(CRM_STAGES.map((s) => s.value));
             return (
               <div className="overflow-x-auto -mx-4 px-4 pb-4">
                 <div className="inline-flex gap-3 min-w-full items-start">

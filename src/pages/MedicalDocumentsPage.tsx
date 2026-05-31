@@ -51,6 +51,7 @@ import {
 import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import UploadProgress from "@/components/UploadProgress";
+import PrivacyBadge from "@/components/PrivacyBadge";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1879,6 +1880,7 @@ export default function MedicalDocumentsPage() {
                 // одного слота можно собрать страницы из PDF, фото, камеры —
                 // всё склеится в один PDF и попадёт одной записью в БД.
                 <div className="py-2 space-y-4">
+                  <PrivacyBadge className="mb-1" />
                   <DocumentUploadWizard
                     onUpload={handleWizardUpload}
                     hint="Каждая иконка — один документ. На активной (выделенной) иконке выберите способ: PDF, фото из галереи или сфотографировать камерой. Все страницы одного документа собираются в один файл."
