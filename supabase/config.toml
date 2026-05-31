@@ -44,3 +44,5 @@ verify_jwt = true
 
 [functions.lawyer-build-plan]
 verify_jwt = true
+[functions.send-deadline-reminders]
+verify_jwt = false
