@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Check, Loader2, Phone } from "lucide-react";
 import { useCaseProgress } from "@/hooks/useCaseProgress";
 import { cn } from "@/lib/utils";
+import PaymentInstructionsDialog from "@/components/PaymentInstructionsDialog";
 
 interface Stage {
   no: string;
@@ -11,6 +12,9 @@ interface Stage {
   hint: string;
   ctaLabel: string;
   ctaPath: string;
+  /** Если задано "payment" — CTA открывает диалог оплаты, а не навигацию.
+   *  (Стадия «Безлимит» вела на /dashboard — текущую же страницу, клик был no-op.) */
+  action?: "payment";
 }
 
 const STAGES: Stage[] = [
@@ -53,12 +57,20 @@ const STAGES: Stage[] = [
     hint: "Подписка снимает все лимиты ИИ-помощника и открывает прямой чат с юристом.",
     ctaLabel: "Оформить подписку",
     ctaPath: "/dashboard",
+    action: "payment",
   },
 ];
 
 const CaseRoadmap = () => {
   const progress = useCaseProgress();
   const navigate = useNavigate();
+  const [paymentOpen, setPaymentOpen] = useState(false);
+
+  // Единая точка обработки CTA стадии: оплата → диалог, иначе → навигация.
+  const handleStageCta = (stage: Pick<Stage, "action" | "ctaPath">) => {
+    if (stage.action === "payment") setPaymentOpen(true);
+    else navigate(stage.ctaPath);
+  };
 
   const stages = useMemo(
     () =>
@@ -131,7 +143,7 @@ const CaseRoadmap = () => {
             </div>
           </div>
           <button
-            onClick={() => navigate(nextStage.ctaPath)}
+            onClick={() => handleStageCta(nextStage)}
             className="group inline-flex items-center justify-center gap-2 px-5 py-3 bg-ink text-paper text-sm font-semibold hover:bg-gold hover:text-ink transition-colors"
           >
             {nextStage.ctaLabel}
@@ -195,15 +207,26 @@ const CaseRoadmap = () => {
                 )}
               </div>
 
-              {/* Inline action */}
+              {/* Inline action: оплата → кнопка-диалог, иначе → ссылка-навигация */}
               {!s.done && (
-                <Link
-                  to={s.ctaPath}
-                  className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
-                >
-                  Перейти
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
+                s.action === "payment" ? (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentOpen(true)}
+                    className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
+                  >
+                    Оплатить
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <Link
+                    to={s.ctaPath}
+                    className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
+                  >
+                    Перейти
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                )
               )}
             </li>
           );
@@ -229,6 +252,8 @@ const CaseRoadmap = () => {
           Записаться
         </button>
       </footer>
+
+      <PaymentInstructionsDialog open={paymentOpen} onOpenChange={setPaymentOpen} />
     </section>
   );
 };
