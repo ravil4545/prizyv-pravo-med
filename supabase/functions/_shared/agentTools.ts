@@ -58,7 +58,10 @@ export const AGENT_TOOLS: LlmTool[] = [
         type: "object",
         properties: {
           query: { type: "string", description: "Диагноз или ключевые слова (например, «плоскостопие», «гипертония», «сколиоз»)." },
-          limit: { type: "integer", description: "Сколько статей вернуть (1–10).", default: 5 },
+          // ВАЖНО: НЕ объявляем integer-параметры в схемах инструментов.
+          // llama-3.3-70b на Groq часто отдаёт числовой аргумент СТРОКОЙ ("5"),
+          // и Groq строго валидирует его → 400 «/limit: expected integer, but
+          // got string». Лимит фиксируем в коде (см. runTool: search_rb).
         },
         required: ["query"],
       },
