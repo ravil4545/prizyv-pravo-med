@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import AboutLawyer from "@/components/AboutLawyer";
+import Credentials from "@/components/Credentials";
 import ConscriptionMap from "@/components/ConscriptionMap";
 import ComplexCases from "@/components/ComplexCases";
 import Services from "@/components/Services";
@@ -23,6 +24,7 @@ const Index = () => {
         <main>
           <Hero />
           <AboutLawyer />
+          <Credentials />
           <ConscriptionMap />
           <ComplexCases />
           <Pricing />
