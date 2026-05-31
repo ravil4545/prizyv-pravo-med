@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { extractFnError } from "@/lib/edgeError";
 import { MessageCircleQuestion, Loader2, Sparkles } from "lucide-react";
 
 // Ассистент по делу (грунтованный): свободный вопрос юриста по конкретному
