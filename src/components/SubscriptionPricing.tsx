@@ -138,7 +138,8 @@ const faq = [
 const SubscriptionPricing = () => {
   const navigate = useNavigate();
   const branding = useBranding();
-  const [activeCycle, setActiveCycle] = useState<BillingCycle>("year");
+  // По умолчанию — месячный тариф (990 ₽), а не годовой.
+  const [activeCycle, setActiveCycle] = useState<BillingCycle>("month");
 
   const startTrial = async () => {
     const dashboard = `${branding.routePrefix}/dashboard?pay=trial`;
