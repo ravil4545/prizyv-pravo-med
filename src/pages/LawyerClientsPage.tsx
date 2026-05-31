@@ -175,7 +175,14 @@ const LawyerClientsPage = () => {
     then: PromiseLike<{ data: LawyerClient[] | null; count: number | null; error?: { message: string } | null }>["then"];
   };
 
-  const lawyerClientsTable = (supabase as unknown as {
+  // ВАЖНО: возвращаем СВЕЖИЙ query-builder на каждый вызов. Раньше тут был один
+  // общий `supabase.from("lawyer_clients")`, переиспользуемый в loadCounts,
+  // loadClients и burning-запросе. В supabase-js объект URL у билдера общий, и
+  // фильтры НАКАПЛИВАЛИСЬ между запросами: в один запрос склеивались и активный
+  // (or link_state in linked_active…), и архивный (link_state in archived…)
+  // фильтры — взаимоисключающие → список возвращал 0 строк, хотя счётчик «12»
+  // (отдельный запрос) был верным. Фабрика-функция даёт изолированный URL.
+  const lawyerClientsTable = () => (supabase as unknown as {
     from: (table: "lawyer_clients") => {
       select: (columns: string, options?: { count?: "exact"; head?: boolean }) => LawyerClientsQuery;
     };
@@ -205,8 +212,8 @@ const LawyerClientsPage = () => {
   const loadCounts = async () => {
     try {
       const [allRes, archRes] = await Promise.all([
-        lawyerClientsTable.select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
-        lawyerClientsTable.select("*", { count: "exact", head: true })
+        lawyerClientsTable().select("*", { count: "exact", head: true }).eq("lawyer_id", user!.id),
+        lawyerClientsTable().select("*", { count: "exact", head: true })
           .eq("lawyer_id", user!.id)
           .filter("link_state", "in", ARCHIVED_LINK_STATE_FILTER),
       ]);
@@ -227,7 +234,7 @@ const LawyerClientsPage = () => {
     try {
       const from = nextPage * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      const pagePromise = applyFilters(lawyerClientsTable.select("*", { count: "exact" }))
+      const pagePromise = applyFilters(lawyerClientsTable().select("*", { count: "exact" }))
         .order("updated_at", { ascending: false })
         .range(from, to);
 
@@ -241,7 +248,7 @@ const LawyerClientsPage = () => {
         const in14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
         const [pageRes, burningRes] = await Promise.all([
           pagePromise,
-          applyFilters(lawyerClientsTable.select("*"))
+          applyFilters(lawyerClientsTable().select("*"))
             .eq("case_won", false)
             .gte("conscription_date", today)
             .lte("conscription_date", in14),
