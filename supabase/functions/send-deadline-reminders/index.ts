@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
+import * as webpush from "https://esm.sh/@negrel/webpush@0.3.0";
 
 /**
  * send-deadline-reminders (Модуль 4, Фаза 3 — движок уведомлений).
@@ -8,8 +9,11 @@ import { Resend } from "npm:resend@4.0.0";
  * Вызывается ПО РАСПИСАНИЮ (ежедневный cron). Находит события `case_events`,
  * до которых осталось 3 / 1 / 0 дней (сегодня по МСК), и рассылает напоминания:
  *   1) e-mail клиенту           (если notify_client_email);
- *   2) e-mail закреплённому юристу (если notify_lawyer_email и клиент привязан).
- * Push клиенту — Фаза 3b (нужны service worker + VAPID), здесь отмечен TODO.
+ *   2) e-mail закреплённому юристу (если notify_lawyer_email и клиент привязан);
+ *   3) web-push клиенту           (если notify_client_push и есть VAPID в Vault).
+ * Push (Фаза 3b) включается, только когда в Vault лежат vapid_public_key/
+ * vapid_private_key и у пользователя есть подписка в push_subscriptions —
+ * иначе канал тихо пропускается, e-mail работает как раньше.
  *
  * Идемпотентность: в `case_events.reminders_sent` хранятся отправленные окна
  * (d3/d1/d0); повторный запуск в тот же день не задублирует письма.
@@ -54,6 +58,7 @@ interface CaseEventRow {
   reminders_sent: string[] | null;
   notify_client_email: boolean;
   notify_lawyer_email: boolean;
+  notify_client_push: boolean;
 }
 
 const json = (body: unknown, status = 200) =>
@@ -161,7 +166,7 @@ serve(async (req) => {
   const { data: events, error } = await supabase
     .from("case_events")
     .select(
-      "id,user_id,event_date,event_type,title,description,reminders_sent,notify_client_email,notify_lawyer_email",
+      "id,user_id,event_date,event_type,title,description,reminders_sent,notify_client_email,notify_lawyer_email,notify_client_push",
     )
     .eq("remind_enabled", true)
     .gte("event_date", todayStr)
@@ -175,6 +180,7 @@ serve(async (req) => {
   const rows = (events ?? []) as CaseEventRow[];
   let clientSent = 0;
   let lawyerSent = 0;
+  let pushSent = 0;
   let processed = 0;
   const errors: string[] = [];
 
@@ -190,6 +196,58 @@ serve(async (req) => {
       console.error("Resend exception:", String(e));
       return false;
     }
+  };
+
+  // --- web-push: один раз готовим ApplicationServer из VAPID-ключей (Vault) ---
+  // Если ключей нет (Фаза 3b не настроена) — push-канал просто пропускается.
+  let pushServer: webpush.ApplicationServer | null = null;
+  try {
+    const { data: vapid } = await supabase.rpc("get_vapid_keys").single();
+    const pub = (vapid as { public_key?: string; private_key?: string } | null)?.public_key;
+    const priv = (vapid as { public_key?: string; private_key?: string } | null)?.private_key;
+    if (pub && priv) {
+      const keys = await webpush.importVapidKeys(
+        { publicKey: pub, privateKey: priv },
+        { extractable: false },
+      );
+      pushServer = await webpush.ApplicationServer.new({
+        contactInformation: "mailto:noreply@nepriziv.ru",
+        vapidKeys: keys,
+      });
+    }
+  } catch (e) {
+    console.error("VAPID init skipped:", String(e));
+  }
+
+  // Отправка push на все подписки пользователя; протухшие (404/410) удаляем.
+  const sendPush = async (userId: string, title: string, body: string): Promise<boolean> => {
+    if (!pushServer) return false;
+    const { data: subs } = await supabase
+      .from("push_subscriptions")
+      .select("endpoint, p256dh, auth")
+      .eq("user_id", userId);
+    if (!subs || subs.length === 0) return false;
+
+    const payload = JSON.stringify({ title, body, url: `${SITE}/dashboard/calendar`, tag: "nepriziv-deadline" });
+    let anyOk = false;
+    for (const s of subs as { endpoint: string; p256dh: string; auth: string }[]) {
+      try {
+        const subscriber = pushServer.subscribe({
+          endpoint: s.endpoint,
+          keys: { p256dh: s.p256dh, auth: s.auth },
+        });
+        await subscriber.pushTextMessage(payload, {});
+        anyOk = true;
+      } catch (e) {
+        const msg = String(e);
+        if (msg.includes("404") || msg.includes("410")) {
+          await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+        } else {
+          console.error("push send error:", msg);
+        }
+      }
+    }
+    return anyOk;
   };
 
   for (const ev of rows) {
@@ -244,7 +302,15 @@ serve(async (req) => {
       }
     }
 
-    // 3) push клиенту — Фаза 3b (service worker + VAPID + таблица подписок). TODO.
+    // 3) push клиенту (Фаза 3b): web-push на все подписки, если включено и есть VAPID.
+    if (ev.notify_client_push && pushServer) {
+      const ok = await sendPush(
+        ev.user_id,
+        `Напоминание: ${ev.title}`,
+        `${typeLabel} — ${whenPhrase(days)} (${dateStr})`,
+      );
+      if (ok) pushSent++;
+    }
 
     // отметить окно обработанным (идемпотентность в пределах суток)
     const { error: updErr } = await supabase
@@ -262,6 +328,7 @@ serve(async (req) => {
     processed,
     client_emails: clientSent,
     lawyer_emails: lawyerSent,
+    push_sent: pushSent,
     errors,
   });
 });

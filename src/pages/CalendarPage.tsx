@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { withBrandPath } from "@/lib/brandPath";
 import { EVENT_TYPES, OUTCOMES, eventTypeMeta } from "@/lib/caseEvents";
 import { getDayInfo } from "@/lib/productionCalendar";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
 
 interface CaseEvent {
   id: string;
@@ -450,9 +451,12 @@ export default function CalendarPage() {
                 Дедлайны, явки и сроки по делу. Выходные и праздники РФ — отмечены.
               </p>
             </div>
-            <Button onClick={() => openAdd()} className="gap-2 self-start bg-ink text-paper hover:bg-ink/90">
-              <Plus className="h-4 w-4" /> Добавить событие
-            </Button>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <Button onClick={() => openAdd()} className="gap-2 self-start bg-ink text-paper hover:bg-ink/90 sm:self-auto">
+                <Plus className="h-4 w-4" /> Добавить событие
+              </Button>
+              <PushNotificationToggle />
+            </div>
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
