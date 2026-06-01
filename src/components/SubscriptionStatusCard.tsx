@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Crown, FileText, MessageSquare, AlertTriangle, UserPlus, Sparkles, Shield, Zap } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PaymentInstructionsDialog from "./PaymentInstructionsDialog";
+import SubscriptionCancelDialog from "./SubscriptionCancelDialog";
 
 interface SubscriptionStatusCardProps {
   compact?: boolean;
@@ -17,6 +18,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const { subscription, loading: subLoading, isActive, remainingDocUploads, remainingAIQuestions } = useSubscription();
   const { isDemoMode, remainingDemoDocs, remainingDemoAI, demoDocLimit, demoAiLimit } = useDemoMode();
 
@@ -84,9 +86,21 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
                 <span className="text-sm font-medium">∞</span>
               </div>
             </div>
+            {!compact && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCancelDialogOpen(true)}
+                  className="text-xs text-muted-foreground/70 underline-offset-2 hover:text-muted-foreground hover:underline"
+                >
+                  Управление подпиской
+                </button>
+              </div>
+            )}
           </CardContent>
         </Card>
         <PaymentInstructionsDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} />
+        <SubscriptionCancelDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen} />
       </>
     );
   }
