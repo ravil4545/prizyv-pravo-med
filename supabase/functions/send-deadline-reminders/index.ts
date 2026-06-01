@@ -14,12 +14,14 @@ import { Resend } from "npm:resend@4.0.0";
  * Идемпотентность: в `case_events.reminders_sent` хранятся отправленные окна
  * (d3/d1/d0); повторный запуск в тот же день не задублирует письма.
  *
- * Защита: verify_jwt=false (cron без JWT) + общий секрет CRON_SECRET в заголовке
- * x-cron-secret (если секрет задан в окружении). Тело (необязательно):
+ * Защита: verify_jwt=false (cron без JWT). Заголовок x-cron-secret сверяется с
+ * секретом `cron_secret` из Supabase Vault через RPC public.match_cron_secret
+ * (доступна только service_role). Единый источник истины — Vault; ручной
+ * CRON_SECRET в окружении больше не нужен. Тело (необязательно):
  * { "dry_run": true } — посчитать, ничего не отправляя.
  *
  * Секреты Supabase (Edge Functions): RESEND_API_KEY, SUPABASE_URL,
- * SUPABASE_SERVICE_ROLE_KEY (уже есть), CRON_SECRET (добавить).
+ * SUPABASE_SERVICE_ROLE_KEY (уже есть). Секрет cron — в Vault (cron_secret).
  */
 
 const corsHeaders = {
@@ -117,20 +119,26 @@ const lawyerEmailHtml = (
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // --- защита cron-секретом (fail-closed: без секрета функция не работает) ---
-  const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (!CRON_SECRET) return json({ error: "CRON_SECRET not configured" }, 500);
-  if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-
-  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  if (!RESEND_API_KEY) return json({ error: "RESEND_API_KEY not configured" }, 500);
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
+
+  // --- защита: сверяем заголовок с секретом cron_secret из Vault (RPC) ---
+  const token = req.headers.get("x-cron-secret") ?? "";
+  if (!token) return json({ error: "Unauthorized" }, 401);
+  const { data: secretOk, error: secretErr } = await supabase.rpc("match_cron_secret", {
+    p_token: token,
+  });
+  if (secretErr) {
+    console.error("Secret check failed:", secretErr);
+    return json({ error: "Secret validation error" }, 500);
+  }
+  if (secretOk !== true) return json({ error: "Unauthorized" }, 401);
+
+  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+  if (!RESEND_API_KEY) return json({ error: "RESEND_API_KEY not configured" }, 500);
+
   const resend = new Resend(RESEND_API_KEY);
 
   let dryRun = false;
@@ -188,9 +196,9 @@ serve(async (req) => {
     const days = Math.round((dateUtcMs(ev.event_date) - todayMs) / 86400000);
     if (!REMIND_OFFSETS.includes(days)) continue;
 
-    const token = `d${days}`;
+    const windowToken = `d${days}`;
     const already = ev.reminders_sent ?? [];
-    if (already.includes(token)) continue;
+    if (already.includes(windowToken)) continue;
 
     processed++;
     if (dryRun) continue;
@@ -241,7 +249,7 @@ serve(async (req) => {
     // отметить окно обработанным (идемпотентность в пределах суток)
     const { error: updErr } = await supabase
       .from("case_events")
-      .update({ reminders_sent: [...already, token] })
+      .update({ reminders_sent: [...already, windowToken] })
       .eq("id", ev.id);
     if (updErr) errors.push(`update:${ev.id}`);
   }
