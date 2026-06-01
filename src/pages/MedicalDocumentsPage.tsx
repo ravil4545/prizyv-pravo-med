@@ -52,6 +52,7 @@ import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import UploadProgress from "@/components/UploadProgress";
 import PrivacyBadge from "@/components/PrivacyBadge";
+import DocumentValidityBadge from "@/components/DocumentValidityBadge";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -2174,6 +2175,13 @@ export default function MedicalDocumentsPage() {
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
+                            <DocumentValidityBadge
+                              className="mt-1 flex w-fit"
+                              documentDate={doc.document_date}
+                              uploadedAt={doc.uploaded_at}
+                              title={doc.title}
+                              typeName={doc.document_types?.name}
+                            />
                           </TableCell>
                           <TableCell>
                             {doc.ai_fitness_category ? (

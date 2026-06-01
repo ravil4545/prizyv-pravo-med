@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Check, Loader2, Phone } from "lucide-react";
+import { ArrowRight, Check, Loader2, Phone, Lock } from "lucide-react";
 import { useCaseProgress } from "@/hooks/useCaseProgress";
 import { cn } from "@/lib/utils";
 import PaymentInstructionsDialog from "@/components/PaymentInstructionsDialog";
@@ -58,6 +58,33 @@ const STAGES: Stage[] = [
     ctaLabel: "Оформить подписку",
     ctaPath: "/dashboard",
     action: "payment",
+  },
+];
+
+/**
+ * Будущие этапы сопровождения (Модуль 2 — удержание).
+ *
+ * Показываются заблокированными (greyed out) после основного роадмапа, чтобы
+ * пользователь видел: сервис ведёт его не только до сбора документов, а через
+ * весь призыв — есть ради чего оставаться в подписке. Разблокируются по мере
+ * развития дела (пока — после оформления подписки, этап 05).
+ */
+const FUTURE_STAGES: { title: string; hint: string }[] = [
+  {
+    title: "Юридическое сопровождение при подаче документов",
+    hint: "Юрист проверит комплект и поможет правильно подать заявление в военкомат.",
+  },
+  {
+    title: "Прохождение медкомиссии и защита прав",
+    hint: "Сопровождение на медосвидетельствовании — что говорить, какие права отстаивать.",
+  },
+  {
+    title: "Контрольное медицинское освидетельствование (КМО)",
+    hint: "Подготовка к КМО: документы по статье, тактика, защита категории годности.",
+  },
+  {
+    title: "Получение военного билета / отсрочки",
+    hint: "Финальный этап — фиксация решения и получение документа на руки.",
   },
 ];
 
@@ -232,6 +259,41 @@ const CaseRoadmap = () => {
           );
         })}
       </ol>
+
+      {/* Future stages — заблокированные будущие этапы сопровождения (удержание) */}
+      <div className="px-5 sm:px-7 pb-6 -mt-1">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-ink/40">
+            Дальше с вами
+          </span>
+          <span className="h-px flex-1 bg-ink/10" />
+        </div>
+        <ul className="space-y-2.5">
+          {FUTURE_STAGES.map((f) => (
+            <li
+              key={f.title}
+              className="grid grid-cols-[2.5rem_1fr] gap-4 items-start opacity-60"
+            >
+              <div className="relative z-10 w-10 h-10 flex items-center justify-center border-2 border-dashed border-ink/20 bg-paper">
+                <Lock className="h-3.5 w-3.5 text-ink/40" />
+              </div>
+              <div className="min-w-0 pt-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-serif text-base sm:text-lg leading-tight text-ink/70">
+                    {f.title}
+                  </h3>
+                  <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/40 border border-ink/15 px-1.5 py-0.5">
+                    скоро
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-ink-soft mt-1 leading-relaxed">
+                  {f.hint}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {/* Bottom: request consultation */}
       <footer className="px-5 sm:px-7 py-4 border-t border-ink/10 bg-paper-deep/60 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">

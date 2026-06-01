@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Home, Calendar, FileHeart, MessageSquare, BookOpen, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { withBrandPath } from "@/lib/brandPath";
+import EmergencyAuditButton from "@/components/EmergencyAuditButton";
 
 interface CabinetNavItem {
   label: string;
@@ -87,6 +88,9 @@ export default function DashboardLayout() {
       <div className="min-w-0 flex-1">
         <Outlet />
       </div>
+
+      {/* Сквозная плавающая кнопка экстренного аудита (Модуль 2 — удержание) */}
+      <EmergencyAuditButton />
     </div>
   );
 }
