@@ -33,6 +33,24 @@ interface Conversation {
   updated_at: string;
 }
 
+// Стартовые подсказки (пустой чат) — заполняют поле ввода, можно отредактировать.
+const QUICK_REPLIES_START = [
+  "Какие диагнозы дают категорию В?",
+  "Как обжаловать решение призывной комиссии?",
+  "Какие документы нужны для отсрочки по здоровью?",
+  "Сроки рассмотрения жалобы в военкомате?",
+];
+
+// Подсказки-продолжения (Модуль 3): появляются над полем ввода после ответа ИИ
+// и отправляются сразу по клику — проактивно ведут диалог дальше.
+const QUICK_REPLIES_FOLLOWUP = [
+  "Объясни проще",
+  "Что делать дальше по шагам?",
+  "Какие документы мне взять с собой?",
+  "Сошлись на конкретные статьи закона",
+  "Что делать, если повестку бросили в почтовый ящик?",
+];
+
 const AIChatDashboardPage = () => {
   const { canAskAI: canAskAISub, incrementAIQuestions: incrementAISub, isActive, remainingAIQuestions } = useSubscription();
   const { isDemoMode, canAskAI: canAskAIDemo, incrementDemoAIQuestions, remainingDemoAI, demoAiLimit } = useDemoMode();
@@ -77,6 +95,42 @@ const AIChatDashboardPage = () => {
     })();
     return () => { cancelled = true; };
   }, [user, isDemoMode]);
+
+  // ── Проактивный триггер по дедлайну (Модуль 3) ──────────────────────────
+  // При открытии чата подтягиваем ближайшее событие дела (≤14 дней). Если есть —
+  // показываем подсказку «спросить, как подготовиться», отправляемую одним кликом.
+  const [nextDeadline, setNextDeadline] = useState<{ title: string; days: number } | null>(null);
+
+  useEffect(() => {
+    if (!user || isDemoMode) { setNextDeadline(null); return; }
+    let cancelled = false;
+    (async () => {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const maxStr = new Date(today.getTime() + 14 * 86400000).toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("case_events")
+        .select("title, event_date")
+        .eq("user_id", user.id)
+        .gte("event_date", todayStr)
+        .lte("event_date", maxStr)
+        .order("event_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data?.event_date) {
+        const ms = new Date(data.event_date + "T00:00:00Z").getTime() -
+          new Date(todayStr + "T00:00:00Z").getTime();
+        setNextDeadline({ title: data.title, days: Math.round(ms / 86400000) });
+      } else {
+        setNextDeadline(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, isDemoMode]);
+
+  const deadlineWhen = (days: number) =>
+    days === 0 ? "сегодня" : days === 1 ? "завтра" : `через ${days} дн.`;
 
   const buildEscalationSummary = () => {
     const lines = messages.slice(-12).map((m) =>
@@ -280,8 +334,11 @@ const AIChatDashboardPage = () => {
     }
   };
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
+  const sendMessage = async (overrideText?: string) => {
+    // overrideText — клик по подсказке (Модуль 3): отправляем сразу, не дожидаясь
+    // асинхронного setInput. Если не передан — берём из поля ввода.
+    const text = (typeof overrideText === "string" ? overrideText : input).trim();
+    if (!text || sending) return;
 
     // Check limits based on mode
     const canAsk = isDemoMode ? canAskAIDemo() : canAskAISub();
@@ -295,7 +352,7 @@ const AIChatDashboardPage = () => {
       await createNewConversation();
     }
 
-    const userMessage: Message = { role: "user", content: input };
+    const userMessage: Message = { role: "user", content: text };
     setMessages((prev) => [...prev, userMessage]);
     if (!isDemoMode) await saveMessage(userMessage);
     setInput("");
@@ -671,13 +728,32 @@ const AIChatDashboardPage = () => {
                       <p className="text-sm text-muted-foreground max-w-md mb-6">
                         Юридическая и медицинская консультация по призыву. ИИ учитывает ваши документы.
                       </p>
+                      {nextDeadline && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendMessage(
+                              `У меня по делу событие «${nextDeadline.title}» ${deadlineWhen(nextDeadline.days)}. Как к нему подготовиться и какие документы взять?`,
+                            )
+                          }
+                          className="mb-5 flex w-full max-w-2xl items-start gap-3 rounded-xl border border-gold/40 bg-gold/5 p-3 text-left transition-colors hover:bg-gold/10"
+                        >
+                          <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gold/20 text-base">
+                            🔔
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-foreground">
+                              Скоро: {nextDeadline.title} — {deadlineWhen(nextDeadline.days)}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              Нажмите, чтобы спросить, как подготовиться и что взять с собой
+                            </span>
+                          </span>
+                        </button>
+                      )}
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
-                        {[
-                          "Какие диагнозы дают категорию В?",
-                          "Как обжаловать решение призывной комиссии?",
-                          "Какие документы нужны для отсрочки по здоровью?",
-                          "Сроки рассмотрения жалобы в военкомате?",
-                        ].map((q) => (
+                        {QUICK_REPLIES_START.map((q) => (
                           <button
                             key={q}
                             onClick={() => setInput(q)}
@@ -764,6 +840,25 @@ const AIChatDashboardPage = () => {
                 </div>
               </ScrollArea>
 
+              {/* Быстрые подсказки-продолжения (Модуль 3): после ответа ИИ —
+                  кликабельные чипы над полем ввода, отправляются сразу. */}
+              {!sending &&
+                messages.length > 0 &&
+                messages[messages.length - 1].role === "assistant" && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {QUICK_REPLIES_FOLLOWUP.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => sendMessage(q)}
+                        className="rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
               <div className="flex gap-2 items-end">
                 <Textarea
                   value={input}
@@ -780,7 +875,7 @@ const AIChatDashboardPage = () => {
                   disabled={sending}
                 />
                 <Button
-                  onClick={sendMessage}
+                  onClick={() => sendMessage()}
                   disabled={sending || !input.trim()}
                   size="icon"
                   className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md hover:shadow-lg transition-shadow"
