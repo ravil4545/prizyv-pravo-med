@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
-import * as webpush from "https://esm.sh/@negrel/webpush@0.3.0";
+import * as webpush from "jsr:@negrel/webpush@0.3.0";
 
 /**
  * send-deadline-reminders (Модуль 4, Фаза 3 — движок уведомлений).
