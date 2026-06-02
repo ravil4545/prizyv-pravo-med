@@ -803,7 +803,7 @@ const LawyerClientsPage = () => {
             const kanbanClients = clients;
             const knownStages = new Set<string>(CRM_STAGES.map((s) => s.value));
             return (
-              <div className="overflow-x-auto -mx-4 px-4 pb-4">
+              <div className="overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-4">
                 <div className="inline-flex gap-3 min-w-full items-start">
                   {CRM_STAGES.map((stage, stageIdx) => {
                     // Клиент с неизвестным/пустым этапом не должен пропадать с доски —
@@ -820,7 +820,7 @@ const LawyerClientsPage = () => {
                         onDragOver={(e) => handleStageDragOver(e, stage.value)}
                         onDragLeave={() => setDragOverStage((s) => (s === stage.value ? null : s))}
                         onDrop={(e) => handleStageDrop(e, stage.value)}
-                        className={`flex-shrink-0 w-64 rounded-lg border transition-colors ${
+                        className={`flex-shrink-0 w-[80vw] sm:w-64 snap-start rounded-lg border transition-colors ${
                           isDropTarget ? "border-primary bg-primary/5" : "border-border bg-muted/30"
                         }`}
                       >
