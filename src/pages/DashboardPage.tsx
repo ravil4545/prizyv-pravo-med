@@ -220,6 +220,58 @@ const DashboardPage = () => {
             </div>
           </div>
 
+          {/* ── 3 главных сценария — первичные действия сразу под приветствием ── */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="section-number">Что делать</span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {primaryCards.map((card) => {
+                const Icon = card.icon;
+                const isFeatured = card.featured;
+                return (
+                  <Card
+                    key={card.path}
+                    onClick={() => navigate(cabinetPath(card.path))}
+                    className={cn(
+                      "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
+                      isFeatured
+                        ? "border-gold/50 bg-gradient-to-br from-gold/10 via-paper to-paper-deep/30 hover:shadow-accent"
+                        : "border-border/60 bg-card hover:shadow-medium",
+                    )}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div
+                          className={cn(
+                            "h-11 w-11 rounded-xl flex items-center justify-center transition-colors",
+                            isFeatured
+                              ? "bg-gold-deep text-paper shadow-sm"
+                              : "bg-muted text-foreground group-hover:bg-gold/15 group-hover:text-gold-deep",
+                          )}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        {card.tag && (
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-gold-deep bg-gold/10 px-1.5 py-0.5 rounded">
+                            {card.tag}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {card.description}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
           {/* ── Пробный период — таймер обратного отсчёта (видно сразу после регистрации) ── */}
           {!isDemoMode && (
             <div className="mb-5">
@@ -339,58 +391,6 @@ const DashboardPage = () => {
               </div>
             </div>
           )}
-
-          {/* ── 3 главных сценария ─────────────────────────────────────── */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="section-number">Что делать</span>
-              <span className="flex-1 h-px bg-border/50" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {primaryCards.map((card) => {
-                const Icon = card.icon;
-                const isFeatured = card.featured;
-                return (
-                  <Card
-                    key={card.path}
-                    onClick={() => navigate(cabinetPath(card.path))}
-                    className={cn(
-                      "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
-                      isFeatured
-                        ? "border-gold/50 bg-gradient-to-br from-gold/10 via-paper to-paper-deep/30 hover:shadow-accent"
-                        : "border-border/60 bg-card hover:shadow-medium",
-                    )}
-                  >
-                    <CardContent className="p-5">
-                      <div className="flex items-start justify-between mb-3">
-                        <div
-                          className={cn(
-                            "h-11 w-11 rounded-xl flex items-center justify-center transition-colors",
-                            isFeatured
-                              ? "bg-gold-deep text-paper shadow-sm"
-                              : "bg-muted text-foreground group-hover:bg-gold/15 group-hover:text-gold-deep",
-                          )}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        {card.tag && (
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-gold-deep bg-gold/10 px-1.5 py-0.5 rounded">
-                            {card.tag}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
-                        {card.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                        {card.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
 
           {/* ── Инструменты ────────────────────────────────────────────── */}
           <div className="mb-8">

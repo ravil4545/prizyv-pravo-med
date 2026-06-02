@@ -2101,7 +2101,7 @@ export default function MedicalDocumentsPage() {
                         <TableHead className="cursor-pointer hover:bg-muted" onClick={() => toggleSort("title")}>
                           <div className="flex items-center">Название {getSortIcon("title")}</div>
                         </TableHead>
-                        <TableHead>Тип</TableHead>
+                        <TableHead className="hidden md:table-cell">Тип</TableHead>
                         <TableHead
                           className="cursor-pointer hover:bg-muted"
                           onClick={() => toggleSort("document_date")}
@@ -2109,8 +2109,8 @@ export default function MedicalDocumentsPage() {
                           <div className="flex items-center">Дата {getSortIcon("document_date")}</div>
                         </TableHead>
                         <TableHead>Категория</TableHead>
-                        <TableHead>Шанс В</TableHead>
-                        <TableHead>Статус</TableHead>
+                        <TableHead className="hidden md:table-cell">Шанс В</TableHead>
+                        <TableHead className="hidden md:table-cell">Статус</TableHead>
                         <TableHead className="text-right">Действия</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2133,7 +2133,7 @@ export default function MedicalDocumentsPage() {
                               )}
                             </Button>
                           </TableCell>
-                          <TableCell className="font-medium w-[180px] max-w-[180px]">
+                          <TableCell className="font-medium w-[120px] max-w-[120px] sm:w-[180px] sm:max-w-[180px]">
                             <div className="whitespace-normal break-words text-sm leading-tight">
                               {isQuestionnaire && <Badge className="mb-1 text-[10px] bg-blue-500 hover:bg-blue-600 block w-fit">📋 Опросник</Badge>}
                               {doc.meta?.parts && doc.meta.parts.length > 1
@@ -2146,7 +2146,7 @@ export default function MedicalDocumentsPage() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[150px]">
+                          <TableCell className="hidden md:table-cell max-w-[150px]">
                             {doc.meta?.parts && doc.meta.parts.length > 1 ? (
                               <div className="flex flex-col gap-1">
                                 {doc.meta.parts.map(
@@ -2192,7 +2192,7 @@ export default function MedicalDocumentsPage() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {doc.ai_category_chance !== null ? (
                               <div className="flex items-center gap-2">
                                 <Progress value={doc.ai_category_chance} className="w-16 h-2" />
@@ -2202,7 +2202,7 @@ export default function MedicalDocumentsPage() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {analyzingId === doc.id ? (
                               <Badge variant="outline" className="animate-pulse">
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
