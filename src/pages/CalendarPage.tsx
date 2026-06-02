@@ -47,6 +47,7 @@ import { withBrandPath } from "@/lib/brandPath";
 import { EVENT_TYPES, OUTCOMES, eventTypeMeta } from "@/lib/caseEvents";
 import { getDayInfo } from "@/lib/productionCalendar";
 import PushNotificationToggle from "@/components/PushNotificationToggle";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface CaseEvent {
   id: string;
@@ -55,6 +56,7 @@ interface CaseEvent {
   title: string;
   description: string | null;
   outcome: string | null;
+  notify_client_push?: boolean | null;
   created_at: string;
 }
 
@@ -93,6 +95,7 @@ export default function CalendarPage() {
     title: "",
     description: "",
     outcome: "pending",
+    notify_client_push: true,
   });
 
   useEffect(() => {
@@ -155,6 +158,7 @@ export default function CalendarPage() {
       title: "",
       description: "",
       outcome: "pending",
+      notify_client_push: true,
     });
     setDialogOpen(true);
   };
@@ -167,6 +171,7 @@ export default function CalendarPage() {
       title: ev.title,
       description: ev.description || "",
       outcome: ev.outcome || "pending",
+      notify_client_push: ev.notify_client_push ?? true,
     });
     setDialogOpen(true);
   };
@@ -178,14 +183,15 @@ export default function CalendarPage() {
     }
     setSaving(true);
     try {
+      // notify_client_push может отсутствовать в сгенерированных типах — каст.
       if (editEvent) {
-        await supabase
+        await (supabase as any)
           .from("case_events")
           .update({ ...form, updated_at: new Date().toISOString() })
           .eq("id", editEvent.id);
         toast({ title: "Событие обновлено" });
       } else {
-        await supabase.from("case_events").insert({ ...form, user_id: user.id });
+        await (supabase as any).from("case_events").insert({ ...form, user_id: user.id });
         toast({ title: "Событие добавлено" });
       }
       setDialogOpen(false);
@@ -591,6 +597,22 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Push-напоминание по этому событию (Модуль 4 Фаза 3b) */}
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-ink/10 bg-muted/20 p-3">
+              <Checkbox
+                checked={form.notify_client_push}
+                onCheckedChange={(c) => setForm((f) => ({ ...f, notify_client_push: c === true }))}
+                className="mt-0.5"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-foreground">Напоминать в браузере (push)</span>
+                <span className="block text-xs text-muted-foreground">
+                  За 3 дня, за сутки и в день события. Нужно один раз включить
+                  «Напоминания в браузере» вверху страницы.
+                </span>
+              </span>
+            </label>
 
             <div className="flex items-center gap-2 pt-1">
               {editEvent && (
