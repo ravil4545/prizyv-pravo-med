@@ -9,6 +9,7 @@ export interface SubscriptionData {
   ai_questions_used: number;
   free_document_limit: number;
   free_ai_limit: number;
+  trial_ends_at: string | null;
 }
 
 const DEFAULT_SUBSCRIPTION: SubscriptionData = {
@@ -19,6 +20,7 @@ const DEFAULT_SUBSCRIPTION: SubscriptionData = {
   ai_questions_used: 0,
   free_document_limit: 3,
   free_ai_limit: 3,
+  trial_ends_at: null,
 };
 
 export function useSubscription() {
@@ -68,9 +70,17 @@ export function useSubscription() {
     fetchSubscription();
   }, [fetchSubscription]);
 
+  // Активен ли 7-дневный пробный период (с момента регистрации).
+  const isTrialActive = useCallback((): boolean => {
+    if (!subscription?.trial_ends_at) return false;
+    return new Date(subscription.trial_ends_at) > new Date();
+  }, [subscription]);
+
   const isActive = useCallback((): boolean => {
     if (!subscription) return false;
     if (subscription.admin_override) return true;
+    // Пробный период даёт полный доступ.
+    if (subscription.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()) return true;
     if (!subscription.is_paid) return false;
     if (!subscription.paid_until) return false;
     return new Date(subscription.paid_until) > new Date();
@@ -126,6 +136,8 @@ export function useSubscription() {
     subscription,
     loading,
     isActive,
+    isTrialActive,
+    trialEndsAt: subscription?.trial_ends_at ?? null,
     canUploadDocument,
     canAskAI,
     incrementDocumentUploads,

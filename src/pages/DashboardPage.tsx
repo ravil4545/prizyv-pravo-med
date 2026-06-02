@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
+import TrialCountdownCard from "@/components/TrialCountdownCard";
 import CaseRoadmap from "@/components/CaseRoadmap";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import OnboardingWizard, { isOnboardingDone } from "@/components/OnboardingWizard";
@@ -233,6 +234,13 @@ const DashboardPage = () => {
               </Button>
             )}
           </div>
+
+          {/* ── Пробный период — таймер обратного отсчёта (видно сразу после регистрации) ── */}
+          {!isDemoMode && (
+            <div className="mb-5">
+              <TrialCountdownCard />
+            </div>
+          )}
 
           {/* ── Инбокс уведомлений ─────────────────────────────────────── */}
           {!isDemoMode && (
