@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
+import { isCabinetPath } from "@/lib/cabinetNav";
 
 const MobileBottomNav = () => {
   const isMobile = useIsMobile();
@@ -31,6 +32,10 @@ const MobileBottomNav = () => {
 
   const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password"];
   if (hiddenRoutes.includes(location.pathname)) return null;
+
+  // В клиентском кабинете нижнюю навигацию даёт DashboardLayout (единый конфиг
+  // с сайдбаром). Здесь не дублируем — иначе на мобиле было бы два нижних бара.
+  if (isCabinetPath(location.pathname)) return null;
 
   // Юристам — навигация по их кабинету. Важно: /lawyers — это публичный
   // каталог юристов для клиентов, а не рабочая зона /lawyer.

@@ -21,6 +21,7 @@ import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
 import CabinetChooserDialog from "@/components/CabinetChooserDialog";
+import { isCabinetPath } from "@/lib/cabinetNav";
 
 const initials = (full: string): string => {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -104,6 +105,10 @@ const Header = () => {
     if (path === "/") return location.pathname === "/";
     return location.pathname === path || location.pathname.startsWith(path + "/");
   };
+
+  // В кабинете «хром» (навигацию) даёт DashboardLayout — маркетинговый Header
+  // здесь не рендерим, иначе получается двойная навигация.
+  if (isCabinetPath(location.pathname)) return null;
 
   return (
     <>

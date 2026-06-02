@@ -1,13 +1,15 @@
 import { Phone, MessageCircle, Send, Mail, Clock, Briefcase, ChevronRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useBranding } from "@/contexts/BrandingContext";
 import LawyerPartnerDialog from "@/components/LawyerPartnerDialog";
+import { isCabinetPath } from "@/lib/cabinetNav";
 
 const Footer = () => {
   const isMobile = useIsMobile();
+  const location = useLocation();
   const { isLawyer } = useLawyerProfile();
   const branding = useBranding();
   const [partnerDialogOpen, setPartnerDialogOpen] = useState(false);
@@ -38,6 +40,10 @@ const Footer = () => {
     if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
     return (parts[0][0] + parts[1][0]).toUpperCase();
   })();
+
+  // В кабинете «хром» даёт DashboardLayout — тяжёлый маркетинговый Footer
+  // на рабочих страницах кабинета не рендерим.
+  if (isCabinetPath(location.pathname)) return null;
 
   return (
     <footer className={`bg-ink text-paper py-16 sm:py-20 ${isMobile ? "pb-24" : ""}`}>
