@@ -82,8 +82,8 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
             <ul className="mt-3 space-y-1 text-sm text-ink-soft">
               <li>· Безлимитные ИИ-консультации</li>
               <li>· Безлимитная загрузка медицинских документов</li>
-              <li>· Прямой чат с юристом</li>
-              <li>· Дорожная карта дела и шаблоны</li>
+              <li>· Дорожная карта дела, календарь и шаблоны</li>
+              <li className="text-ink/50">· Консультация юриста — за доплату, от 9 000 ₽</li>
             </ul>
           </div>
 

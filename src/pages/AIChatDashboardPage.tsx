@@ -165,8 +165,8 @@ const AIChatDashboardPage = () => {
       if (error) throw error;
       setLinkedCard({ ...linkedCard, escalation_requested: true });
       toast({
-        title: "Дело передано юристу",
-        description: "Юрист увидит ваш запрос и сводку диалога и свяжется с вами в чате.",
+        title: "Запрос юристу отправлен",
+        description: "Консультация и сопровождение юриста — платная услуга от 9 000 ₽. Юрист свяжется с вами и сориентирует по стоимости.",
       });
     } catch (e: any) {
       toast({
@@ -685,7 +685,7 @@ const AIChatDashboardPage = () => {
                 onClick={handleEscalate}
                 disabled={escalating || !!linkedCard?.escalation_requested}
                 className="ml-auto text-xs sm:text-sm"
-                title="Передать дело и сводку диалога живому юристу"
+                title="Платная услуга: консультация и сопровождение юриста — от 9 000 ₽"
               >
                 {escalating ? (
                   <Loader2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
@@ -693,10 +693,10 @@ const AIChatDashboardPage = () => {
                   <UserPlus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                 )}
                 <span className="hidden sm:inline">
-                  {linkedCard?.escalation_requested ? "Юрист уведомлён" : "Передать дело юристу"}
+                  {linkedCard?.escalation_requested ? "Юрист уведомлён" : "Юрист — от 9 000 ₽"}
                 </span>
                 <span className="sm:hidden">
-                  {linkedCard?.escalation_requested ? "Передано" : "Юристу"}
+                  {linkedCard?.escalation_requested ? "Передано" : "Юрист ₽"}
                 </span>
               </Button>
             )}

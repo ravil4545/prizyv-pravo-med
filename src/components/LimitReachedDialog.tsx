@@ -87,7 +87,7 @@ export default function LimitReachedDialog({ open, onClose, type, isDemoMode = f
                 {[
                   "Безлимитные загрузки документов",
                   "Безлимитные вопросы к ИИ",
-                  "Прямой чат с юристом",
+                  "Календарь дедлайнов и напоминания",
                   "Генерация документов и шаблонов",
                 ].map((f) => (
                   <div key={f} className="flex items-start gap-2 text-sm text-ink-soft">
