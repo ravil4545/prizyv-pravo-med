@@ -1,6 +1,5 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ChatWidget from "@/components/ChatWidget";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -272,7 +271,6 @@ const ServicesPage = () => {
       </section>
 
       <Footer />
-      <ChatWidget />
     </div>
   );
 };
