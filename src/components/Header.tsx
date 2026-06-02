@@ -22,6 +22,7 @@ import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
 import CabinetChooserDialog from "@/components/CabinetChooserDialog";
 import { isCabinetPath } from "@/lib/cabinetNav";
+import { isLawyerPath } from "@/lib/lawyerNav";
 
 const initials = (full: string): string => {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -106,9 +107,9 @@ const Header = () => {
     return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
-  // В кабинете «хром» (навигацию) даёт DashboardLayout — маркетинговый Header
-  // здесь не рендерим, иначе получается двойная навигация.
-  if (isCabinetPath(location.pathname)) return null;
+  // В кабинетах (клиент/юрист) «хром» даёт соответствующий Layout — маркетинговый
+  // Header здесь не рендерим, иначе получается двойная навигация.
+  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname)) return null;
 
   return (
     <>

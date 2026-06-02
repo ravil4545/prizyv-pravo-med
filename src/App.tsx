@@ -14,6 +14,7 @@ import BrandedPWAMeta from "./components/BrandedPWAMeta";
 import RoleGuard from "./components/RoleGuard";
 import AdminGuard from "./components/AdminGuard";
 import DashboardLayout from "./components/DashboardLayout";
+import LawyerLayout from "./components/LawyerLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth } from "./lib/analytics";
 
@@ -219,15 +220,18 @@ const App = () => (
                 <Route path="/admin/articles" element={<AdminGuard><AdminArticlesPage /></AdminGuard>} />
                 <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
                 {/* /profile теперь внутри DashboardLayout (см. блок клиентского кабинета) */}
-                {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard */}
-                <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
-                <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />
-                <Route path="/lawyer/clients/:clientId" element={<RoleGuard role="lawyer"><LawyerClientDetail /></RoleGuard>} />
-                <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
-                <Route path="/lawyer/templates" element={<RoleGuard role="lawyer"><LawyerTemplatesPage /></RoleGuard>} />
-                <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
-                <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />
-                <Route path="/lawyer/branding" element={<RoleGuard role="lawyer"><LawyerBrandingPage /></RoleGuard>} />
+                {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard.
+                    Обёрнут в LawyerLayout — единое боковое меню + нижние табы. */}
+                <Route element={<LawyerLayout />}>
+                  <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
+                  <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />
+                  <Route path="/lawyer/clients/:clientId" element={<RoleGuard role="lawyer"><LawyerClientDetail /></RoleGuard>} />
+                  <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
+                  <Route path="/lawyer/templates" element={<RoleGuard role="lawyer"><LawyerTemplatesPage /></RoleGuard>} />
+                  <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
+                  <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />
+                  <Route path="/lawyer/branding" element={<RoleGuard role="lawyer"><LawyerBrandingPage /></RoleGuard>} />
+                </Route>
                 {/* /client/* — переписки клиента с юристами; доступны только клиентам */}
                 <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
                 <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
