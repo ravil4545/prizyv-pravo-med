@@ -5,10 +5,34 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CreditCard, MessageCircle, Loader2, Crown, Check, Copy } from "lucide-react";
 
-const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215";
-const PRICE_LABEL = "990 ₽ / мес";
 const LAWYER_TELEGRAM = "https://t.me/nepriziv2";
 const LAWYER_PHONE = "+7 925 350-05-33";
+
+type PlanId = "month" | "year";
+
+interface Plan {
+  id: PlanId;
+  url: string;
+  priceLabel: string;
+  unit: string;
+  note?: string;
+}
+
+const PLANS: Record<PlanId, Plan> = {
+  month: {
+    id: "month",
+    url: "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215",
+    priceLabel: "990 ₽",
+    unit: "в месяц",
+  },
+  year: {
+    id: "year",
+    url: "https://yoomoney.ru/bill/pay/1I54F0JNBCS.260602",
+    priceLabel: "9 900 ₽",
+    unit: "в год",
+    note: "≈ 825 ₽/мес · экономия 1 980 ₽",
+  },
+};
 
 interface PaymentInstructionsDialogProps {
   open: boolean;
@@ -20,6 +44,7 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
   const [opening, setOpening] = useState(false);
   const [opened, setOpened] = useState(false);
   const [userIdShort, setUserIdShort] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<PlanId>("year");
 
   const handleOpenPayment = async () => {
     setOpening(true);
@@ -28,9 +53,10 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
       const userId = session?.user?.id;
 
       // Передаём user_id в YooMoney через label — пригодится для будущего webhook
+      const base = PLANS[planId].url;
       const url = userId
-        ? `${YOOMONEY_PAYMENT_URL}?label=${encodeURIComponent(`uid:${userId}`)}`
-        : YOOMONEY_PAYMENT_URL;
+        ? `${base}?label=${encodeURIComponent(`uid:${userId}`)}`
+        : base;
 
       window.open(url, "_blank", "noopener,noreferrer");
       setOpened(true);
@@ -73,13 +99,44 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
         </DialogHeader>
 
         <div className="space-y-5">
-          {/* Цена */}
+          {/* Выбор тарифа */}
           <div className="border border-ink/15 bg-paper-deep/40 p-4">
-            <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-1">
+            <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-2">
               Тариф · ИИ-кабинет
             </div>
-            <div className="font-serif text-3xl text-ink">{PRICE_LABEL}</div>
-            <ul className="mt-3 space-y-1 text-sm text-ink-soft">
+
+            <div className="grid grid-cols-2 gap-2">
+              {(["year", "month"] as PlanId[]).map((id) => {
+                const plan = PLANS[id];
+                const selected = planId === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPlanId(id)}
+                    aria-pressed={selected}
+                    className={`relative rounded-lg border p-3 text-left transition-colors ${
+                      selected
+                        ? "border-gold bg-gold/10"
+                        : "border-ink/15 hover:border-gold/40 hover:bg-gold/5"
+                    }`}
+                  >
+                    {id === "year" && (
+                      <span className="absolute -top-2 right-2 rounded bg-gold px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-ink">
+                        Выгодно
+                      </span>
+                    )}
+                    <div className="font-serif text-2xl text-ink">{plan.priceLabel}</div>
+                    <div className="text-xs text-ink-soft">{plan.unit}</div>
+                    {plan.note && (
+                      <div className="mt-1 text-[11px] font-medium text-gold-deep">{plan.note}</div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <ul className="mt-4 space-y-1 text-sm text-ink-soft">
               <li>· Безлимитные ИИ-консультации</li>
               <li>· Безлимитная загрузка медицинских документов</li>
               <li>· Дорожная карта дела, календарь и шаблоны</li>
@@ -163,7 +220,7 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
               ) : (
                 <>
                   <CreditCard className="h-4 w-4 mr-2" />
-                  Перейти к оплате
+                  Оплатить {PLANS[planId].priceLabel} / {planId === "year" ? "год" : "мес"}
                 </>
               )}
             </Button>
