@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   FileText,
   MessageSquare,
-  LogOut,
   Settings,
   BookOpen,
   Star,
@@ -104,12 +103,6 @@ const DashboardPage = () => {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast({ title: "Выход выполнен", description: "Вы успешно вышли из системы" });
-    navigate("/");
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -203,36 +196,28 @@ const DashboardPage = () => {
       <Header />
       <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
         <div className="max-w-5xl mx-auto">
-          {/* ── Шапка — серифный editorial-стиль ───────────────────────── */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              {!isDemoMode && (
-                <button
-                  onClick={() => navigate(cabinetPath("/profile"))}
-                  aria-label="Профиль"
-                  className="h-11 w-11 rounded-full bg-gold/15 hover:bg-gold/25 transition-colors flex items-center justify-center flex-shrink-0"
-                >
-                  <span className="text-gold-deep font-serif font-semibold text-lg">
-                    {(profile?.full_name?.[0] || user?.email?.[0] || "?").toUpperCase()}
-                  </span>
-                </button>
-              )}
-              <div>
-                <p className="section-number mb-0.5">Личный кабинет</p>
-                <h1 className="font-serif text-2xl md:text-3xl font-semibold text-foreground tracking-tight">
-                  {isDemoMode ? "Демо-режим" : profile?.full_name?.split(" ")[0] || "Здравствуйте"}
-                </h1>
-                {!isDemoMode && (
-                  <p className="text-xs text-muted-foreground truncate max-w-[260px]">{user?.email}</p>
-                )}
-              </div>
-            </div>
+          {/* ── Приветствие. «Личный кабинет» и «Выйти» теперь в обвязке
+                 кабинета (DashboardLayout) — здесь не дублируем. ──────────── */}
+          <div className="mb-6 flex items-center gap-3">
             {!isDemoMode && (
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground">
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Выйти</span>
-              </Button>
+              <button
+                onClick={() => navigate(cabinetPath("/profile"))}
+                aria-label="Профиль"
+                className="h-11 w-11 rounded-full bg-gold/15 hover:bg-gold/25 transition-colors flex items-center justify-center flex-shrink-0"
+              >
+                <span className="text-gold-deep font-serif font-semibold text-lg">
+                  {(profile?.full_name?.[0] || user?.email?.[0] || "?").toUpperCase()}
+                </span>
+              </button>
             )}
+            <div className="min-w-0">
+              <h1 className="font-serif text-2xl md:text-3xl font-semibold text-foreground tracking-tight">
+                {isDemoMode ? "Демо-режим" : profile?.full_name?.split(" ")[0] || "Здравствуйте"}
+              </h1>
+              {!isDemoMode && (
+                <p className="text-xs text-muted-foreground truncate max-w-[260px]">{user?.email}</p>
+              )}
+            </div>
           </div>
 
           {/* ── Пробный период — таймер обратного отсчёта (видно сразу после регистрации) ── */}
