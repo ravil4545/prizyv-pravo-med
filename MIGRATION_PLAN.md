@@ -1,0 +1,282 @@
+# План миграции nepriziv.ru на собственный сервер
+
+> Цель: убрать привязку к онлайн-платформам **Lovable** и **Supabase Cloud**.
+> Всё крутится на мощности **одного своего сервера**, кроме **ИИ — он по внешнему API**
+> (ChatGPT / Claude Opus / Gemini, выбор по цене позже).
+> 152-ФЗ не приоритет. Решение: **self-hosted Supabase (Docker) + свой хостинг фронта**.
+
+Документ — это план, не выполнение. Ничего из прод не трогается до отдельного «делаем».
+
+---
+
+## 0. Снимок текущего состояния (факты из проекта на 2026-06-02)
+
+| Параметр | Значение |
+|---|---|
+| Postgres | 17.6 |
+| Размер БД | ~25 МБ |
+| Таблиц в public | 44 |
+| Функций/процедур в public | 198 (вкл. триггеры, RLS-хелперы) |
+| Storage | 5 бакетов, 55 файлов, ~35 МБ |
+| — приватные бакеты | `medical-documents`, `test-results` (медданные) |
+| — публичные бакеты | `blog-images`, `chat-attachments`, `lawyer-brand-assets` |
+| Auth | 13 пользователей: 6 Google OAuth, 5 email; анонимный вход включён |
+| Realtime | используется в 11 файлах (чаты клиент↔юрист, presence) |
+| Edge Functions | ~30 (Deno) |
+| Инфра БД | pg_cron (1 job), pg_net, supabase_vault (3 секрета), pgvector (RAG, 127 чанков) |
+| Внешняя почта | Resend (можно оставить или заменить своим SMTP) |
+| AI — текст | **Groq** (`api.groq.com`), модели `llama-3.3-70b-versatile` (осн.) / `llama-3.1-8b-instant` (быстрая). Через `_shared/llmGateway.ts`, **уже мимо Lovable**, переключается env `GROQ_*` |
+| AI — vision | **Google Gemini** через `ai.gateway.lovable.dev` + `LOVABLE_API_KEY`: `gemini-2.5-flash` (анализ меддоков, повестки), `gemini-2.5-flash-image-preview` (enhance). **Единственная AI-привязка к Lovable** |
+| AI — эмбеддинги | **Jina** (`jina-embeddings-v3`) для RAG-поиска |
+
+**Вывод:** данные крошечные — миграция данных тривиальна. Основная работа —
+поднять self-hosted Supabase-стек и переключить на него фронт + функции.
+
+---
+
+## 1. Что именно держит нас за Lovable и Supabase
+
+### Lovable (убрать целиком)
+1. **Хостинг фронта** (Cloudflare CDN + кнопка Publish) → заменяется своим Nginx/Caddy.
+2. **`lovable-tagger`** — dev-плагин в `vite.config.ts` → удалить.
+3. **AI-шлюз `ai.gateway.lovable.dev`** — НЕ весь ИИ, а только **vision** (Gemini:
+   анализ меддоков, повестки, enhance). Текстовый ИИ уже идёт мимо Lovable (Groq).
+   При уходе нужно отвязать только ~3 vision-функции (см. §6).
+4. **GitHub-синк Lovable↔репозиторий** — после ухода просто отключить в Lovable;
+   деплой будет своим CI/скриптом.
+
+### Supabase Cloud (заменить на self-hosted, API совместим)
+Это не «просто БД», а набор сервисов. Self-hosted Supabase (официальный Docker
+`supabase/docker`) даёт ровно те же API:
+- **Postgres** + RLS + pgvector
+- **GoTrue** (Auth) — email/пароль, OAuth, анонимный
+- **Storage API** (файлы + signed URLs)
+- **Realtime** (postgres_changes, presence, broadcast)
+- **Edge Runtime** (Deno-функции)
+- **Kong** (API-gateway) + **PostgREST** (REST) + **Studio** (UI вместо дашборда)
+
+Поскольку API тот же — **код фронта почти не меняется** (меняется только базовый
+URL и ключи в одном месте — `src/integrations/supabase/client.ts` и `.env`).
+
+---
+
+## 2. Целевая архитектура (всё на одном сервере)
+
+```
+┌─────────────────────────── ВАШ СЕРВЕР (Linux + Docker) ───────────────────────────┐
+│                                                                                    │
+│   Caddy/Nginx (TLS, реверс-прокси, отдаёт собранный фронт)                         │
+│        │                                                                           │
+│        ├── /            → статика фронта (dist/ от `vite build`)                   │
+│        └── /api, /auth, /storage, /realtime, /functions → Kong (Supabase gateway)  │
+│                                                                                    │
+│   Supabase self-hosted (docker compose):                                           │
+│     postgres(17) · gotrue · postgrest · storage-api · realtime · edge-runtime ·    │
+│     kong · studio · imgproxy · vector(logs)                                        │
+│                                                                                    │
+│   Файлы Storage → локальный диск сервера (или MinIO, S3-совместимо)                │
+│   pg_cron + pg_net → расписания (как сейчас, уже в Postgres)                       │
+│                                                                                    │
+└────────────────────────────────────────────────────────────────────────────────┘
+            │                                  │
+            ▼                                  ▼
+   AI API (внешний):                   SMTP (внешний или свой):
+   ChatGPT / Opus / Gemini             Resend ИЛИ собственный postfix
+```
+
+**Единственные внешние зависимости после переезда:**
+1. **AI API** (по вашему требованию — осознанно внешний).
+2. **SMTP** для писем (можно оставить Resend, можно поднять свой — см. §7).
+3. **OAuth Google** (6 из 13 юзеров) — если оставляем соц-вход, он по определению
+   ходит в Google. Альтернатива — отказаться от соц-входа (см. §5, риск).
+4. (опц.) DNS/домен и, при желании, внешний CDN — но можно и без них.
+
+---
+
+## 3. Требования к серверу
+
+Минимально комфортно для текущей нагрузки (13 юзеров, 25 МБ):
+- **CPU:** 4 vCPU
+- **RAM:** 8 ГБ (Supabase-стек в Docker съедает 3–4 ГБ; запас на рост)
+- **Диск:** 50–80 ГБ SSD (БД + Storage + образы + бэкапы + логи)
+- **ОС:** Ubuntu 22.04/24.04 LTS
+- **Сеть:** статический IP, открытые 80/443; домен `nepriziv.ru` → A-запись на сервер
+
+На вырост (сотни юзеров) — 8 vCPU / 16 ГБ. ИИ локально НЕ планируется, поэтому
+GPU не нужен.
+
+---
+
+## 4. Этапы миграции (порядок и оценка)
+
+### Фаза A. Поднять self-hosted Supabase (0.5–1 день)
+1. Сервер: Docker + Docker Compose.
+2. `git clone supabase/docker`, заполнить `.env` (пароли, JWT-секрет, ключи
+   anon/service_role, SMTP, OAuth-кред).
+3. `docker compose up -d` → проверить, что поднялись все сервисы + Studio.
+4. Caddy/Nginx + TLS (Let's Encrypt) на домен/субдомен.
+
+### Фаза B. Перенести схему БД (0.5 дня)
+1. Все наши миграции лежат в `supabase/migrations/` — применить их на новый
+   Postgres (`supabase db push` или psql), либо снять полный дамп текущей БД:
+   `pg_dump` со схемой public + расширениями (pgvector, pg_cron, pg_net, vault).
+2. Проверить расширения: pgvector, pg_cron, pg_net, supabase_vault — включить.
+3. Перенести данные: `pg_dump --data-only` → `psql` в новый (25 МБ — секунды).
+4. Перезавести **Vault-секреты** (cron_secret, vapid_public/private) — заново
+   через `vault.create_secret` (из дампа они не переносятся в открытом виде).
+5. Воссоздать **cron job** `nepriziv-deadline-reminders` (наш SQL уже в миграции
+   `20260601120000_cron_secret_vault.sql`).
+
+### Фаза C. Перенести Storage (0.5 дня)
+1. Выкачать 55 файлов из облачного Storage (скрипт через supabase-js или CLI).
+2. Залить в self-hosted Storage (тот же API) с сохранением путей и бакетов.
+3. Перенести RLS-политики бакетов (особенно приватные `medical-documents`,
+   `test-results`).
+
+### Фаза D. Перенести Auth (0.5–1 день) — самое внимательное
+1. **email-юзеры (5):** перенос строк `auth.users` дампом сохраняет хэши паролей
+   (bcrypt в GoTrue) — пароли продолжат работать. Проверить на тесте.
+2. **Google OAuth (6):** прописать Google client_id/secret в новый GoTrue;
+   в Google Cloud Console добавить новый redirect_uri (домен/`/auth/v1/callback`).
+   Привязка по email сохраняется.
+3. **Анонимный вход:** включить в конфиге GoTrue.
+4. JWT-секрет: сгенерировать свой; фронт получит новые anon/service ключи.
+
+### Фаза E. Перенести Edge Functions + заменить AI (1–2 дня)
+1. Все ~30 функций уже в репо (`supabase/functions/`). Деплой в self-hosted
+   Edge Runtime: `supabase functions deploy` против своего проекта, либо через
+   docker edge-runtime volume.
+2. **Заменить AI-шлюз** в ~10 функциях (см. §6): `ai.gateway.lovable.dev` →
+   выбранный API; `LOVABLE_API_KEY` → ключ провайдера.
+3. Завести секреты функций в self-hosted: AI-ключ, RESEND/SMTP, SERVICE_ROLE.
+
+### Фаза F. Переключить фронт (0.5 дня)
+1. `src/integrations/supabase/client.ts` + `.env`: новый `SUPABASE_URL`
+   (ваш домен), новый anon-ключ.
+2. Удалить `lovable-tagger` из `vite.config.ts` и `package.json`.
+3. `vite build` → отдавать `dist/` через Caddy/Nginx.
+4. Проверить пути Storage/Realtime/Functions на новом домене (CORS).
+
+### Фаза G. Бэкапы, мониторинг, отключение старого (0.5–1 день)
+1. **Бэкапы:** ночной `pg_dump` + бэкап папки Storage в отдельное место/диск
+   (cron). Проверить восстановление.
+2. **Мониторинг:** healthcheck контейнеров, алерт на падение (хотя бы uptime-пинг).
+3. **TLS-автопродление** (Caddy делает сам).
+4. Прогнать полный регресс (регистрация, вход Google, загрузка меддока, ИИ-анализ,
+   чат с юристом, календарь, push, оплата-ссылки).
+5. Только после зелёного регресса — отключить Lovable-публикацию и приостановить
+   Supabase Cloud (не удалять ~2 недели как страховку).
+
+**Итого:** ориентировочно **4–7 рабочих дней** одного исполнителя.
+
+---
+
+## 5. Auth — детально и риски
+- **Хэши паролей переносятся** (GoTrue использует bcrypt) → 5 email-юзеров войдут
+  старыми паролями. Обязательно проверить на одном тестовом до отключения старого.
+- **Google OAuth:** нужен доступ к Google Cloud Console проекта, где заведён
+  client_id. Если доступа нет — соц-вход для 6 юзеров сломается; запасной путь —
+  «сброс пароля»/привязка email. ⚠️ Уточнить, есть ли доступ к Google-проекту.
+- **Анонимный вход** — просто флаг в GoTrue.
+- РИСК: рассинхрон `auth.users` ↔ `public.profiles`/`user_subscriptions` при
+  переносе. Митигация: переносить вместе, проверить FK и триггеры on-signup.
+
+---
+
+## 6. ИИ: что есть сейчас и что менять
+
+**Важно:** в коде НЕ «весь ИИ через Lovable». Реально три независимых пути:
+
+### 6.1. Текст → Groq (уже мимо Lovable) ✅
+- Модуль `_shared/llmGateway.ts`, провайдер **Groq** (`api.groq.com`, OpenAI-совместим).
+- Модели: `llama-3.3-70b-versatile` (`MODEL_MAIN`), `llama-3.1-8b-instant` (`MODEL_FAST`),
+  переключаются env `GROQ_BASE_URL` / `GROQ_API_KEY` / `GROQ_MODEL_MAIN` / `GROQ_MODEL_FAST`.
+- Кто использует: `chat`, `analyze-diagnosis`, `generate-appeal`, `generate-document`,
+  `find-government-structures`, `lawyer-*` (ассистент/планнер/ревью/ready-check/suggest/
+  extract-date), `chat-rag` (генерация ответа) и др.
+- **При переезде:** просто перенести `GROQ_API_KEY` на новый сервер. Привязки к
+  Lovable здесь НЕТ. Хотите ChatGPT/Opus/Gemini вместо Llama — поменять `GROQ_BASE_URL`
+  + ключ + имя модели (формат OpenAI-совместимый), кода не трогая.
+
+### 6.2. Vision → Google Gemini через Lovable (ЕДИНСТВЕННАЯ AI-привязка к Lovable) 🔴
+- Эндпоинт `ai.gateway.lovable.dev` + `LOVABLE_API_KEY`, всего ~3 функции:
+  - `analyze-medical-document` — `google/gemini-2.5-flash`
+  - `parse-summons` — `google/gemini-2.5-flash`
+  - `enhance-document` — `google/gemini-2.5-flash-image-preview`
+- **При переезде ОБЯЗАТЕЛЬНО** заменить шлюз на прямой vision-API:
+  - **Google Gemini напрямую** — `generativelanguage.googleapis.com` (минимум правок,
+    те же модели `gemini-2.5-flash`), ИЛИ
+  - **OpenAI** (`api.openai.com`, vision у gpt-4o-класса), ИЛИ
+  - **Anthropic Claude** (`api.anthropic.com`, vision у Opus/Sonnet).
+- ⚠️ Провайдер обязан уметь **vision** (картинки/PDF→изображения) — все три умеют.
+
+### 6.3. Эмбеддинги (RAG-поиск) → Jina
+- `chat-rag` использует `jina-embeddings-v3` (внешний вызов). Перенести по ключу,
+  либо заменить на эмбеддинги выбранного провайдера (тогда переиндексировать
+  `rag_chunks` — 127 шт.).
+
+### Рекомендация по рефакторингу
+Свести оба исходящих пути (текст + vision) в **один адаптер** `_shared/ai.ts`
+с функциями `callAI()` и `callVisionAI()`, чтобы провайдер/модель менялись в одном
+месте. Сейчас текст уже почти централизован (`llmGateway.ts`), vision — разбросан
+по 3 функциям; стоит унифицировать при миграции.
+
+---
+
+## 7. Почта (Resend) — оставить или заменить
+- **Проще:** оставить Resend (внешний, но один HTTP-вызов, уже работает).
+- **Полная автономия:** свой `postfix`/`maddy` на сервере — но тогда возни с SPF/
+  DKIM/DMARC и риском попадания в спам. Для писем-напоминаний это критично.
+- Рекомендация: на старте оставить Resend; свой SMTP — отдельной задачей.
+
+---
+
+## 8. Что в коде поменяется (оценка объёма)
+- `src/integrations/supabase/client.ts` — URL + ключ (1 файл).
+- `.env` — новые переменные.
+- `vite.config.ts` + `package.json` — убрать `lovable-tagger`.
+- ~10 edge-функций — заменить AI-эндпоинт (лучше через общий адаптер).
+- `BrandedPWAMeta`/CDN-нюансы — проверить (комментарий про Cloudflare в
+  `vite.config.ts` станет неактуальным).
+- Остальной код (компоненты, хуки, RLS) — **без изменений**, т.к. Supabase API
+  тот же.
+
+---
+
+## 9. Чек-лист «точно не потеряем возможности»
+- [x] БД + RLS — переносится дампом
+- [x] pgvector/RAG — расширение + данные
+- [x] Auth email (пароли) — хэши переносятся
+- [ ] Auth Google — нужен доступ к Google Cloud Console (уточнить)
+- [x] Анонимный вход — флаг GoTrue
+- [x] Storage + приватные signed URLs — тот же API
+- [x] Realtime (чаты/presence) — тот же API
+- [x] Edge Functions — деплой в self-hosted runtime
+- [x] cron + Vault (уведомления) — воссоздать SQL-ом
+- [x] Push (VAPID) — секреты в новый Vault
+- [ ] AI — заменить шлюз на API-провайдера (обязательно)
+- [x] Почта — Resend оставить (или свой SMTP позже)
+
+---
+
+## 10. Главные риски и как страхуемся
+1. **DevOps-ответственность** — теперь аптайм/бэкапы/обновления на вас. Митигация:
+   автоматические бэкапы + мониторинг + не удалять Supabase Cloud ~2 недели.
+2. **Google OAuth** — без доступа к Google-проекту 6 юзеров не войдут соц-входом.
+   Уточнить доступ заранее.
+3. **AI vision** — провайдер обязан уметь картинки (анализ меддоков/повесток).
+4. **Простой при переключении** — делать на тестовом домене, переключать DNS
+   только после зелёного регресса.
+5. **Секреты** (Vault, AI-ключ, service_role) — завести заново, не из дампа.
+
+---
+
+## 11. Что нужно от вас, чтобы начать (когда скажете «делаем»)
+1. Сервер (характеристики из §3) + root/ssh-доступ.
+2. Доступ к Google Cloud Console (для OAuth) — или решение отказаться от соц-входа.
+3. Выбор AI-провайдера и ключ (можно начать с одного, адаптер позволит сменить).
+4. Решение по почте: Resend оставляем или свой SMTP.
+5. Подтверждение окна переключения (минимальный простой).
+
+> Рекомендуемая последовательность исполнения, когда дадите старт:
+> A → B → C → D (на тесте!) → E (+AI-адаптер) → F → G. Старый стек гасим последним.
