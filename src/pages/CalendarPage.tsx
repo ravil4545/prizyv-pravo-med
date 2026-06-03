@@ -278,7 +278,7 @@ export default function CalendarPage() {
                           e.stopPropagation();
                           openEdit(ev);
                         }}
-                        className="flex items-center gap-1 truncate rounded px-1 py-0.5 text-[10px] hover:bg-background"
+                        className="flex items-center gap-1.5 truncate rounded px-1 py-1 text-[11px] hover:bg-background"
                       >
                         <span className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", meta.dot)} />
                         <span className="truncate">{ev.title}</span>
@@ -286,7 +286,7 @@ export default function CalendarPage() {
                     );
                   })}
                   {dayEvents.length > 3 && (
-                    <span className="px-1 text-[10px] text-muted-foreground">+{dayEvents.length - 3} ещё</span>
+                    <span className="px-1 text-[11px] text-muted-foreground">+{dayEvents.length - 3} ещё</span>
                   )}
                 </div>
               </button>

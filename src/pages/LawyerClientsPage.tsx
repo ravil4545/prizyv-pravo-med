@@ -781,7 +781,7 @@ const LawyerClientsPage = () => {
                             )}
                           </Button>
                           {unreadByConv[c.id] > 0 && (
-                            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 pointer-events-none">
+                            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5 pointer-events-none">
                               {unreadByConv[c.id] > 9 ? "9+" : unreadByConv[c.id]}
                             </span>
                           )}
@@ -851,7 +851,7 @@ const LawyerClientsPage = () => {
                                   <div className="flex items-start justify-between gap-1">
                                     <p className="font-medium text-sm leading-tight">{c.client_name}</p>
                                     {unreadByConv[c.id] > 0 && (
-                                      <span className="flex-shrink-0 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
+                                      <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                                         {unreadByConv[c.id] > 9 ? "9+" : unreadByConv[c.id]}
                                       </span>
                                     )}
