@@ -272,24 +272,24 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* ── Пробный период — таймер обратного отсчёта (видно сразу после регистрации) ── */}
-          {!isDemoMode && (
-            <div className="mb-5">
-              <TrialCountdownCard />
-            </div>
-          )}
-
-          {/* ── Инбокс уведомлений ─────────────────────────────────────── */}
+          {/* ── Инбокс уведомлений — сперва то, что требует внимания ───── */}
           {!isDemoMode && (
             <div className="mb-5">
               <NotificationsInbox />
             </div>
           )}
 
-          {/* ── План дела — первый экран должен отвечать «что делать дальше» ── */}
+          {/* ── План дела — «что делать дальше» ────────────────────────── */}
           <div className="mb-5">
             <CasePlanCard />
           </div>
+
+          {/* ── Пробный период — таймер обратного отсчёта ──────────────── */}
+          {!isDemoMode && (
+            <div className="mb-5">
+              <TrialCountdownCard />
+            </div>
+          )}
 
           {/* ── AI-сводка по делу — главный блок ───────────────────────── */}
           {!isDemoMode && (
@@ -312,6 +312,11 @@ const DashboardPage = () => {
             </div>
           )}
 
+          {/* ── Подписка (рядом со статусом дела) ──────────────────────── */}
+          <div className="mb-6">
+            <SubscriptionStatusCard />
+          </div>
+
           {/* ── Запросы от юристов (одна кнопка «Принять») ──────────────── */}
           {!isDemoMode && !isLawyer && (
             <div className="mb-6">
@@ -329,11 +334,6 @@ const DashboardPage = () => {
           {!isDemoMode && !isLawyer && (
             <ShareWithLawyer />
           )}
-
-          {/* ── Подписка ───────────────────────────────────────────────── */}
-          <div className="mb-6">
-            <SubscriptionStatusCard />
-          </div>
 
           {/* ── Юристы (без дубля «Кабинет юриста» из футера) ──────────── */}
           {!isDemoMode && !isLawyer && (
