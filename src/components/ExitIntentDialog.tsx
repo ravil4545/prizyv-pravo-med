@@ -75,15 +75,27 @@ const ExitIntentDialog = () => {
       if (e.clientY <= 0) trigger();
     };
 
-    // Mobile: 35 секунд активного просмотра без срабатывания — мягкий таймер.
+    // Mobile: вместо «попапа через 35с» — аналог exit-intent. Показываем, когда
+    // пользователь прокрутил вглубь и вернулся вверх (жест «ухожу»), либо мягкий
+    // запасной таймер 60с. Так попап не перебивает чтение в первые секунды и
+    // ловит именно вовлечённого читателя, который собрался уходить.
+    let maxScroll = 0;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > maxScroll) maxScroll = y;
+      if (maxScroll > 800 && y < maxScroll - 400) trigger();
+    };
+
     if (isMobile) {
-      mobileTimer = window.setTimeout(trigger, 35000);
+      window.addEventListener("scroll", onScroll, { passive: true });
+      mobileTimer = window.setTimeout(trigger, 60000);
     } else {
       document.addEventListener("mouseleave", onMouseLeave);
     }
 
     return () => {
       document.removeEventListener("mouseleave", onMouseLeave);
+      window.removeEventListener("scroll", onScroll);
       if (mobileTimer) window.clearTimeout(mobileTimer);
     };
   }, [user, location.pathname]);
