@@ -159,25 +159,29 @@ const App = () => (
                 <Route path="/u/:slug/auth" element={<AuthPage />} />
                 <Route path="/u/:slug/register" element={<RegisterPage />} />
                 <Route path="/u/:slug/login" element={<LoginPage />} />
+                {/* Брендовые зеркала клиентского кабинета. Те же RoleGuard role="client",
+                    что и на неймспейсе /dashboard/*: у юриста клиентского кабинета НЕТ —
+                    с собственной /u/:slug-ссылки юрист уходит в /lawyer, а не видит ИИ-чат
+                    и предложения подписки (разделение сущностей клиент/юрист). */}
                 <Route element={<DashboardLayout />}>
-                  <Route path="/u/:slug/dashboard" element={<DashboardPage />} />
-                  <Route path="/u/:slug/dashboard/ai-chat" element={<AIChatDashboardPage />} />
-                  <Route path="/u/:slug/dashboard/medical-documents" element={<MedicalDocumentsPage />} />
-                  <Route path="/u/:slug/dashboard/templates" element={<UserTemplatesPage />} />
-                  <Route path="/u/:slug/dashboard/case-tracking" element={<CaseTrackingPage />} />
-                  <Route path="/u/:slug/dashboard/calendar" element={<CalendarPage />} />
-                  <Route path="/u/:slug/medical-history" element={<MedicalHistoryPage />} />
-                  <Route path="/u/:slug/medical-questionnaire" element={<MedicalQuestionnairePage />} />
-                  <Route path="/u/:slug/profile" element={<ProfilePage />} />
+                  <Route path="/u/:slug/dashboard" element={<RoleGuard role="client"><DashboardPage /></RoleGuard>} />
+                  <Route path="/u/:slug/dashboard/ai-chat" element={<RoleGuard role="client"><AIChatDashboardPage /></RoleGuard>} />
+                  <Route path="/u/:slug/dashboard/medical-documents" element={<RoleGuard role="client"><MedicalDocumentsPage /></RoleGuard>} />
+                  <Route path="/u/:slug/dashboard/templates" element={<RoleGuard role="client"><UserTemplatesPage /></RoleGuard>} />
+                  <Route path="/u/:slug/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
+                  <Route path="/u/:slug/dashboard/calendar" element={<RoleGuard role="client"><CalendarPage /></RoleGuard>} />
+                  <Route path="/u/:slug/medical-history" element={<RoleGuard role="client"><MedicalHistoryPage /></RoleGuard>} />
+                  <Route path="/u/:slug/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
+                  <Route path="/u/:slug/profile" element={<RoleGuard role="client"><ProfilePage /></RoleGuard>} />
                 </Route>
                 <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
                 <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
                 {/* Клиент: инбокс, чат-тред, семья — внутри shell. У чат-треда на
                     десктопе сайдбар; мобильные бары прячет layout (isChatThread). */}
                 <Route element={<DashboardLayout />}>
-                  <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
-                  <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
-                  <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
+                  <Route path="/u/:slug/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
+                  <Route path="/u/:slug/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
+                  <Route path="/u/:slug/family" element={<RoleGuard role="client"><FamilyAccessPage /></RoleGuard>} />
                 </Route>
                 {/* /u/:slug/profile теперь внутри DashboardLayout (см. блок выше) */}
 
@@ -205,7 +209,7 @@ const App = () => (
                   <Route path="/medical-questionnaire" element={<RoleGuard role="client"><MedicalQuestionnairePage /></RoleGuard>} />
                   <Route path="/dashboard/case-tracking" element={<RoleGuard role="client"><CaseTrackingPage /></RoleGuard>} />
                   <Route path="/dashboard/calendar" element={<RoleGuard role="client"><CalendarPage /></RoleGuard>} />
-                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/profile" element={<RoleGuard role="client"><ProfilePage /></RoleGuard>} />
                 </Route>
                 <Route path="/medical-documents" element={<Navigate to="/dashboard/medical-documents" replace />} />
                 <Route path="/success-cases" element={<SuccessCasesPage />} />

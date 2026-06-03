@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
+import { withBrandPath } from "@/lib/brandPath";
 import Header from "@/components/Header";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,7 +33,10 @@ const RoleGuard = ({ role, children, authRedirect }: RoleGuardProps) => {
 
     if (!user) {
       const next = encodeURIComponent(location.pathname + location.search);
-      navigate(authRedirect || `/auth?next=${next}`, { replace: true });
+      // Бренд-aware: под /u/:slug ведём на /u/:slug/auth, чтобы клиент, пришедший
+      // по ссылке юриста, не терял брендинг при входе (на нём держится авто-привязка).
+      const authPath = withBrandPath(location.pathname, "/auth");
+      navigate(authRedirect || `${authPath}?next=${next}`, { replace: true });
       return;
     }
 
