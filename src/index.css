@@ -229,8 +229,15 @@
     @apply border-border;
   }
 
-  html, body, #root {
+  html, body {
     @apply overflow-x-hidden max-w-[100vw];
+  }
+
+  /* НЕ ставим overflow на #root: overflow-x:hidden у промежуточного предка
+     создаёт scroll-контейнер и ЛОМАЕТ position:sticky (боковая панель кабинета
+     уезжала при скролле). Горизонтальный скролл уже отсекают html/body. */
+  #root {
+    @apply max-w-[100vw];
   }
 
   body {
