@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import { MoreHorizontal, LogOut, MessageSquare, ChevronRight, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { withBrandPath } from "@/lib/brandPath";
-import { PRIMARY_NAV, SECONDARY_NAV, type CabinetNavItem } from "@/lib/cabinetNav";
+import { PRIMARY_NAV, SECONDARY_NAV, isChatThread, type CabinetNavItem } from "@/lib/cabinetNav";
 import EmergencyAuditButton from "@/components/EmergencyAuditButton";
 import LimitsBadge from "@/components/LimitsBadge";
 import CabinetChooserDialog from "@/components/CabinetChooserDialog";
@@ -42,6 +42,11 @@ export default function DashboardLayout() {
   const branding = useBranding();
   const [moreOpen, setMoreOpen] = useState(false);
   const [cabinetChooserOpen, setCabinetChooserOpen] = useState(false);
+
+  // Полноэкранный чат-тред: десктоп-сайдбар оставляем, но мобильные верхнюю
+  // панель и нижние табы прячем (у чата своя шапка с «назад», а h-screen-поле
+  // ввода прижато к низу — табы бы его перекрыли).
+  const chat = isChatThread(location.pathname);
 
   const resolve = (item: Pick<CabinetNavItem, "to" | "external">) =>
     item.external ? item.to : withBrandPath(location.pathname, item.to);
@@ -108,7 +113,8 @@ export default function DashboardLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* ── Мобайл: компактная верхняя панель кабинета ────────────────── */}
+        {/* ── Мобайл: компактная верхняя панель кабинета (на чат-тредах нет) ── */}
+        {!chat && (
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-paper px-3 md:hidden">
           <Link to={resolve({ to: "/dashboard" })} className="flex min-w-0 items-center gap-2" aria-label="Личный кабинет">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border border-ink/80 font-serif text-sm italic text-ink">
@@ -133,16 +139,18 @@ export default function DashboardLayout() {
             </button>
           </div>
         </header>
+        )}
 
         <div className="flex-1">
           <Outlet />
         </div>
 
-        {/* Зазор под фиксированные нижние табы (страницы могут не иметь pb) */}
-        <div className="h-[64px] md:hidden" aria-hidden />
+        {/* Зазор под фиксированные нижние табы (на чат-тредах табов нет). */}
+        {!chat && <div className="h-[64px] md:hidden" aria-hidden />}
       </div>
 
-      {/* ── Мобайл: нижние табы ────────────────────────────────────────── */}
+      {/* ── Мобайл: нижние табы (скрыты на полноэкранных чат-тредах) ────── */}
+      {!chat && (
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.04)] md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -196,6 +204,7 @@ export default function DashboardLayout() {
           </button>
         </div>
       </nav>
+      )}
 
       {/* ── Лист «Ещё» (вторичные пункты + аккаунт) ────────────────────── */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -258,8 +267,9 @@ export default function DashboardLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* Сквозная плавающая кнопка экстренного аудита (Модуль 2 — удержание) */}
-      <EmergencyAuditButton />
+      {/* Сквозная плавающая кнопка экстренного аудита (на чат-тредах прячем —
+          перекрывала бы поле ввода). */}
+      {!chat && <EmergencyAuditButton />}
       <CabinetChooserDialog open={cabinetChooserOpen} onOpenChange={setCabinetChooserOpen} />
     </div>
   );

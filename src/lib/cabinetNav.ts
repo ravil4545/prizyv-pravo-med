@@ -62,11 +62,13 @@ export const SECONDARY_NAV: CabinetNavItem[] = [
  * получается двойной «хром».
  *
  * Маршруты под DashboardLayout (App.tsx): /dashboard(/*), /medical-history,
- * /medical-questionnaire, /profile, /client/messages, /family — и их брендовые
- * зеркала /u/:slug/... НЕ входят: полноэкранные чат-треды /client/chat/* (см.
- * isChatThread) и кабинет юриста /lawyer/* (своя обвязка LawyerLayout).
+ * /medical-questionnaire, /profile, /client/* (инбокс И чат-тред), /family,
+ * /lawyers (каталог — флоу подбора юриста) — и их брендовые зеркала /u/:slug/...
+ * Чат-треды /client/chat/* ВХОДЯТ (на десктопе сайдбар есть), но DashboardLayout
+ * прячет у них мобильные верх/низ-бары (см. isChatThread). НЕ входит /lawyer/*
+ * (своя обвязка LawyerLayout).
  */
-const CABINET_RX = /^(\/dashboard(\/|$)|\/medical-history(\/|$)|\/medical-questionnaire(\/|$)|\/profile(\/|$)|\/client\/messages(\/|$)|\/family$)/;
+const CABINET_RX = /^(\/dashboard(\/|$)|\/medical-history(\/|$)|\/medical-questionnaire(\/|$)|\/profile(\/|$)|\/client(\/|$)|\/family$|\/lawyers(\/|$))/;
 
 export function isCabinetPath(pathname: string): boolean {
   const stripped = pathname.replace(/^\/u\/[^/]+/, "") || "/";

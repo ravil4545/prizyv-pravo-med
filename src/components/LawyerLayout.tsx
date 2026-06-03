@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import { MoreHorizontal, LogOut, MessageSquare, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LAWYER_PRIMARY_NAV, LAWYER_SECONDARY_NAV, type LawyerNavItem } from "@/lib/lawyerNav";
+import { isChatThread } from "@/lib/cabinetNav";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +31,10 @@ export default function LawyerLayout() {
   const { user } = useAuth();
   const branding = useBranding();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Полноэкранный чат-тред /lawyer/chat/* — десктоп-сайдбар оставляем, мобильные
+  // верхнюю панель и нижние табы прячем (у чата своя шапка, поле ввода у низа).
+  const chat = isChatThread(location.pathname);
 
   const isItemActive = (item: LawyerNavItem) => {
     // «Кабинет» активен только точным совпадением, иначе светился бы на всех /lawyer/*
@@ -83,7 +88,8 @@ export default function LawyerLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* ── Мобайл: верхняя панель кабинета ───────────────────────────── */}
+        {/* ── Мобайл: верхняя панель кабинета (на чат-тредах нет) ────────── */}
+        {!chat && (
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-paper px-3 md:hidden">
           <Link to="/lawyer" className="flex min-w-0 items-center gap-2" aria-label="Кабинет юриста">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border border-ink/80 font-serif text-sm italic text-ink">
@@ -105,15 +111,17 @@ export default function LawyerLayout() {
             )}
           </button>
         </header>
+        )}
 
         <div className="flex-1">
           <Outlet />
         </div>
 
-        <div className="h-[64px] md:hidden" aria-hidden />
+        {!chat && <div className="h-[64px] md:hidden" aria-hidden />}
       </div>
 
-      {/* ── Мобайл: нижние табы ────────────────────────────────────────── */}
+      {/* ── Мобайл: нижние табы (скрыты на полноэкранных чат-тредах) ────── */}
+      {!chat && (
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.04)] md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -168,6 +176,7 @@ export default function LawyerLayout() {
           </button>
         </div>
       </nav>
+      )}
 
       {/* ── Лист «Ещё» ─────────────────────────────────────────────────── */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>

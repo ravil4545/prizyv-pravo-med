@@ -172,12 +172,13 @@ const App = () => (
                 </Route>
                 <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
                 <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
+                {/* Клиент: инбокс, чат-тред, семья — внутри shell. У чат-треда на
+                    десктопе сайдбар; мобильные бары прячет layout (isChatThread). */}
                 <Route element={<DashboardLayout />}>
                   <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
+                  <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
                   <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
                 </Route>
-                {/* Полноэкранный тред — своя шапка, без shell/нижних табов */}
-                <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
                 {/* /u/:slug/profile теперь внутри DashboardLayout (см. блок выше) */}
 
                 <Route path="/" element={<Index />} />
@@ -210,7 +211,10 @@ const App = () => (
                 <Route path="/success-cases" element={<SuccessCasesPage />} />
                 <Route path="/commissariats" element={<CommissariatDirectoryPage />} />
                 <Route path="/commissariats/:slug" element={<CommissariatDetailPage />} />
-                <Route path="/lawyers" element={<LawyersDirectoryPage />} />
+                {/* Каталог юристов — флоу подбора из кабинета: внутри shell (сайдбар) */}
+                <Route element={<DashboardLayout />}>
+                  <Route path="/lawyers" element={<LawyersDirectoryPage />} />
+                </Route>
                 {/* Compliance & legal pages — обязательно по 152-ФЗ и для приёма платежей */}
                 <Route path="/privacy" element={<PrivacyPolicyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
@@ -233,16 +237,16 @@ const App = () => (
                   <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
                   <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />
                   <Route path="/lawyer/branding" element={<RoleGuard role="lawyer"><LawyerBrandingPage /></RoleGuard>} />
+                  {/* Чат-тред юриста: на десктопе сайдбар, мобильные бары прячет layout */}
+                  <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
                 </Route>
-                {/* Полноэкранный тред юриста — своя шапка, без shell/нижних табов */}
-                <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
-                {/* Инбокс клиента + семейный доступ — внутри shell кабинета (DashboardLayout) */}
+                {/* Клиент: инбокс, чат-тред, семья — внутри shell кабинета. У чат-треда
+                    на десктопе сайдбар; мобильные бары прячет layout (isChatThread). */}
                 <Route element={<DashboardLayout />}>
                   <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
+                  <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
                   <Route path="/family" element={<RoleGuard role="client"><FamilyAccessPage /></RoleGuard>} />
                 </Route>
-                {/* Полноэкранный тред клиента — своя шапка, без shell/нижних табов */}
-                <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
                 <Route path="/family/accept/:token" element={<FamilyAcceptPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
