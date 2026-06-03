@@ -60,7 +60,7 @@ interface CaseEvent {
   created_at: string;
 }
 
-type CalendarView = "month" | "week" | "day";
+type CalendarView = "month" | "week" | "day" | "agenda";
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
@@ -83,7 +83,11 @@ export default function CalendarPage() {
   const [user, setUser] = useState<any>(null);
   const [events, setEvents] = useState<CaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<CalendarView>("month");
+  // На мобиле month-grid из 7 колонок тесный — по умолчанию показываем список
+  // («Список»/agenda). На десктопе остаётся «Месяц». Пользователь может переключить.
+  const [view, setView] = useState<CalendarView>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "agenda" : "month",
+  );
   const [cursor, setCursor] = useState<Date>(new Date());
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -425,6 +429,83 @@ export default function CalendarPage() {
     );
   };
 
+  // Список (agenda) — мобильный вид: хронологический список событий, без тесной
+  // сетки. Ближайшие (от сегодня) + прошедшие. Тап по строке — редактирование.
+  const renderAgenda = () => {
+    const todayKey = dayKey(new Date());
+    const sorted = [...events].sort((a, b) =>
+      normDate(a.event_date).localeCompare(normDate(b.event_date)),
+    );
+    const upcoming = sorted.filter((e) => normDate(e.event_date) >= todayKey);
+    const past = sorted.filter((e) => normDate(e.event_date) < todayKey).reverse();
+
+    const eventRow = (ev: CaseEvent) => {
+      const meta = eventTypeMeta(ev.event_type);
+      const d = parseISO(normDate(ev.event_date));
+      const di = getDayInfo(d);
+      return (
+        <Card key={ev.id}>
+          <CardContent className="flex items-start justify-between gap-3 p-3 sm:p-4">
+            <button
+              type="button"
+              onClick={() => openEdit(ev)}
+              className="flex min-w-0 flex-1 items-start gap-3 text-left"
+            >
+              <span className="flex w-12 flex-shrink-0 flex-col items-center rounded-lg bg-muted/50 px-1 py-1.5 leading-none">
+                <span className="text-base font-semibold">{format(d, "d")}</span>
+                <span className="text-[10px] uppercase text-muted-foreground">{format(d, "LLL", { locale: ru })}</span>
+              </span>
+              <span className="min-w-0">
+                <Badge variant="outline" className={cn("mb-1 text-[11px]", meta.badgeClass)}>{meta.label}</Badge>
+                <span className="block truncate font-medium">{ev.title}</span>
+                <span className="block text-[11px] capitalize text-muted-foreground">
+                  {format(d, "EEEE", { locale: ru })}
+                  {di.kind === "holiday" ? ` · ${di.label}` : ""}
+                </span>
+              </span>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 flex-shrink-0 text-destructive hover:text-destructive"
+              onClick={() => deleteEvent(ev.id)}
+              aria-label="Удалить"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    };
+
+    return (
+      <div className="space-y-5">
+        <Button onClick={() => openAdd()} className="w-full gap-2 sm:hidden">
+          <Plus className="h-4 w-4" /> Добавить событие
+        </Button>
+        <section className="space-y-2">
+          <p className="section-number">Ближайшие</p>
+          {upcoming.length === 0 ? (
+            <Card className="py-10 text-center">
+              <CardContent>
+                <CalendarDays className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
+                <p className="text-muted-foreground">Ближайших событий нет</p>
+              </CardContent>
+            </Card>
+          ) : (
+            upcoming.map(eventRow)
+          )}
+        </section>
+        {past.length > 0 && (
+          <section className="space-y-2">
+            <p className="section-number">Прошедшие</p>
+            {past.map(eventRow)}
+          </section>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -481,6 +562,7 @@ export default function CalendarPage() {
             <div className="inline-flex rounded-lg border border-ink/10 bg-muted/30 p-0.5">
               {(
                 [
+                  ["agenda", "Список"],
                   ["month", "Месяц"],
                   ["week", "Неделя"],
                   ["day", "День"],
@@ -501,6 +583,7 @@ export default function CalendarPage() {
             </div>
           </div>
 
+          {view === "agenda" && renderAgenda()}
           {view === "month" && renderMonth()}
           {view === "week" && renderWeek()}
           {view === "day" && renderDay()}
