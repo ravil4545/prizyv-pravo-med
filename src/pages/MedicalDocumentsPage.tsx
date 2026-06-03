@@ -1709,7 +1709,7 @@ export default function MedicalDocumentsPage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 md:pb-12">
         <div className="max-w-7xl mx-auto">
           <div className="mb-4">
             <SubscriptionBanner compact />

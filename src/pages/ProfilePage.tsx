@@ -90,7 +90,7 @@ const ProfilePage = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="container mx-auto py-6 px-3 sm:px-4 pb-24 md:pb-8">
+        <div className="container mx-auto py-6 px-3 sm:px-4 md:pb-8">
           <div className="max-w-4xl mx-auto space-y-6">
             <Skeleton className="h-10 w-48" />
             <Skeleton className="h-12 w-full" />
@@ -111,7 +111,7 @@ const ProfilePage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <div className="container mx-auto py-4 sm:py-8 px-3 sm:px-4 pb-24 md:pb-8">
+      <div className="container mx-auto py-4 sm:py-8 px-3 sm:px-4 md:pb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 sm:mb-8">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1">Профиль</h1>

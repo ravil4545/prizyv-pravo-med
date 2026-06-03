@@ -107,7 +107,7 @@ const DashboardPage = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
+        <main className="container mx-auto px-4 py-6 md:py-10 md:pb-12">
           <div className="max-w-5xl mx-auto space-y-6">
             <div>
               <Skeleton className="h-8 w-48 mb-2" />
@@ -194,7 +194,7 @@ const DashboardPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-6 md:py-10 pb-24 md:pb-12">
+      <main className="container mx-auto px-4 py-6 md:py-10 md:pb-12">
         <div className="max-w-5xl mx-auto">
           {/* ── Приветствие. «Личный кабинет» и «Выйти» теперь в обвязке
                  кабинета (DashboardLayout) — здесь не дублируем. ──────────── */}

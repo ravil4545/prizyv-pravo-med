@@ -439,7 +439,7 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-3 py-6 pb-24 sm:px-4 md:py-8 md:pb-12">
+      <main className="container mx-auto px-3 py-6 sm:px-4 md:py-8 md:pb-12">
         <div className="mx-auto max-w-5xl">
           <Button
             variant="ghost"

@@ -914,7 +914,7 @@ export default function MedicalHistoryPage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 md:pb-12">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2 sm:gap-3">

@@ -227,7 +227,7 @@ export default function FamilyAccessPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8 pb-24 md:pb-12">
+      <main className="container mx-auto px-4 py-8 md:pb-12">
         <div className="max-w-4xl mx-auto">
           <Button variant="ghost" onClick={() => navigate(cabinetPath("/dashboard"))} className="mb-6">
             <ArrowLeft className="h-4 w-4 mr-2" /> Назад в кабинет
