@@ -1,19 +1,27 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowRight, Check, Loader2, Phone, Lock } from "lucide-react";
 import { useCaseProgress } from "@/hooks/useCaseProgress";
 import { cn } from "@/lib/utils";
 import PaymentInstructionsDialog from "@/components/PaymentInstructionsDialog";
+import { withBrandPath } from "@/lib/brandPath";
 
 interface Stage {
   no: string;
   key: keyof Omit<ReturnType<typeof useCaseProgress>, "loading">;
   title: string;
+  /** Подсказка, пока шаг не выполнен. */
   hint: string;
+  /** Подсказка, когда шаг выполнен — что можно докрутить (шаг остаётся активным). */
+  doneHint: string;
+  /** Действие, пока не выполнено. */
   ctaLabel: string;
+  /** Действие, когда выполнено — «продолжить работу» (дозагрузить/обновить/продлить). */
+  doneLabel: string;
   ctaPath: string;
-  /** Если задано "payment" — CTA открывает диалог оплаты, а не навигацию.
-   *  (Стадия «Безлимит» вела на /dashboard — текущую же страницу, клик был no-op.) */
+  /** Путь действия, когда выполнено (если отличается от ctaPath). */
+  donePath?: string;
+  /** Если задано "payment" — CTA открывает диалог оплаты, а не навигацию. */
   action?: "payment";
 }
 
@@ -23,7 +31,9 @@ const STAGES: Stage[] = [
     key: "profileFilled",
     title: "Профиль",
     hint: "Заполните данные — имя, год рождения, военкомат. Это база для всех документов.",
+    doneHint: "Профиль заполнен. Дополните или поправьте данные в любой момент.",
     ctaLabel: "Заполнить профиль",
+    doneLabel: "Дополнить",
     ctaPath: "/profile",
   },
   {
@@ -31,7 +41,9 @@ const STAGES: Stage[] = [
     key: "hasDocuments",
     title: "Документы",
     hint: "Загрузите медицинские справки, заключения, выписки. Можно фото или PDF.",
+    doneHint: "Документы загружены. Подгрузите новые справки, когда появятся.",
     ctaLabel: "Загрузить документы",
+    doneLabel: "Добавить",
     ctaPath: "/dashboard/medical-documents",
   },
   {
@@ -39,7 +51,9 @@ const STAGES: Stage[] = [
     key: "hasAiAnalysis",
     title: "ИИ-анализ",
     hint: "ИИ извлечёт диагнозы, привяжет к статьям Расписания болезней, оценит шансы.",
+    doneHint: "Анализ готов. Запустите заново после загрузки новых документов.",
     ctaLabel: "Запустить анализ",
+    doneLabel: "Заново",
     ctaPath: "/dashboard/medical-documents",
   },
   {
@@ -47,15 +61,20 @@ const STAGES: Stage[] = [
     key: "hasLawyerLink",
     title: "Связь с юристом",
     hint: "Дайте юристу доступ к документам — получите стратегию и план действий.",
+    doneHint: "Юрист на связи. Напишите за уточнением или вторым мнением.",
     ctaLabel: "Подключить юриста",
+    doneLabel: "Написать",
     ctaPath: "/dashboard",
+    donePath: "/client/messages",
   },
   {
     no: "05",
     key: "hasActiveSubscription",
     title: "Безлимит",
     hint: "Подписка снимает все лимиты ИИ-помощника, открывает календарь дедлайнов и шаблоны. Консультация юриста — за доплату, от 9 000 ₽.",
+    doneHint: "Подписка активна. Продлите, чтобы не терять безлимит и доступ.",
     ctaLabel: "Оформить подписку",
+    doneLabel: "Продлить",
     ctaPath: "/dashboard",
     action: "payment",
   },
@@ -91,12 +110,21 @@ const FUTURE_STAGES: { title: string; hint: string }[] = [
 const CaseRoadmap = () => {
   const progress = useCaseProgress();
   const navigate = useNavigate();
+  const location = useLocation();
   const [paymentOpen, setPaymentOpen] = useState(false);
 
-  // Единая точка обработки CTA стадии: оплата → диалог, иначе → навигация.
-  const handleStageCta = (stage: Pick<Stage, "action" | "ctaPath">) => {
-    if (stage.action === "payment") setPaymentOpen(true);
-    else navigate(stage.ctaPath);
+  // Переход по шагу: оплата → диалог; иначе бренд-aware навигация (под /u/:slug
+  // ведём на брендированный путь). Для выполненного шага — donePath, если задан.
+  const goStage = (
+    stage: Pick<Stage, "action" | "ctaPath" | "donePath">,
+    done: boolean,
+  ) => {
+    if (stage.action === "payment") {
+      setPaymentOpen(true);
+      return;
+    }
+    const target = done && stage.donePath ? stage.donePath : stage.ctaPath;
+    navigate(withBrandPath(location.pathname, target));
   };
 
   const stages = useMemo(
@@ -170,7 +198,7 @@ const CaseRoadmap = () => {
             </div>
           </div>
           <button
-            onClick={() => handleStageCta(nextStage)}
+            onClick={() => goStage(nextStage, false)}
             className="group inline-flex items-center justify-center gap-2 px-5 py-3 bg-ink text-paper text-sm font-semibold hover:bg-gold hover:text-ink transition-colors"
           >
             {nextStage.ctaLabel}
@@ -191,12 +219,13 @@ const CaseRoadmap = () => {
                 i < stages.length - 1 && "after:absolute after:left-[1.25rem] after:top-[3.5rem] after:bottom-[-0.75rem] after:w-px after:bg-ink/10",
               )}
             >
-              {/* Status badge */}
+              {/* Status badge — выполненные показываем как «активные в работе»
+                  (золотая обводка + галочка), а не закрытые/перечёркнутые. */}
               <div
                 className={cn(
                   "relative z-10 w-10 h-10 flex items-center justify-center font-mono text-sm font-semibold border-2 transition-colors",
                   s.done
-                    ? "bg-ink text-paper border-ink"
+                    ? "bg-gold/15 text-gold-deep border-gold/50"
                     : isCurrent
                       ? "bg-gold text-ink border-gold"
                       : "bg-paper text-ink/40 border-ink/15",
@@ -208,12 +237,7 @@ const CaseRoadmap = () => {
               {/* Title + hint */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3
-                    className={cn(
-                      "font-serif text-base sm:text-lg leading-tight",
-                      s.done ? "text-ink/60 line-through decoration-ink/30" : "text-ink",
-                    )}
-                  >
+                  <h3 className="font-serif text-base sm:text-lg leading-tight text-ink">
                     {s.title}
                   </h3>
                   {isCurrent && (
@@ -222,38 +246,36 @@ const CaseRoadmap = () => {
                     </span>
                   )}
                   {s.done && (
-                    <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/40">
-                      готово
+                    <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gold-deep border border-gold/40 px-1.5 py-0.5">
+                      в работе
                     </span>
                   )}
                 </div>
-                {!s.done && (
-                  <p className="text-xs sm:text-sm text-ink-soft mt-1 leading-relaxed">
-                    {s.hint}
-                  </p>
-                )}
+                <p className="text-xs sm:text-sm text-ink-soft mt-1 leading-relaxed">
+                  {s.done ? s.doneHint : s.hint}
+                </p>
               </div>
 
-              {/* Inline action: оплата → кнопка-диалог, иначе → ссылка-навигация */}
-              {!s.done && (
-                s.action === "payment" ? (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentOpen(true)}
-                    className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
-                  >
-                    Оплатить
-                    <ArrowRight className="h-3 w-3" />
-                  </button>
-                ) : (
-                  <Link
-                    to={s.ctaPath}
-                    className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
-                  >
-                    Перейти
-                    <ArrowRight className="h-3 w-3" />
-                  </Link>
-                )
+              {/* Inline action — доступно ВСЕГДА: для выполненного шага «продолжить
+                  работу» (дозагрузить/обновить/написать/продлить), иначе — выполнить. */}
+              {s.action === "payment" ? (
+                <button
+                  type="button"
+                  onClick={() => setPaymentOpen(true)}
+                  className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
+                >
+                  {s.done ? s.doneLabel : "Оплатить"}
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => goStage(s, s.done)}
+                  className="text-xs font-mono tracking-wider uppercase text-gold-deep hover:text-ink whitespace-nowrap inline-flex items-center gap-1"
+                >
+                  {s.done ? s.doneLabel : "Перейти"}
+                  <ArrowRight className="h-3 w-3" />
+                </button>
               )}
             </li>
           );
