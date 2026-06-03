@@ -27,8 +27,8 @@ const Index = () => {
           <Credentials />
           <ConscriptionMap />
           <ComplexCases />
-          <Pricing />
           <Services />
+          <Pricing />
           <SubscriptionPricing />
           <AIFeaturesSection />
           <Testimonials />
