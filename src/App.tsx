@@ -172,9 +172,12 @@ const App = () => (
                 </Route>
                 <Route path="/u/:slug/diagnoses" element={<DiagnosesPage />} />
                 <Route path="/u/:slug/diagnoses/:diagnosisSlug" element={<DiagnosisDetailPage />} />
-                <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
+                <Route element={<DashboardLayout />}>
+                  <Route path="/u/:slug/client/messages" element={<ClientMessagesPage />} />
+                  <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
+                </Route>
+                {/* Полноэкранный тред — своя шапка, без shell/нижних табов */}
                 <Route path="/u/:slug/client/chat/:lawyerClientId" element={<ClientChatPage />} />
-                <Route path="/u/:slug/family" element={<FamilyAccessPage />} />
                 {/* /u/:slug/profile теперь внутри DashboardLayout (см. блок выше) */}
 
                 <Route path="/" element={<Index />} />
@@ -226,17 +229,20 @@ const App = () => (
                   <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
                   <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />
                   <Route path="/lawyer/clients/:clientId" element={<RoleGuard role="lawyer"><LawyerClientDetail /></RoleGuard>} />
-                  <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
                   <Route path="/lawyer/templates" element={<RoleGuard role="lawyer"><LawyerTemplatesPage /></RoleGuard>} />
                   <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
                   <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />
                   <Route path="/lawyer/branding" element={<RoleGuard role="lawyer"><LawyerBrandingPage /></RoleGuard>} />
                 </Route>
-                {/* /client/* — переписки клиента с юристами; доступны только клиентам */}
-                <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
+                {/* Полноэкранный тред юриста — своя шапка, без shell/нижних табов */}
+                <Route path="/lawyer/chat/:clientId" element={<RoleGuard role="lawyer"><LawyerChatPage /></RoleGuard>} />
+                {/* Инбокс клиента + семейный доступ — внутри shell кабинета (DashboardLayout) */}
+                <Route element={<DashboardLayout />}>
+                  <Route path="/client/messages" element={<RoleGuard role="client"><ClientMessagesPage /></RoleGuard>} />
+                  <Route path="/family" element={<RoleGuard role="client"><FamilyAccessPage /></RoleGuard>} />
+                </Route>
+                {/* Полноэкранный тред клиента — своя шапка, без shell/нижних табов */}
                 <Route path="/client/chat/:lawyerClientId" element={<RoleGuard role="client"><ClientChatPage /></RoleGuard>} />
-                {/* /family — семейный доступ (только клиенты) и приём приглашений */}
-                <Route path="/family" element={<RoleGuard role="client"><FamilyAccessPage /></RoleGuard>} />
                 <Route path="/family/accept/:token" element={<FamilyAcceptPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

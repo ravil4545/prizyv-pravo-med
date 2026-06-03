@@ -62,12 +62,25 @@ export const SECONDARY_NAV: CabinetNavItem[] = [
  * получается двойной «хром».
  *
  * Маршруты под DashboardLayout (App.tsx): /dashboard(/*), /medical-history,
- * /medical-questionnaire, /profile — и их брендовые зеркала /u/:slug/...
- * НЕ входят: /client/*, /family, /lawyer/* (у них своя обвязка).
+ * /medical-questionnaire, /profile, /client/messages, /family — и их брендовые
+ * зеркала /u/:slug/... НЕ входят: полноэкранные чат-треды /client/chat/* (см.
+ * isChatThread) и кабинет юриста /lawyer/* (своя обвязка LawyerLayout).
  */
-const CABINET_RX = /^(\/dashboard(\/|$)|\/medical-history(\/|$)|\/medical-questionnaire(\/|$)|\/profile(\/|$))/;
+const CABINET_RX = /^(\/dashboard(\/|$)|\/medical-history(\/|$)|\/medical-questionnaire(\/|$)|\/profile(\/|$)|\/client\/messages(\/|$)|\/family$)/;
 
 export function isCabinetPath(pathname: string): boolean {
   const stripped = pathname.replace(/^\/u\/[^/]+/, "") || "/";
   return CABINET_RX.test(stripped);
+}
+
+/**
+ * Полноэкранный чат-тред (1:1) — /lawyer/chat/* и /client/chat/* (+ /u/:slug).
+ * Эти страницы используют `h-screen overflow-hidden` с собственной шапкой и
+ * полем ввода, прижатым к низу: их НЕ оборачиваем в shell и НЕ показываем
+ * нижние табы (иначе поле ввода уезжает под них). Header у них свой — НЕ
+ * подавляется (isCabinetPath/isLawyerPath возвращают для них false).
+ */
+export function isChatThread(pathname: string): boolean {
+  const stripped = pathname.replace(/^\/u\/[^/]+/, "") || "/";
+  return /^\/(lawyer|client)\/chat(\/|$)/.test(stripped);
 }

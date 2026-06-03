@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
-import { isCabinetPath } from "@/lib/cabinetNav";
+import { isCabinetPath, isChatThread } from "@/lib/cabinetNav";
 import { isLawyerPath } from "@/lib/lawyerNav";
 
 const MobileBottomNav = () => {
@@ -36,7 +36,13 @@ const MobileBottomNav = () => {
 
   // В кабинетах (клиент/юрист) нижнюю навигацию даёт соответствующий Layout
   // (единый конфиг с сайдбаром). Здесь не дублируем — иначе было бы два бара.
-  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname)) return null;
+  // На полноэкранных чат-тредах баров нет вовсе (поле ввода прижато к низу).
+  if (
+    isCabinetPath(location.pathname) ||
+    isLawyerPath(location.pathname) ||
+    isChatThread(location.pathname)
+  )
+    return null;
 
   // Юристам — навигация по их кабинету. Важно: /lawyers — это публичный
   // каталог юристов для клиентов, а не рабочая зона /lawyer.

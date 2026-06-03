@@ -8,6 +8,7 @@ import {
   Palette,
   Search,
 } from "lucide-react";
+import { isChatThread } from "@/lib/cabinetNav";
 
 /**
  * ЕДИНЫЙ ИСТОЧНИК НАВИГАЦИИ КАБИНЕТА ЮРИСТА — зеркало клиентского cabinetNav.
@@ -42,11 +43,12 @@ export const LAWYER_SECONDARY_NAV: LawyerNavItem[] = [
 ];
 
 /**
- * Путь относится к рабочему кабинету юриста (/lawyer, /lawyer/*).
- * ВАЖНО: НЕ совпадает с публичным каталогом /lawyers (после «lawyer» идёт «s»,
- * а не «/» или конец строки). Header/Footer/MobileBottomNav на этих маршрутах
- * не рендерятся — хром даёт LawyerLayout.
+ * Путь относится к рабочему кабинету юриста (/lawyer, /lawyer/*), КРОМЕ
+ * полноэкранного чат-треда /lawyer/chat/* (остаётся standalone со своей шапкой —
+ * см. isChatThread). НЕ совпадает с публичным каталогом /lawyers (после «lawyer»
+ * идёт «s»). На этих маршрутах Header/Footer/MobileBottomNav не рендерятся —
+ * хром даёт LawyerLayout.
  */
 export function isLawyerPath(pathname: string): boolean {
-  return /^\/lawyer(\/|$)/.test(pathname);
+  return /^\/lawyer(\/|$)/.test(pathname) && !isChatThread(pathname);
 }
