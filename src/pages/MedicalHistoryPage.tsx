@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -14,6 +14,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getSignedDocumentUrl } from "@/lib/storage";
 import { toast } from "sonner";
+import RbArticleView from "@/components/RbArticleView";
+import { articleFullName, articleShortName } from "@/lib/rb565";
 
 interface Article {
   id: string;
@@ -194,6 +196,7 @@ function getDocumentsForArticle(
 
 export default function MedicalHistoryPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -326,13 +329,22 @@ export default function MedicalHistoryPage() {
     });
   }, [articleScores]);
 
-  // Set initial selected article to the first article by number
+  // Set initial selected article — prefer the ?article=<number> deep link
   useEffect(() => {
-    if (articles.length > 0 && !selectedArticle) {
-      // Always select the first article (sorted by article_number)
-      setSelectedArticle(articles[0]);
-    }
-  }, [articles, selectedArticle]);
+    if (articles.length === 0 || selectedArticle) return;
+    const param = (searchParams.get("article") || "").trim();
+    const fromParam = param ? articles.find((a) => a.article_number === param) : null;
+    setSelectedArticle(fromParam || articles[0]);
+  }, [articles, selectedArticle, searchParams]);
+
+  // Select an article and reflect it in the URL (?article=<number>)
+  const handleSelectArticle = useCallback(
+    (article: Article) => {
+      setSelectedArticle(article);
+      setSearchParams({ article: article.article_number }, { replace: true });
+    },
+    [setSearchParams],
+  );
 
   // Filter articles by search
   const filteredArticles = useMemo(() => {
@@ -343,6 +355,7 @@ export default function MedicalHistoryPage() {
       (article) =>
         article.article_number.toLowerCase().includes(query) ||
         article.title.toLowerCase().includes(query) ||
+        articleFullName(article.article_number, article.title).toLowerCase().includes(query) ||
         (categoryLabels[article.category] || "").toLowerCase().includes(query),
     );
   }, [sortedArticles, searchQuery]);
@@ -831,7 +844,7 @@ export default function MedicalHistoryPage() {
     setIsGeneratingDoc(true);
     try {
       const contentToExport = isEditingExams ? editedExamsText : examinationsText;
-      const fullContent = `МИНИМАЛЬНЫЕ НЕОБХОДИМЫЕ ОБСЛЕДОВАНИЯ\nСтатья ${selectedArticle.article_number}: ${selectedArticle.title}\n\n${contentToExport}`;
+      const fullContent = `МИНИМАЛЬНЫЕ НЕОБХОДИМЫЕ ОБСЛЕДОВАНИЯ\nСтатья ${selectedArticle.article_number}: ${articleFullName(selectedArticle.article_number, selectedArticle.title)}\n\n${contentToExport}`;
 
       const response = await fetch(
         `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
@@ -880,7 +893,7 @@ export default function MedicalHistoryPage() {
       <style>body{font-family:Arial,sans-serif;padding:40px;line-height:1.8;font-size:14px}
       h1{font-size:18px;margin-bottom:20px}pre{white-space:pre-wrap;font-family:inherit}</style></head>
       <body><h1>Минимальные необходимые обследования</h1>
-      <p>Статья ${selectedArticle?.article_number}: ${selectedArticle?.title}</p>
+      <p>Статья ${selectedArticle?.article_number}: ${articleFullName(selectedArticle?.article_number ?? "", selectedArticle?.title ?? "")}</p>
       <pre>${contentToPrint}</pre></body></html>
     `);
     printWindow.document.close();
@@ -1071,7 +1084,8 @@ export default function MedicalHistoryPage() {
                           return (
                             <button
                               key={article.id}
-                              onClick={() => setSelectedArticle(article)}
+                              onClick={() => handleSelectArticle(article)}
+                              title={articleFullName(article.article_number, article.title)}
                               className={`
                                 w-full text-left px-3 py-2 rounded-lg transition-all duration-200
                                 flex items-center gap-2 group text-sm
@@ -1086,7 +1100,7 @@ export default function MedicalHistoryPage() {
                                 {article.article_number}
                               </span>
                               <span
-                                className={`truncate ${
+                                className={`line-clamp-2 ${
                                   selectedArticle?.id === article.id
                                     ? "text-primary-foreground/90"
                                     : hasDocuments
@@ -1094,7 +1108,7 @@ export default function MedicalHistoryPage() {
                                       : "text-muted-foreground"
                                 }`}
                               >
-                                {article.title}
+                                {articleShortName(article.article_number, article.title)}
                               </span>
                               {hasDocuments && <FileCheck className="h-3.5 w-3.5 flex-shrink-0 text-primary" />}
                               <ChevronRight
@@ -1132,23 +1146,20 @@ export default function MedicalHistoryPage() {
                           {categoryLabels[selectedArticle.category] || selectedArticle.category}
                         </Badge>
                         <CardTitle className="text-lg sm:text-xl md:text-2xl break-words">
-                          Статья {selectedArticle.article_number}: {selectedArticle.title}
+                          Статья {selectedArticle.article_number}:{" "}
+                          {articleFullName(selectedArticle.article_number, selectedArticle.title)}
                         </CardTitle>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="px-3 sm:px-6">
-                    <Collapsible>
+                    <Collapsible defaultOpen>
                       <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-primary hover:underline w-full justify-between py-1">
-                        <span>📜 Полный текст статьи</span>
+                        <span>📜 Полный текст статьи и таблица категорий</span>
                         <ChevronDown className="h-4 w-4 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="prose prose-sm dark:prose-invert max-w-none mt-3">
-                          <pre className="whitespace-pre-wrap font-sans text-foreground bg-muted/50 rounded-lg p-3 sm:p-4 border text-xs sm:text-sm leading-relaxed overflow-x-auto max-h-[60vh] overflow-y-auto">
-                            {selectedArticle.body}
-                          </pre>
-                        </div>
+                        <RbArticleView body={selectedArticle.body} />
                       </CollapsibleContent>
                     </Collapsible>
                   </CardContent>
@@ -1280,7 +1291,10 @@ export default function MedicalHistoryPage() {
                         <FileText className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-4 opacity-50" />
                         <p className="mb-2 text-sm">Нет документов по данной статье</p>
                         <p className="text-xs sm:text-sm">
-                          Загрузите документы: <strong className="break-words">{selectedArticle.title}</strong>
+                          Загрузите документы:{" "}
+                          <strong className="break-words">
+                            {articleShortName(selectedArticle.article_number, selectedArticle.title)}
+                          </strong>
                         </p>
                         <Button
                           variant="outline"
