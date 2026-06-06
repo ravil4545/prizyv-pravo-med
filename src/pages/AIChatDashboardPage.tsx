@@ -705,7 +705,7 @@ const AIChatDashboardPage = () => {
           {filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group rounded-lg p-3 transition-colors hover:bg-muted ${
+              className={`group max-w-full overflow-hidden rounded-lg p-3 transition-colors hover:bg-muted ${
                 currentConversationId === conv.id ? 'bg-muted' : ''
               }`}
             >
@@ -721,24 +721,25 @@ const AIChatDashboardPage = () => {
                     autoFocus
                     className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
-                  <div className="flex gap-1.5">
+                  <div className="grid min-w-0 grid-cols-[1fr_auto] gap-1.5">
                     <Button
                       type="button"
                       size="sm"
-                      className="h-8 flex-1"
+                      className="h-8 min-w-0 px-2 hover:scale-100"
                       onClick={saveConversationTitle}
                       disabled={renamingSaving}
                     >
                       {renamingSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                      Сохранить
+                      <span className="min-w-0 truncate">Сохранить</span>
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-8"
+                      className="h-8 w-9 px-0 hover:scale-100"
                       onClick={cancelRenameConversation}
                       disabled={renamingSaving}
+                      aria-label="Отменить переименование"
                     >
                       <X className="h-3.5 w-3.5" />
                     </Button>
@@ -748,45 +749,47 @@ const AIChatDashboardPage = () => {
                 <>
                   <button
                     type="button"
-                    className="w-full min-w-0 text-left"
+                    className="w-full min-w-0 overflow-hidden text-left"
                     onClick={() => {
                       setCurrentConversationId(conv.id);
                       setMobileSidebarOpen(false);
                     }}
                   >
-                    <div className="mb-1 flex items-center gap-2">
+                    <div className="mb-1 flex min-w-0 items-center gap-2">
                       <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate text-sm font-medium">{conv.title || "Новый диалог"}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{conv.title || "Новый диалог"}</span>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {new Date(conv.updated_at).toLocaleDateString('ru-RU')}
                     </span>
                   </button>
-                  <div className="mt-2 flex gap-1.5">
+                  <div className="mt-2 grid min-w-0 grid-cols-2 gap-1.5">
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-8 flex-1 px-2 text-xs"
+                      className="h-8 min-w-0 gap-1 px-1.5 text-[11px] hover:scale-100"
                       onClick={() => startRenameConversation(conv)}
+                      title="Переименовать диалог"
                     >
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      Переименовать
+                      <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="min-w-0 truncate">Переименовать</span>
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-8 flex-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="h-8 min-w-0 gap-1 px-1.5 text-[11px] text-destructive hover:scale-100 hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => setConversationToDelete(conv)}
                       disabled={deletingConversationId === conv.id}
+                      title="Удалить диалог"
                     >
                       {deletingConversationId === conv.id ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin" />
                       ) : (
-                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
                       )}
-                      Удалить
+                      <span className="min-w-0 truncate">Удалить</span>
                     </Button>
                   </div>
                 </>
