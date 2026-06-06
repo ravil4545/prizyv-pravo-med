@@ -12,6 +12,16 @@ import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2, 
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -65,6 +75,8 @@ const AIChatDashboardPage = () => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [limitDialogOpen, setLimitDialogOpen] = useState(false);
   const [quickRepliesCollapsed, setQuickRepliesCollapsed] = useState(false);
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [medicalContext, setMedicalContext] = useState<string>("");
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
@@ -189,6 +201,7 @@ const AIChatDashboardPage = () => {
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ block: "end" });
       if (scrollAreaRef.current) {
         const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
         if (viewport) {
@@ -297,12 +310,15 @@ const AIChatDashboardPage = () => {
   };
 
   const deleteConversation = async (id: string) => {
-    const { error } = await supabase
-      .from("chat_conversations")
-      .delete()
-      .eq("id", id);
+    setDeletingConversationId(id);
+    try {
+      const { error } = await supabase
+        .from("chat_conversations")
+        .delete()
+        .eq("id", id);
 
-    if (!error) {
+      if (error) throw error;
+
       const filtered = conversations.filter(c => c.id !== id);
       setConversations(filtered);
       if (currentConversationId === id) {
@@ -312,6 +328,15 @@ const AIChatDashboardPage = () => {
       toast({
         title: "Диалог удален",
       });
+      setConversationToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "Не удалось удалить диалог",
+        description: error?.message || "Попробуйте ещё раз",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingConversationId(null);
     }
   };
 
@@ -549,7 +574,7 @@ const AIChatDashboardPage = () => {
     <>
       <Button
         size="sm"
-        className="w-full mb-4"
+        className="mb-4 w-full flex-shrink-0"
         onClick={() => {
           createNewConversation();
           setMobileSidebarOpen(false);
@@ -558,13 +583,12 @@ const AIChatDashboardPage = () => {
         <Plus className="h-4 w-4 mr-2" />
         Новый диалог
       </Button>
-      
-      <ScrollArea className="h-[calc(100vh-250px)]">
-        <div className="space-y-2">
+      <ScrollArea className="min-h-0 flex-1 overscroll-contain pr-1">
+        <div className="space-y-2 pb-2">
           {conversations.map((conv) => (
             <div
               key={conv.id}
-              className={`p-3 rounded-lg cursor-pointer hover:bg-muted flex items-start justify-between gap-2 ${
+              className={`group p-3 rounded-lg cursor-pointer hover:bg-muted flex items-start justify-between gap-2 ${
                 currentConversationId === conv.id ? 'bg-muted' : ''
               }`}
             >
@@ -586,13 +610,20 @@ const AIChatDashboardPage = () => {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-8 w-8 p-0 flex-shrink-0"
+                className="h-8 w-8 flex-shrink-0 p-0 text-muted-foreground opacity-100 hover:bg-destructive/10 hover:text-destructive md:opacity-70 md:group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
-                  deleteConversation(conv.id);
+                  setConversationToDelete(conv);
                 }}
+                disabled={deletingConversationId === conv.id}
+                aria-label={`Удалить диалог ${conv.title || "Новый диалог"}`}
+                title="Удалить диалог"
               >
-                <Trash2 className="h-3 w-3" />
+                {deletingConversationId === conv.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
               </Button>
             </div>
           ))}
@@ -603,17 +634,17 @@ const AIChatDashboardPage = () => {
 
   return (
     <div
-      className="flex h-[100dvh] min-h-0 flex-col bg-background md:h-auto md:min-h-screen"
+      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background md:h-full"
       style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
     >
       <Header />
-      <main className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-0 py-0 md:container md:mx-auto md:flex-row md:gap-4 md:px-4 md:py-8">
+      <main className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-0 py-0 md:container md:mx-auto md:flex-row md:gap-4 md:px-4 md:py-4">
         {/* Desktop Sidebar */}
         {!isMobile && !isDemoMode && (
-          <div className="hidden md:block w-64 flex-shrink-0 space-y-4">
+          <div className="hidden min-h-0 w-64 flex-shrink-0 flex-col gap-4 md:flex">
             <SubscriptionBanner compact />
-            <Card className="h-full">
-              <CardContent className="p-4">
+            <Card className="min-h-0 flex-1">
+              <CardContent className="flex h-full min-h-0 flex-col p-4">
                 <SidebarContent />
               </CardContent>
             </Card>
@@ -644,7 +675,7 @@ const AIChatDashboardPage = () => {
         )}
 
         {/* Main Chat */}
-        <div className="flex min-h-0 flex-1 flex-col min-w-0">
+        <div className="flex min-h-0 flex-1 flex-col min-w-0 overflow-hidden">
           <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur md:mb-4 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-0">
             {isMobile && !isDemoMode && (
               <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
@@ -653,8 +684,8 @@ const AIChatDashboardPage = () => {
                     <Menu className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] sm:w-[320px]">
-                  <SheetHeader className="mb-4">
+                <SheetContent side="left" className="flex w-[280px] flex-col sm:w-[320px]">
+                  <SheetHeader className="mb-4 flex-shrink-0">
                     <SheetTitle>Диалоги</SheetTitle>
                   </SheetHeader>
                   <SidebarContent />
@@ -705,7 +736,7 @@ const AIChatDashboardPage = () => {
             )}
           </div>
 
-          <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none md:h-[calc(100vh-180px)] md:rounded-lg md:border md:shadow-sm">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 shadow-none md:rounded-lg md:border md:shadow-sm">
             <CardHeader className="hidden flex-shrink-0 px-3 py-2.5 md:flex md:px-6 md:py-4">
               <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
               <p className="text-xs sm:text-sm text-muted-foreground">
@@ -719,9 +750,9 @@ const AIChatDashboardPage = () => {
                 <p className="text-xs text-muted-foreground">📋 Заполните профиль и загрузите документы — ИИ даст персональную консультацию</p>
               )}
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-6">
-              <ScrollArea className="mb-2 min-h-0 flex-1 sm:mb-4" ref={scrollAreaRef}>
-                <div className="space-y-3 pr-2 pb-2 sm:space-y-4 sm:pr-4">
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4">
+              <ScrollArea className="min-h-0 flex-1 overscroll-contain" ref={scrollAreaRef}>
+                <div className="space-y-3 pr-2 pb-3 sm:space-y-4 sm:pr-4">
                   {messages.length === 0 && (
                     <div className="flex flex-col items-center text-center py-6 sm:py-10 px-3 sm:px-4">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 shadow-md">
@@ -848,7 +879,7 @@ const AIChatDashboardPage = () => {
               {!sending &&
                 messages.length > 0 &&
                 messages[messages.length - 1].role === "assistant" && (
-                  <div className="mb-2 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-sm">
+                  <div className="mb-2 mt-2 shrink-0 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-sm">
                     {quickRepliesCollapsed ? (
                       <button
                         type="button"
@@ -899,38 +930,40 @@ const AIChatDashboardPage = () => {
                   </div>
                 )}
 
-              <div className="flex items-end gap-2">
-                <Textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    e.currentTarget.style.height = "auto";
-                    e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 132)}px`;
-                  }}
-                  onFocus={scrollToBottom}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !isMobile) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  placeholder="Введите ваш вопрос..."
-                  enterKeyHint="send"
-                  className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl text-[15px] leading-relaxed sm:text-base"
-                  rows={1}
-                  disabled={sending}
-                  style={{ maxHeight: 132 }}
-                />
-                <Button
-                  onClick={() => sendMessage()}
-                  disabled={sending || !input.trim()}
-                  size="icon"
-                  className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md transition-shadow hover:shadow-lg sm:h-12 sm:w-12"
-                  aria-label="Отправить"
-                >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
+              <div className="shrink-0 border-t border-border/60 bg-background/95 pt-2">
+                <div className="flex items-end gap-2">
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.currentTarget.style.height = "auto";
+                      e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 132)}px`;
+                    }}
+                    onFocus={scrollToBottom}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey && !isMobile) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    placeholder="Введите ваш вопрос..."
+                    enterKeyHint="send"
+                    className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl text-[15px] leading-relaxed sm:text-base"
+                    rows={1}
+                    disabled={sending}
+                    style={{ maxHeight: 132 }}
+                  />
+                  <Button
+                    onClick={() => sendMessage()}
+                    disabled={sending || !input.trim()}
+                    size="icon"
+                    className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md transition-shadow hover:shadow-lg sm:h-12 sm:w-12"
+                    aria-label="Отправить"
+                  >
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -943,6 +976,35 @@ const AIChatDashboardPage = () => {
         type="ai"
         isDemoMode={isDemoMode}
       />
+      <AlertDialog
+        open={!!conversationToDelete}
+        onOpenChange={(open) => {
+          if (!open && !deletingConversationId) setConversationToDelete(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить диалог?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Диалог «{conversationToDelete?.title || "Новый диалог"}» и все сообщения внутри будут удалены без возможности восстановления.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingConversationId}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (conversationToDelete) deleteConversation(conversationToDelete.id);
+              }}
+              disabled={!!deletingConversationId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingConversationId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
