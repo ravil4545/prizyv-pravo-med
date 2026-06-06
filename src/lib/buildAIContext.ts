@@ -1,9 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths, format } from "date-fns";
 
-// 100k оставляет запас 20k до серверного лимита 120k в chat edge-функции.
-// Опросник один может занимать до 6k, профиль ~500, документы — основная масса.
-const MAX_CONTEXT_CHARS = 100000;
+// Контекст ограничен ~40k (раньше 100k): дешевле/быстрее на OpenAI, при этом
+// сохраняется почти весь набор данных пользователя. Базу знаний (RAG) chat
+// edge-функция теперь подмешивает ВСЕГДА (старый Groq-порог 12k снят), так что
+// cap — чисто оптимизация стоимости/скорости и на доступность RAG не влияет.
+// Документы идут от новых к старым → хвостовая обрезка режет старые в первую очередь.
+const MAX_CONTEXT_CHARS = 40000;
 
 /**
  * Собирает полный контекст для ИИ-чата:
@@ -99,7 +102,7 @@ export async function buildAIContext(): Promise<string> {
 
       if (questionnaire?.raw_text) {
         context += "=== МЕДИЦИНСКИЙ ОПРОСНИК (заполнен пользователем) ===\n";
-        context += questionnaire.raw_text.substring(0, 6000);
+        context += questionnaire.raw_text.substring(0, 3500);
         context += "\n\n";
       }
 
@@ -147,10 +150,10 @@ export async function buildAIContext(): Promise<string> {
           const chance = link.ai_category_chance || 0;
           context += `  Статья ${article.article_number} (${article.title}) — шанс кат. В: ${chance}%\n`;
           if (link.ai_explanation) {
-            context += `    Обоснование: ${link.ai_explanation}\n`;
+            context += `    Обоснование: ${String(link.ai_explanation).slice(0, 300)}\n`;
           }
           if (link.ai_recommendations && link.ai_recommendations.length > 0) {
-            context += `    Рекомендации: ${link.ai_recommendations.join("; ")}\n`;
+            context += `    Рекомендации: ${link.ai_recommendations.join("; ").slice(0, 300)}\n`;
           }
           const existing = articleBestChance.get(link.article_id);
           if (!existing || chance > existing.chance) {
