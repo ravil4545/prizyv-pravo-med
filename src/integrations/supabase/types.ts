@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_plan_items: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          lawyer_client_id: string
+          lawyer_id: string
+          order_index: number
+          priority: string
+          source: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          lawyer_client_id: string
+          lawyer_id: string
+          order_index?: number
+          priority?: string
+          source?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          lawyer_client_id?: string
+          lawyer_id?: string
+          order_index?: number
+          priority?: string
+          source?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_plan_items_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_plan_items_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analytics_events: {
         Row: {
           browser: string | null
@@ -266,7 +329,12 @@ export type Database = {
           event_date: string
           event_type: string
           id: string
+          notify_client_email: boolean
+          notify_client_push: boolean
+          notify_lawyer_email: boolean
           outcome: string | null
+          remind_enabled: boolean
+          reminders_sent: string[]
           title: string
           updated_at: string | null
           user_id: string
@@ -277,7 +345,12 @@ export type Database = {
           event_date: string
           event_type: string
           id?: string
+          notify_client_email?: boolean
+          notify_client_push?: boolean
+          notify_lawyer_email?: boolean
           outcome?: string | null
+          remind_enabled?: boolean
+          reminders_sent?: string[]
           title: string
           updated_at?: string | null
           user_id: string
@@ -288,7 +361,12 @@ export type Database = {
           event_date?: string
           event_type?: string
           id?: string
+          notify_client_email?: boolean
+          notify_client_push?: boolean
+          notify_lawyer_email?: boolean
           outcome?: string | null
+          remind_enabled?: boolean
+          reminders_sent?: string[]
           title?: string
           updated_at?: string | null
           user_id?: string
@@ -740,6 +818,66 @@ export type Database = {
         }
         Relationships: []
       }
+      examination_plan_items: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          due_date: string | null
+          id: string
+          item_type: string
+          lawyer_client_id: string
+          lawyer_id: string
+          name: string
+          reason: string | null
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          id?: string
+          item_type: string
+          lawyer_client_id: string
+          lawyer_id: string
+          name: string
+          reason?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          id?: string
+          item_type?: string
+          lawyer_client_id?: string
+          lawyer_id?: string
+          name?: string
+          reason?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "examination_plan_items_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "examination_plan_items_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       family_access: {
         Row: {
           accepted_at: string | null
@@ -988,6 +1126,8 @@ export type Database = {
           created_at: string
           crm_stage: string
           diagnosis: string | null
+          escalated_at: string | null
+          escalation_requested: boolean
           expected_category: string | null
           id: string
           invite_code: string | null
@@ -1013,6 +1153,8 @@ export type Database = {
           created_at?: string
           crm_stage?: string
           diagnosis?: string | null
+          escalated_at?: string | null
+          escalation_requested?: boolean
           expected_category?: string | null
           id?: string
           invite_code?: string | null
@@ -1038,6 +1180,8 @@ export type Database = {
           created_at?: string
           crm_stage?: string
           diagnosis?: string | null
+          escalated_at?: string | null
+          escalation_requested?: boolean
           expected_category?: string | null
           id?: string
           invite_code?: string | null
@@ -1164,6 +1308,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      llm_usage_daily: {
+        Row: {
+          model: string
+          request_count: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          model: string
+          request_count?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Update: {
+          model?: string
+          request_count?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: []
       }
       medical_documents: {
         Row: {
@@ -1391,6 +1556,39 @@ export type Database = {
           work_address?: string | null
           work_place?: string | null
           work_position?: string | null
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_used_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_used_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_used_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -1633,6 +1831,7 @@ export type Database = {
           is_paid: boolean
           paid_until: string | null
           payment_link_clicked_at: string | null
+          trial_ends_at: string | null
           updated_at: string
           user_id: string
         }
@@ -1647,6 +1846,7 @@ export type Database = {
           is_paid?: boolean
           paid_until?: string | null
           payment_link_clicked_at?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1661,6 +1861,7 @@ export type Database = {
           is_paid?: boolean
           paid_until?: string | null
           payment_link_clicked_at?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1783,6 +1984,10 @@ export type Database = {
         Args: { p_lawyer_client_id: string }
         Returns: boolean
       }
+      client_escalate_to_lawyer: {
+        Args: { p_lawyer_client_id: string; p_summary?: string }
+        Returns: undefined
+      }
       client_pending_requests: {
         Args: never
         Returns: {
@@ -1809,12 +2014,23 @@ export type Database = {
       current_user_email: { Args: never; Returns: string }
       generate_lawyer_invite_code: { Args: never; Returns: string }
       get_user_email_safe: { Args: { p_user_id: string }; Returns: string }
+      get_vapid_keys: {
+        Args: never
+        Returns: {
+          private_key: string
+          public_key: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      lawyer_clear_escalation: {
+        Args: { p_lawyer_client_id: string }
+        Returns: undefined
       }
       lawyer_delete_client: {
         Args: { p_lawyer_client_id: string }
@@ -1844,6 +2060,8 @@ export type Database = {
           new_invite_code: string
         }[]
       }
+      llm_increment_rpd: { Args: { p_model: string }; Returns: number }
+      match_cron_secret: { Args: { p_token: string }; Returns: boolean }
       match_rag_chunks: {
         Args: {
           match_count?: number
