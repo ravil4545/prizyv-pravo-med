@@ -26,9 +26,9 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY not configured");
     }
 
     // Clean base64 if it has data URL prefix
@@ -78,30 +78,21 @@ serve(async (req) => {
 
 Результат: чистый белый документ с улучшенной читаемостью ОРИГИНАЛЬНОГО содержимого.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // OpenAI Images API (gpt-image-1): редактирование изображения (фото → чистый скан).
+    // input_fidelity=high — сохранять детали оригинала, чтобы НЕ потерять/исказить
+    // текст, печати и подписи документа.
+    const imgBytes = Uint8Array.from(atob(cleanBase64), (c) => c.charCodeAt(0));
+    const ext = mimeType === "image/png" ? "png" : (mimeType === "image/webp" ? "webp" : "jpg");
+    const form = new FormData();
+    form.append("model", "gpt-image-1");
+    form.append("image", new Blob([imgBytes], { type: mimeType }), `document.${ext}`);
+    form.append("prompt", prompt);
+    form.append("size", "auto");
+    form.append("input_fidelity", "high");
+    const response = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${cleanBase64}`,
-                },
-              },
-            ],
-          },
-        ],
-        modalities: ["image", "text"],
-      }),
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: form,
     });
 
     if (!response.ok) {
@@ -115,14 +106,15 @@ serve(async (req) => {
         });
       }
 
-      throw new Error(`AI API error: ${response.status}`);
+      throw new Error(`AI API error: ${response.status}: ${errorText.slice(0, 400)}`);
     }
 
     const data = await response.json();
     console.log("AI response received");
 
-    // Extract enhanced image from response
-    const enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    // Extract enhanced image from response (gpt-image-1 → data[0].b64_json)
+    const b64out = data?.data?.[0]?.b64_json;
+    const enhancedImageUrl = b64out ? `data:image/png;base64,${b64out}` : null;
 
     if (!enhancedImageUrl) {
       console.log("No enhanced image in response, returning original");

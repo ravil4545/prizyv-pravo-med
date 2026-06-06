@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("OPENAI_API_KEY не настроен");
 
     const today = new Date().toISOString().slice(0, 10);
     const prompt = `Извлеки из сообщения призывника возможную дату повестки/явки в военкомат/призыва.

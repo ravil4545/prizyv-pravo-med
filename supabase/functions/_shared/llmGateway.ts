@@ -1,67 +1,39 @@
 // ════════════════════════════════════════════════════════════════════════
-//  LLMGateway — единая точка доступа к LLM (ТЗ §0.1, §0.3).
+//  LLMGateway — единая точка доступа к OpenAI API (ТЗ §0.1, §0.3).
 //
-//  • Провайдер по умолчанию — Groq (OpenAI-совместим, open-source модели).
-//  • Модель/URL/ключ — ТОЛЬКО из окружения, без хардкода в агентах.
-//    Смена модели/провайдера — конфигом, без правок кода агентов.
-//  • Ретраи с экспоненциальной паузой на 429/503 (free-tier Groq: ~30 RPM,
-//    ~6K TPM, ~1K RPD — лимиты строгие).
+//  Модель/URL/ключ — ТОЛЬКО из окружения, без хардкода в агентах. Смена
+//  модели — секретами Supabase, без правок кода агентов.
 //
-//  ⚠️ Vision: Groq НЕ читает изображения. OCR/анализ картинок идёт отдельным
-//     путём (analyze-medical-document на Gemini), сюда не маршрутизируется.
+//  Ретраи с экспоненциальной паузой на 429/503.
 //
-//  TODO (ТЗ §0.1, следующий шаг): собственный суточный счётчик RPD
-//     (Groq не отдаёт RPD в заголовках; сброс в полночь UTC) — таблица +
-//     проверка перед вызовом, чтобы не упереться в потолок незаметно.
+//  Совместимость моделей (compat-шим в llmChat):
+//    • OpenAI использует `max_completion_tokens` (а не `max_tokens`).
+//    • reasoning-семейства (gpt-5*, o1/o3/o4…) НЕ принимают кастомную
+//      temperature — для них её НЕ отправляем (берётся дефолтная).
+//
+//  ⚠️ Vision: content сообщения может быть массивом частей (text + image_url),
+//     поэтому vision-функции тоже могут ходить через этот шлюз.
 // ════════════════════════════════════════════════════════════════════════
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const OPENAI_BASE_URL = Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 
-const GROQ_BASE_URL = Deno.env.get("GROQ_BASE_URL") || "https://api.groq.com/openai/v1";
-const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") || "";
-const RPD_LIMIT = Number(Deno.env.get("GROQ_RPD_LIMIT") || "1000");
+// Модели переопределяются env. Сохранены имена экспортов MODEL_MAIN/MODEL_FAST,
+// чтобы вызывающие функции не менялись.
+export const MODEL_MAIN = Deno.env.get("OPENAI_MODEL_MAIN") || "gpt-4.1-mini";
+export const MODEL_FAST = Deno.env.get("OPENAI_MODEL_FAST") || "gpt-4.1-nano";
 
-// Модели — из каталога Groq, переопределяются через env (см. ТЗ §0.3).
-export const MODEL_MAIN = Deno.env.get("GROQ_MODEL_MAIN") || "llama-3.3-70b-versatile";
-export const MODEL_FAST = Deno.env.get("GROQ_MODEL_FAST") || "llama-3.1-8b-instant";
+export const isLlmConfigured = (): boolean => !!OPENAI_API_KEY;
 
-export const isLlmConfigured = (): boolean => !!GROQ_API_KEY;
+// reasoning-модели (gpt-5*, o1/o3/o4…) не принимают кастомную temperature.
+const isReasoningModel = (model: string): boolean => /^(gpt-5|o\d)/i.test(model);
 
-// ── Суточный RPD-счётчик (best-effort, fail-open) ───────────────────────────
-let _sb: ReturnType<typeof createClient> | null = null;
-function getServiceClient() {
-  if (_sb) return _sb;
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) return null;
-  _sb = createClient(url, key);
-  return _sb;
-}
-
-// Инкрементит суточный счётчик модели и возвращает {ok, count}. При любой
-// ошибке БД — fail-open (ok=true), чтобы счётчик не блокировал ИИ.
-async function checkRpd(model: string): Promise<{ ok: boolean; count: number }> {
-  try {
-    const c = getServiceClient();
-    if (!c) return { ok: true, count: 0 };
-    const { data, error } = await c.rpc("llm_increment_rpd", { p_model: model });
-    if (error) {
-      console.error("[LLMGateway] RPD rpc error:", error.message);
-      return { ok: true, count: 0 };
-    }
-    const count = Number(data) || 0;
-    return { ok: count <= RPD_LIMIT, count };
-  } catch (e) {
-    console.error("[LLMGateway] RPD check failed:", e instanceof Error ? e.message : e);
-    return { ok: true, count: 0 };
-  }
-}
-
-// Сообщение чата. Допускает поля function-calling (tool_calls у ассистента,
-// tool_call_id/name у роли "tool") — Groq OpenAI-совместим.
+// Сообщение чата. content допускает массив частей (vision: text+image_url).
+// Допускает поля function-calling (tool_calls, tool_call_id, name) — OpenAI.
 export interface LlmMessage {
   role: string;
-  content: string | null;
+  // deno-lint-ignore no-explicit-any
+  content: string | any[] | null;
   // deno-lint-ignore no-explicit-any
   tool_calls?: any[];
   tool_call_id?: string;
@@ -88,12 +60,12 @@ export interface LlmChatOpts {
 }
 
 /**
- * Вызов chat/completions у провайдера. Возвращает сырой Response (ok или нет):
+ * Вызов OpenAI chat/completions. Возвращает сырой Response:
  * стрим-режим отдаётся вызывающему как есть (он пробрасывает res.body),
  * non-stream — caller сам читает res.json(). Ретраи на 429/503 — внутри.
  */
 export async function llmChat(opts: LlmChatOpts): Promise<Response> {
-  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY не настроен");
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY не настроен");
 
   const {
     messages,
@@ -108,32 +80,25 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     toolChoice,
   } = opts;
 
-  const payload: Record<string, unknown> = { model, messages, temperature, stream };
+  const payload: Record<string, unknown> = { model, messages, stream };
+
+  // OpenAI: max_completion_tokens; temperature только для не-reasoning моделей.
+  if (!isReasoningModel(model)) payload.temperature = temperature;
+  if (maxTokens) payload.max_completion_tokens = maxTokens;
+
   if (responseFormat) payload.response_format = { type: responseFormat };
-  if (maxTokens) payload.max_tokens = maxTokens;
   if (tools?.length) {
     payload.tools = tools;
     payload.tool_choice = toolChoice ?? "auto";
   }
   const body = JSON.stringify(payload);
 
-  // P0.1 (ТЗ §0.1): суточный лимит запросов. Инкрементим счётчик; при упоре
-  // отдаём синтетический 429 (caller обработает как обычный rate-limit).
-  const rpd = await checkRpd(model);
-  if (!rpd.ok) {
-    console.warn(`[LLMGateway] RPD limit ${rpd.count}/${RPD_LIMIT} for ${model}`);
-    return new Response(
-      JSON.stringify({ error: "Дневной лимит запросов к ИИ исчерпан. Попробуйте позже." }),
-      { status: 429, headers: { "Content-Type": "application/json" } },
-    );
-  }
-
   let res!: Response;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    res = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
+    res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body,
@@ -145,9 +110,6 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     // 429 (лимит) / 503 — транзиентные: ждём и повторяем.
     if ((res.status === 429 || res.status === 503) && attempt < maxRetries) {
       const retryAfter = Number(res.headers.get("retry-after"));
-      // Groq часто кладёт задержку только в ТЕЛО ответа («try again in 5.6s»),
-      // а не в заголовок retry-after → тогда он NaN. Минутное TPM-окно за 1–4с
-      // не освобождается, поэтому фолбэк длиннее: 5с, 8с, 11с (потолок 15с).
       const waitSec = Number.isFinite(retryAfter) && retryAfter > 0
         ? Math.min(retryAfter, 15)
         : Math.min(2 + attempt * 3, 15);

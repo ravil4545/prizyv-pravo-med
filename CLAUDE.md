@@ -28,7 +28,7 @@ No test runner is configured (no Jest/Vitest).
 
 **Frontend**: React 18 + TypeScript + Vite, shadcn/ui (Radix) + Tailwind CSS, React Router v6, React Query v5, React Hook Form + Zod.
 
-**Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions in Deno). All AI calls go through Supabase Edge Functions using `LOVABLE_API_KEY` — never directly from the frontend.
+**Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions in Deno). All AI calls go through Supabase Edge Functions using `OPENAI_API_KEY` — never directly from the frontend.
 
 ### Key Directories
 
@@ -85,7 +85,7 @@ Design tokens are HSL CSS variables defined in [src/index.css](src/index.css). D
 
 ### Environment Variables
 
-[.env](.env) contains public Supabase keys (safe to commit). Backend secrets (`LOVABLE_API_KEY`, `RESEND_API_KEY`) live only in the Supabase Dashboard.
+[.env](.env) contains public Supabase keys (safe to commit). Backend secrets (`OPENAI_API_KEY`, `RESEND_API_KEY`) live only in the Supabase Dashboard.
 
 ### Deployment
 
@@ -101,3 +101,34 @@ supabase db push
 ### Lovable ↔ GitHub Sync
 
 The repo has bidirectional sync with the Lovable platform. Push changes here → they appear in Lovable. Changes made in Lovable auto-commit to GitHub.
+
+## RAG / «Второй мозг» (база знаний ИИ)
+
+Экспертная база знаний юриста живёт в Obsidian-волте **`D:\Obsidian\SecondBrain`** (заболевания, юр.процедуры, документооборот, FAQ, расписание болезней + реальная практика: кейсы, вопросы врачу, консультации, стратегии). Она загружается в Supabase для семантического поиска.
+
+**Конвейер:** [`scripts/ingest_rag.py`](scripts/ingest_rag.py) читает волт → эмбеддинги Jina v3 (1024 dims) → таблицы:
+- `rag_chunks` — чанки знаний с метаданными. **`category` задаётся СТРОГО ПО ПАПКЕ волта** (источник истины — `FOLDER_CATEGORY` в ingest; ручной frontmatter `category` НЕ главнее — он рассинхронивался). 13 канонических категорий: `medical_condition`, `legal_procedure`, `document_guide`, `faq`, `schedule_rb` (разбор глав РБ), `rb_official` (дословный текст РБ-565), `reference`, `strategy`, `web_source`, `case`, `doctor_qa`, `consultation`, `transcript`.
+- `rag_system_context` — 5 фундаментальных блоков (рамка консультации, мед./процедурные тонкости, диагностический анализ, правила улучшения), включаются в каждый промпт.
+- `rag_index` (VIEW) — оглавление: файл → категория, статьи РБ, размер. Для роутинга и генерации `00_Home/Оглавление.md`.
+- Навигационные файлы (`_MOC_*`, `Home`, `README`, `00_Index`, `00_Start_Here`, папка `00_Home`) НЕ индексируются (см. `SKIP_*` в ingest).
+- Поиск: RPC `match_rag_chunks(query_embedding, match_count, min_similarity, filter_categories?, filter_articles?)` — два последних параметра опциональны (точечный срез по разделам/статьям, обратносовместимо).
+
+Ключи берутся из env или из gitignored `scripts/ingest.secrets.env` (шаблон — `ingest.secrets.example.env`). НЕ хардкодить ключи в коде.
+
+**Где ИИ использует базу** (общий модуль [`supabase/functions/_shared/ragSearch.ts`](supabase/functions/_shared/ragSearch.ts)):
+- `chat-rag` — публичный виджет «База знаний» (гибрид keyword+вектор, срез `KNOWLEDGE_CATEGORIES`).
+- `chat` — клиентский ИИ-ассистент: подмешивает релевантные чанки в system-prompt (гибрид, срез `KNOWLEDGE_CATEGORIES`, fail-open).
+- `analyze-medical-document` — после анализа сверяет документ с экспертными требованиями по статьям (`searchByArticles`) и возвращает `documentGaps` (чего не хватает в документе).
+- Агенты-юристы (`lawyer-case-assistant`, `lawyer-build-plan`) — инструмент `search_knowledge` в [`_shared/agentTools.ts`](supabase/functions/_shared/agentTools.ts).
+
+**Пополнение базы — «запомнить факт → второй мозг».** Когда пользователь просит запомнить доменный факт/правило/особенность диагноза (про призыв, ВВК, РБ-565, документы), это знание должно попасть В ВОЛТ, а не только в память ассистента:
+- CLI: [`scripts/add_note.py`](scripts/add_note.py) `--category <medical_condition|legal_procedure|document_guide|faq|reference|strategy|case> --title "…" --articles 68 --content "…"` — создаёт заметку с frontmatter и сразу индексирует в `rag_chunks`.
+- Вручную: создать `.md` в нужной папке `SecondBrain` с frontmatter (`category`, `schedule_articles`, `target_category`, `type`, `anonymized: true`) → прогнать `ingest_rag.py` (idempotent upsert по id).
+- Личная оперативная память ассистента (заметки о ходе проекта) — это ДРУГОЕ; доменные знания о призыве идут в SecondBrain.
+
+После правок волта — перезапустить `ingest_rag.py` (полная пересборка: `--fresh`), затем `build_index.py` (обновляет `00_Home/Оглавление.md` — карту разделов + индекс по статьям РБ). NB: категория = РАСПОЛОЖЕНИЕ файла (папка), не frontmatter.
+
+**Точечный поиск (чтобы не раздувать промпт)** — пресеты и хелперы в `ragSearch.ts`:
+- `KNOWLEDGE_CATEGORIES` / `PRACTICE_CATEGORIES` — срезы базы. Публичный `chat-rag` и клиентский `chat` ищут ТОЛЬКО по `KNOWLEDGE_CATEGORIES` (сырая практика с возможными ПДн в ответы не подмешивается).
+- `extractArticleNumbers(text)` — вытащить статьи РБ из запроса (для фильтра `filter_articles`).
+- `searchByArticles` — точная выборка по статьям РБ без эмбеддинга (используется в `analyze-medical-document`).

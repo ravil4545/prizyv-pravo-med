@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       docs = (data || []) as typeof docs;
     }
 
-    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("OPENAI_API_KEY не настроен");
 
     const docList = docs.length === 0
       ? "(документов нет)"
@@ -127,7 +127,7 @@ ${docList}
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("OpenRouter error:", aiRes.status, errText);
+      console.error("OpenAI error:", aiRes.status, errText);
       throw new Error(`AI сервис вернул ошибку: ${aiRes.status}`);
     }
 

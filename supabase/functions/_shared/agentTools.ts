@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════
 //  Agent Tools (ТЗ §2.2) — function-calling инструменты для агентов A1–A5.
 //
-//  Groq OpenAI-совместим → используем стандартный tool-calling. Здесь:
+//  OpenAI tool-calling. Здесь:
 //    • определения инструментов (JSON-схема функций),
 //    • безопасный диспетчер runTool (проверка владения, без IDOR),
 //    • цикл runWithTools — гоняет модель ↔ инструменты до финального ответа.
@@ -20,14 +20,15 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import { llmChat, type LlmMessage, type LlmTool, MODEL_MAIN } from "./llmGateway.ts";
+import { searchByText } from "./ragSearch.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = any;
 
 // Обрезка результатов инструментов. Намеренно небольшая: результат вызова
 // дописывается в историю диалога и ПЕРЕСЫЛАЕТСЯ моделью каждый следующий раунд,
-// поэтому крупные тела статей РБ/документов быстро выжигают минутный TPM-лимит
-// Groq (free-tier 12000 ток/мин). 1400/1600 достаточно для сути, без раздувания.
+// поэтому крупные тела статей РБ/документов быстро раздувают историю.
+// 1400/1600 символов достаточно для сути.
 const RB_BODY_CAP = 1400;
 const DOC_TEXT_CAP = 1600;
 
@@ -59,9 +60,8 @@ export const AGENT_TOOLS: LlmTool[] = [
         properties: {
           query: { type: "string", description: "Диагноз или ключевые слова (например, «плоскостопие», «гипертония», «сколиоз»)." },
           // ВАЖНО: НЕ объявляем integer-параметры в схемах инструментов.
-          // llama-3.3-70b на Groq часто отдаёт числовой аргумент СТРОКОЙ ("5"),
-          // и Groq строго валидирует его → 400 «/limit: expected integer, but
-          // got string». Лимит фиксируем в коде (см. runTool: search_rb).
+          // Модели иногда отдают числовой аргумент СТРОКОЙ ("5").
+          // Лимит фиксируем в коде (см. runTool: search_rb).
         },
         required: ["query"],
       },
@@ -79,6 +79,21 @@ export const AGENT_TOOLS: LlmTool[] = [
           article_number: { type: "string", description: "Номер статьи РБ, например «68» или «43»." },
         },
         required: ["article_number"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_knowledge",
+      description:
+        "Поиск по ЭКСПЕРТНОЙ базе знаний юриста («второй мозг»): тактика по диагнозу, требования к оформлению документов, чек-листы, разбор реальных кейсов и стратегии — то, чего НЕТ в сухом тексте закона. Используй, чтобы найти практические рекомендации, пограничные значения, типичные ошибки и тактику усиления позиции. Дополняет search_rb (текст Расписания болезней).",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Диагноз/тема/ключевые слова (например, «плоскостопие тактика», «бронхиальная астма документы», «обжалование сроки»)." },
+        },
+        required: ["query"],
       },
     },
   },
@@ -196,7 +211,7 @@ export const PLANNER_WRITE_TOOLS: LlmTool[] = [
 ];
 
 // Отложенные инструменты (P3/P4): схемы существуют, но по умолчанию НЕ
-// передаются модели. save_extraction — нужна точка persist'а (A1/Gemini-путь);
+// передаются модели. save_extraction — нужна точка persist'а;
 // create_template_draft — это A5/шаблоны (P4).
 export const DEFERRED_TOOL_NAMES = [
   "save_extraction",
@@ -262,6 +277,21 @@ export async function runTool(
         title: data.title,
         category: data.category ?? null,
         body: cap(data.body as string, RB_BODY_CAP),
+      };
+    }
+
+    case "search_knowledge": {
+      const term = sanitizeTerm(String(args.query ?? ""));
+      if (!term) return { error: "Пустой запрос" };
+      const chunks = await searchByText(sb, term, 4);
+      if (!chunks.length) return { results: [], note: "В экспертной базе ничего не найдено по запросу." };
+      return {
+        results: chunks.map((c) => ({
+          category: c.category ?? null,
+          section: c.section_title ?? null,
+          articles: c.schedule_articles ?? [],
+          snippet: cap(c.content, 600),
+        })),
       };
     }
 
@@ -358,7 +388,7 @@ export async function runTool(
       return { saved: valid.length, replaced: replace };
     }
 
-    // Отложено: save_extraction (нужна точка persist'а на A1/Gemini-пути),
+    // Отложено: save_extraction (нужна точка persist'а),
     // create_template_draft (A5/шаблоны — P4).
     case "save_extraction":
     case "create_template_draft":

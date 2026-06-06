@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Клиент не найден или нет доступа" }, { status: 403, headers: corsHeaders(req) });
     }
 
-    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("OPENAI_API_KEY не настроен");
 
     const CRM_STAGES: Record<string, string> = {
       initial_contact: "Первичный контакт", no_diagnosis: "Нет диагноза",
@@ -139,7 +139,7 @@ ${historyLines ? `\nПредыстория переписки (использу�
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("[lawyer-chat-suggest] Groq error:", aiRes.status, errText);
+      console.error("[lawyer-chat-suggest] OpenAI error:", aiRes.status, errText);
       throw new Error(`AI сервис вернул ошибку: ${aiRes.status}`);
     }
 

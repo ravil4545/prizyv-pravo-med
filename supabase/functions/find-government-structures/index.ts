@@ -21,7 +21,7 @@ serve(async (req) => {
     const { city, address, region } = await req.json();
 
     if (!isLlmConfigured()) {
-      throw new Error("GROQ_API_KEY is not configured");
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const isMoscow = city?.toLowerCase().includes("москва") || region?.toLowerCase().includes("москва");

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 
 // CORS configuration - allow production and preview origins
 const getAllowedOrigin = (req?: Request) => {
@@ -86,11 +87,8 @@ serve(async (req) => {
       });
     }
 
-    // Lovable AI Gateway — единый провайдер для всех edge-функций
-    // (analyze-medical-document, parse-summons, generate-appeal — все на нём).
-    // Lovable оплачивает usage, лимиты гораздо щедрее чем у OpenRouter free.
     if (!isLlmConfigured()) {
-      throw new Error("GROQ_API_KEY is not configured");
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     let systemPrompt = `Вы — виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
@@ -229,18 +227,38 @@ serve(async (req) => {
 ${medicalContext}`;
     }
 
-    // Fallback-цепочка моделей. Делаем NON-STREAM запросы:
-    // streaming-режим OpenRouter иногда возвращает 200 + только keepalive
-    // ": OPENROUTER PROCESSING" в течение долгого времени (модель в очереди).
-    // Тогда наш стрим висит, клиент таймаутится без полезных данных, и мы
-    // не можем переключиться на другую модель.
-    // Non-stream: ждём полный ответ с серверным timeout 25 сек на модель.
-    // Если модель не отдала контент за это время — пробуем следующую.
-    // Клиенту отдаём результат как искусственный SSE-стрим (одним чанком) —
-    // существующий клиент работает без изменений.
-    // Единый провайдер — Lovable AI Gateway. Тот же, что в
-    // analyze-medical-document, parse-summons, generate-appeal.
-    // gemini-2.5-flash достаточно быстрая и хорошо знает русский.
+    // RAG: ищем релевантные экспертные материалы из «второго мозга» (rag_chunks).
+    // Кладём их НЕ в общий system-prompt (там тонут среди инструкций), а
+    // отдельным сообщением вплотную к вопросу — так модель приоритизирует базу.
+    // Fail-open: при ошибке/без ключа отвечаем без RAG.
+    let ragContext = "";
+    try {
+      const ctxLen = medicalContext?.length ?? 0;
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      // Только если контекст пользователя не огромный — иначе превысим TPM-лимит (413).
+      if (lastUser?.content && ctxLen < 12000) {
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+        const ragClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const chunks = await searchHybrid(ragClient, lastUser.content, {
+          matchCount: 6,
+          categories: KNOWLEDGE_CATEGORIES, // клиентский ассистент — только выверенные знания, без сырой практики
+        });
+        if (chunks.length) {
+          ragContext = `Ниже — выдержки из ЭКСПЕРТНОЙ БАЗЫ ЗНАНИЙ юриста (приоритетный источник). Отвечай по существу на их основе, конкретные цифры/пороги бери из них, цитируй статьи в формате [Ст. NN]. Если нужных данных в выдержках нет — честно скажи об этом, не выдумывай.
+
+${renderChunks(chunks, 1100)}`;
+          console.log("[Chat] RAG: подмешано чанков:", chunks.length);
+        }
+      }
+    } catch (e) {
+      console.error("[Chat] RAG enrich failed (continuing without):", e instanceof Error ? e.message : e);
+    }
+
+    // Делаем non-stream запрос к OpenAI, затем отдаём результат как SSE-стрим
+    // одним чанком, чтобы существующий клиент работал без изменений.
     const PRIMARY_MODEL = MODEL_MAIN;
     const TIMEOUT_MS = 50_000; // запас под клиентский 60 сек
 
@@ -252,27 +270,33 @@ ${medicalContext}`;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
-    console.log("[Chat] Calling Lovable Gateway, model:", PRIMARY_MODEL, "messages:", messages.length);
+    console.log("[Chat] Calling OpenAI, model:", PRIMARY_MODEL, "messages:", messages.length);
 
     try {
+      const chatMsgs = [{ role: "system", content: systemPrompt }, ...messages];
+      // Материалы базы знаний — отдельным system-сообщением ПЕРЕД последним
+      // сообщением пользователя (так у модели максимальный приоритет на них).
+      if (ragContext) {
+        chatMsgs.splice(chatMsgs.length - 1, 0, { role: "system", content: ragContext });
+      }
       const r = await llmChat({
         model: PRIMARY_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        messages: chatMsgs,
         signal: ctrl.signal,
       });
       clearTimeout(t);
-      console.log("[Chat] Lovable Gateway →", r.status);
+      console.log("[Chat] OpenAI →", r.status);
 
       if (!r.ok) {
         lastStatus = r.status;
         lastErrorText = await r.text();
-        console.error("[Chat] Lovable Gateway failed:", r.status, lastErrorText.slice(0, 400));
+        console.error("[Chat] OpenAI failed:", r.status, lastErrorText.slice(0, 400));
       } else {
         const data = await r.json();
         const c: string = data?.choices?.[0]?.message?.content || "";
         if (c && c.trim()) {
           content = c;
-          usedModel = `groq/${PRIMARY_MODEL}`;
+          usedModel = `openai/${PRIMARY_MODEL}`;
         } else {
           lastErrorText = "empty content";
         }
@@ -280,7 +304,7 @@ ${medicalContext}`;
     } catch (err) {
       clearTimeout(t);
       lastErrorText = err instanceof Error ? err.message : String(err);
-      console.error("[Chat] Lovable Gateway error:", lastErrorText);
+      console.error("[Chat] OpenAI error:", lastErrorText);
     }
 
     if (!content) {

@@ -191,8 +191,7 @@ serve(async (req) => {
       context += userContext;
     }
 
-    // Lovable AI Gateway вместо OpenRouter — тот же ключ что в
-    // analyze-medical-document, Lovable оплачивает usage.
+    // Генерация жалобы через общий OpenAI LLM-шлюз.
     if (!isLlmConfigured()) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
         status: 500,

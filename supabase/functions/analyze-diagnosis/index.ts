@@ -51,7 +51,7 @@ serve(async (req) => {
     const { diagnosisName, diagnosisCode } = await req.json();
 
     if (!isLlmConfigured()) {
-      throw new Error("GROQ_API_KEY is not configured");
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const prompt = `Проанализируй следующий диагноз и определи предварительную категорию годности к военной службе согласно Расписанию болезней РФ:

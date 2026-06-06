@@ -69,11 +69,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: "lawyerClientId обязателен" }, { status: 400, headers: corsHeaders(req) });
     }
 
-    if (!isLlmConfigured()) throw new Error("GROQ_API_KEY не настроен");
+    if (!isLlmConfigured()) throw new Error("OPENAI_API_KEY не настроен");
 
     // Context Bundle (проверка владения карточкой — внутри ассемблера).
     const bundle = await assembleLawyerClientContext(serviceClient, lawyerClientId, user.id);
-    // Бюджет контекста урезан под free-tier TPM Groq (12000 ток/мин): агент
+    // Бюджет контекста урезан, чтобы многораундовый агент стабильно укладывался в лимиты:
     // многораундовый, каждый раунд пересылает растущую историю — компактный
     // контекст не даёт прогону упереться в лимит.
     const contextBlock = serializeBundle(bundle, { maxChars: 3500, docTextChars: 400 });

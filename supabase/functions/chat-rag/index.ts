@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { llmChat, MODEL_FAST, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 
 // ─── CORS (same pattern as other functions in this project) ──────────────────
 const getAllowedOrigin = (req: Request): string => {
@@ -23,7 +24,7 @@ const supabase = createClient(
 );
 
 const JINA_KEY = Deno.env.get("JINA_API_KEY");
-// Текстовый агент (RAG-виджет) теперь через единый LLMGateway (Groq).
+// Текстовый агент (RAG-виджет) идёт через единый OpenAI LLMGateway.
 // Vision не нужен — это чисто текстовый RAG-чат по базе знаний.
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
@@ -63,17 +64,25 @@ async function getSystemContext(): Promise<string> {
     );
   }
 
+  // Обрезаем каждый блок: суммарный system-context разросся (>47k символов),
+  // что вместе с retrieved-чанками превышало лимит запроса к LLM (413).
+  const BLOCK_CAP = 2500;
   const map = Object.fromEntries(data.map((r) => [r.name, r.content]));
   cachedSystemContext = ORDER
     .filter((n) => map[n])
-    .map((n) => `### ${n}\n\n${map[n]}`)
+    .map((n) => {
+      const c = map[n].length > BLOCK_CAP ? map[n].slice(0, BLOCK_CAP) + "…" : map[n];
+      return `### ${n}\n\n${c}`;
+    })
     .join("\n\n---\n\n");
 
   return cachedSystemContext;
 }
 
 // ─── Jina AI embeddings (jina-embeddings-v3, 1024 dims, strong Russian support) ─
-async function embed(text: string, task: "retrieval.query" | "retrieval.passage" = "retrieval.query"): Promise<number[]> {
+// task по умолчанию retrieval.passage — симметрично инжесту (ingest_rag.py).
+// Асимметрия query/passage на этой базе давала низкую similarity и мусор.
+async function embed(text: string, task: "retrieval.query" | "retrieval.passage" = "retrieval.passage"): Promise<number[]> {
   if (!JINA_KEY) throw new Error("JINA_API_KEY не настроен");
 
   const res = await fetch("https://api.jina.ai/v1/embeddings", {
@@ -110,7 +119,7 @@ Deno.serve(async (req) => {
   try {
     if (!JINA_KEY || !isLlmConfigured()) {
       return Response.json(
-        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "GROQ_API_KEY не настроен" },
+        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "OPENAI_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -136,39 +145,27 @@ Deno.serve(async (req) => {
 
     const { message, history } = parsed.data;
 
-    // 1. Embed the user query
-    const queryEmbedding = await embed(message);
-
-    // 2. Semantic search over knowledge base
-    const { data: chunks, error: searchError } = await supabase.rpc(
-      "match_rag_chunks",
-      {
-        query_embedding: queryEmbedding,
-        match_count: 5,
-        min_similarity: 0.3,
-      },
-    );
-
-    if (searchError) {
-      console.error("[chat-rag] Vector search error:", searchError);
-    }
-
-    const retrievedContext = (chunks ?? [])
-      .map((c: { id: string; content: string; category: string | null }) => {
-        const tag = c.category ? `[${c.category}] ` : "";
-        return `${tag}${c.content}`;
-      })
-      .join("\n\n---\n\n");
+    // 1-2. Гибридный поиск по базе знаний (keyword + вектор) — устойчивее
+    // чистого вектора на русских мед-текстах (низкая дискриминация Jina v3).
+    // Чанки обрезаются (1600), чтобы таблицы степеней/порогов не резались на половине.
+    const chunks = await searchHybrid(supabase, message, {
+      matchCount: 6,
+      categories: KNOWLEDGE_CATEGORIES, // публичный виджет — только выверенные знания, без сырой практики
+    });
+    const retrievedContext = renderChunks(chunks, 1600);
 
     // 3. Load foundational system context (cached after first call)
     const sysCtx = await getSystemContext();
 
-    // System prompt — included in every request, cached by OpenRouter for Claude
+    // System prompt — included in every OpenAI request
     const systemText =
       `Ты — специализированный AI-помощник сайта nepriziv.ru. Помогаешь призывникам разобраться в военно-медицинской экспертизе и юридических процедурах призыва в РФ.
 
 ПРАВИЛА:
-- Отвечай ТОЛЬКО на основе материалов из базы знаний ниже
+- ГЛАВНЫЙ ИСТОЧНИК — блок «НАЙДЕННЫЕ МАТЕРИАЛЫ ПО ТЕМЕ» в сообщении пользователя. Отвечай строго по нему; общая «База знаний» ниже — только фон.
+- ВСЕ ЧИСЛА И ПОРОГИ (градусы, диоптрии, мм, степени/стадии, номера статей и пунктов, категории) бери ДОСЛОВНО из «Найденных материалов». НИКОГДА не указывай числовые границы по памяти.
+- Если в материалах есть таблица степеней/категорий — определяй степень и категорию СТРОГО по диапазону из таблицы, не сдвигая и не округляя границы (например, значение на границе диапазона относится к тому диапазону, где оно явно указано).
+- Если нужного числа/порога в материалах НЕТ — честно скажи, что нужно уточнить, и предложи консультацию. НЕ придумывай числа и не бери их «из общих знаний».
 - Конкретно указывай статьи Расписания болезней (ПП РФ №565) и нормы ФЗ-53
 - Если нужной информации нет — честно скажи и предложи личную консультацию: +7 (925) 350-05-33
 - Язык: русский, понятный призывнику 18 лет, без юридического жаргона
@@ -187,12 +184,14 @@ ${sysCtx}`;
 
     // User turn: retrieved chunks + actual question
     const userContent = retrievedContext
-      ? `Найденные материалы по теме:\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
+      ? `НАЙДЕННЫЕ МАТЕРИАЛЫ ПО ТЕМЕ (это основной источник; числа, степени, категории и статьи бери дословно отсюда):\n\n${retrievedContext}\n\n---\n\nВопрос: ${message}`
       : `Вопрос: ${message}`;
 
-    // 4. Текстовый LLM через единый LLMGateway (Groq, лёгкая/быстрая модель).
+    // 4. Текстовый LLM через единый OpenAI LLMGateway.
     const aiRes = await llmChat({
-      model: MODEL_FAST,
+      // 70b-модель (TPM 12000) вместо 8b (TPM 6000): база знаний + system-context
+      // в одном запросе не влезали в лимит малой модели.
+      model: MODEL_MAIN,
       stream: true,
       messages: [
         { role: "system", content: systemText },
@@ -204,7 +203,7 @@ ${sysCtx}`;
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("[chat-rag] Groq error:", aiRes.status, errText);
+      console.error("[chat-rag] OpenAI error:", aiRes.status, errText);
 
       if (aiRes.status === 429) {
         return Response.json(

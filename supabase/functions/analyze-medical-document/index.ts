@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { searchByArticles, renderChunks } from "../_shared/ragSearch.ts";
 
 const getAllowedOrigin = (req?: Request) => {
   const requestOrigin = req?.headers.get("origin") || "";
@@ -90,7 +91,9 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    // Vision-модель OpenAI (читает фото/скан документа). Переключаемо секретом.
+    const VISION_MODEL = Deno.env.get("OPENAI_MODEL_VISION") || "gpt-4.1-mini";
 
     // Verify user token
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -106,8 +109,8 @@ serve(async (req) => {
 
     const { imageBase64, images, documentId, userId, manualText, isHandwritten } = await req.json();
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     // Use service role client for DB operations
@@ -408,7 +411,7 @@ ${examinationsList}
 }`;
 
       requestBody = {
-        model: "google/gemini-2.5-flash",
+        model: VISION_MODEL,
         messages: [
           {
             role: "user",
@@ -419,7 +422,7 @@ ${examinationsList}
       };
     } else {
       // Обычный анализ документа с изображением
-      console.log("Starting comprehensive medical document analysis with Lovable AI");
+      console.log("Starting comprehensive medical document analysis with OpenAI");
 
       prompt = `${basePrompt}
 
@@ -550,7 +553,7 @@ ${examinationsList}
         : prompt;
 
       requestBody = {
-        model: "google/gemini-2.5-flash",
+        model: VISION_MODEL,
         messages: [
           {
             role: "user",
@@ -571,11 +574,11 @@ ${examinationsList}
     let response: Response;
     try {
       response = await callAIWithRetry(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
+        "https://api.openai.com/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(requestBody),
@@ -662,6 +665,79 @@ ${examinationsList}
         recommendations: ["Загрузите более чёткое изображение документа"],
         suggestedTitle: "Медицинский документ",
       };
+    }
+
+    // ── RAG-обогащение: сверяем документ с экспертными требованиями базы знаний ──
+    // По найденным статьям тянем из rag_chunks («второй мозг») чек-листы/требования
+    // к оформлению и просим ИИ указать, чего НЕ ХВАТАЕТ именно в этом документе.
+    // Аддитивно и fail-open: любая ошибка не ломает основной анализ.
+    try {
+      const articleNums: string[] = [];
+      if (Array.isArray(result.linkedArticles)) {
+        for (const a of result.linkedArticles) {
+          if (a?.articleNumber != null) articleNums.push(String(a.articleNumber));
+        }
+      }
+      if (result.primaryArticleNumber) articleNums.push(String(result.primaryArticleNumber));
+
+      const knowledge = await searchByArticles(supabase, articleNums, 6);
+      if (knowledge.length && result.extractedText) {
+        const checklistText = renderChunks(knowledge, 900);
+        const gapPrompt = `Ты — эксперт по военно-врачебной экспертизе. Ниже ТЕКСТ медицинского документа призывника и ЭКСПЕРТНЫЕ ТРЕБОВАНИЯ к оформлению документов по соответствующим статьям Расписания болезней (из базы знаний юриста).
+
+Сверь документ с требованиями и верни СТРОГО JSON:
+{
+  "documentGaps": ["конкретно чего НЕ ХВАТАЕТ в документе или что оформлено неверно, со ссылкой на требование", "..."],
+  "strengthenedRecommendations": ["усиленные практические рекомендации: что именно дооформить/добавить", "..."]
+}
+
+Правила:
+- Пиши КОНКРЕТНО: не «нужны обследования», а «в заключении нет угла свода стопы в градусах для обеих стоп — без него степень не засчитают».
+- Если документ полностью соответствует требованиям — верни пустые массивы.
+- Опирайся ТОЛЬКО на требования ниже, ничего не выдумывай.
+
+=== ТЕКСТ ДОКУМЕНТА ===
+${String(result.extractedText).slice(0, 4000)}
+
+=== ЭКСПЕРТНЫЕ ТРЕБОВАНИЯ (база знаний) ===
+${checklistText}`;
+
+        const gapResp = await callAIWithRetry(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: VISION_MODEL,
+              messages: [{ role: "user", content: gapPrompt }],
+              response_format: { type: "json_object" },
+            }),
+          },
+          2,
+        );
+
+        if (gapResp.ok) {
+          const gapData = await gapResp.json();
+          const gapContent = gapData.choices?.[0]?.message?.content ?? "";
+          const gapMatch = gapContent.match(/\{[\s\S]*\}/);
+          const gaps = gapMatch ? JSON.parse(gapMatch[0]) : JSON.parse(gapContent);
+          const gapList: string[] = Array.isArray(gaps.documentGaps) ? gaps.documentGaps.filter(Boolean) : [];
+          const strong: string[] = Array.isArray(gaps.strengthenedRecommendations)
+            ? gaps.strengthenedRecommendations.filter(Boolean)
+            : [];
+          const baseRecs = Array.isArray(result.recommendations) ? result.recommendations : [];
+          if (gapList.length) {
+            result.documentGaps = gapList;
+            const tagged = gapList.map((g: string) => `⚠️ Чего не хватает в документе: ${g}`);
+            result.recommendations = [...tagged, ...strong, ...baseRecs];
+          } else if (strong.length) {
+            result.recommendations = [...strong, ...baseRecs];
+          }
+          console.log("[analyze] RAG gaps:", gapList.length, "strengthened:", strong.length, "from", knowledge.length, "chunks");
+        }
+      }
+    } catch (e) {
+      console.error("[analyze] RAG enrich failed (continuing):", e instanceof Error ? e.message : e);
     }
 
     // Находим ID типа документа по коду
@@ -840,6 +916,7 @@ ${examinationsList}
         categoryBChance: result.categoryBChance || 0,
         explanation: result.explanation,
         recommendations: result.recommendations || [],
+        documentGaps: result.documentGaps || [],
         suggestedTitle: result.suggestedTitle,
       }),
       {

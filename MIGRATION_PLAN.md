@@ -2,7 +2,7 @@
 
 > Цель: убрать привязку к онлайн-платформам **Lovable** и **Supabase Cloud**.
 > Всё крутится на мощности **одного своего сервера**, кроме **ИИ — он по внешнему API**
-> (ChatGPT / Claude Opus / Gemini, выбор по цене позже).
+> (OpenAI API для AI-вызовов).
 > 152-ФЗ не приоритет. Решение: **self-hosted Supabase (Docker) + свой хостинг фронта**.
 
 Документ — это план, не выполнение. Ничего из прод не трогается до отдельного «делаем».
@@ -25,8 +25,8 @@
 | Edge Functions | ~30 (Deno) |
 | Инфра БД | pg_cron (1 job), pg_net, supabase_vault (3 секрета), pgvector (RAG, 127 чанков) |
 | Внешняя почта | Resend (можно оставить или заменить своим SMTP) |
-| AI — текст | **Groq** (`api.groq.com`), модели `llama-3.3-70b-versatile` (осн.) / `llama-3.1-8b-instant` (быстрая). Через `_shared/llmGateway.ts`, **уже мимо Lovable**, переключается env `GROQ_*` |
-| AI — vision | **Google Gemini** через `ai.gateway.lovable.dev` + `LOVABLE_API_KEY`: `gemini-2.5-flash` (анализ меддоков, повестки), `gemini-2.5-flash-image-preview` (enhance). **Единственная AI-привязка к Lovable** |
+| AI — текст | **OpenAI API** через `_shared/llmGateway.ts`, секрет `OPENAI_API_KEY`, модели из `OPENAI_MODEL_MAIN` / `OPENAI_MODEL_FAST` |
+| AI — vision | **OpenAI API** напрямую: `analyze-medical-document` и `parse-summons` через chat/completions vision, `enhance-document` через Images API |
 | AI — эмбеддинги | **Jina** (`jina-embeddings-v3`) для RAG-поиска |
 
 **Вывод:** данные крошечные — миграция данных тривиальна. Основная работа —
@@ -39,9 +39,8 @@
 ### Lovable (убрать целиком)
 1. **Хостинг фронта** (Cloudflare CDN + кнопка Publish) → заменяется своим Nginx/Caddy.
 2. **`lovable-tagger`** — dev-плагин в `vite.config.ts` → удалить.
-3. **AI-шлюз `ai.gateway.lovable.dev`** — НЕ весь ИИ, а только **vision** (Gemini:
-   анализ меддоков, повестки, enhance). Текстовый ИИ уже идёт мимо Lovable (Groq).
-   При уходе нужно отвязать только ~3 vision-функции (см. §6).
+3. **AI-шлюз Lovable не используется для AI**: текст, vision и улучшение документов
+   ходят напрямую в OpenAI API из Supabase Edge Functions.
 4. **GitHub-синк Lovable↔репозиторий** — после ухода просто отключить в Lovable;
    деплой будет своим CI/скриптом.
 
@@ -81,7 +80,7 @@ URL и ключи в одном месте — `src/integrations/supabase/client
             │                                  │
             ▼                                  ▼
    AI API (внешний):                   SMTP (внешний или свой):
-   ChatGPT / Opus / Gemini             Resend ИЛИ собственный postfix
+   OpenAI API                          Resend ИЛИ собственный postfix
 ```
 
 **Единственные внешние зависимости после переезда:**
@@ -146,8 +145,8 @@ GPU не нужен.
 1. Все ~30 функций уже в репо (`supabase/functions/`). Деплой в self-hosted
    Edge Runtime: `supabase functions deploy` против своего проекта, либо через
    docker edge-runtime volume.
-2. **Заменить AI-шлюз** в ~10 функциях (см. §6): `ai.gateway.lovable.dev` →
-   выбранный API; `LOVABLE_API_KEY` → ключ провайдера.
+2. **AI-шлюз уже заменён на OpenAI API**: при переносе нужно завести `OPENAI_API_KEY`
+   и, при необходимости, `OPENAI_MODEL_MAIN` / `OPENAI_MODEL_FAST` / `OPENAI_MODEL_VISION`.
 3. Завести секреты функций в self-hosted: AI-ключ, RESEND/SMTP, SERVICE_ROLE.
 
 ### Фаза F. Переключить фронт (0.5 дня)
@@ -185,30 +184,20 @@ GPU не нужен.
 
 ## 6. ИИ: что есть сейчас и что менять
 
-**Важно:** в коде НЕ «весь ИИ через Lovable». Реально три независимых пути:
+**Важно:** AI-вызовы идут напрямую через OpenAI API из Supabase Edge Functions:
 
-### 6.1. Текст → Groq (уже мимо Lovable) ✅
-- Модуль `_shared/llmGateway.ts`, провайдер **Groq** (`api.groq.com`, OpenAI-совместим).
-- Модели: `llama-3.3-70b-versatile` (`MODEL_MAIN`), `llama-3.1-8b-instant` (`MODEL_FAST`),
-  переключаются env `GROQ_BASE_URL` / `GROQ_API_KEY` / `GROQ_MODEL_MAIN` / `GROQ_MODEL_FAST`.
+### 6.1. Текст → OpenAI ✅
+- Модуль `_shared/llmGateway.ts`, прямой вызов `api.openai.com/v1/chat/completions`.
+- Модели: `OPENAI_MODEL_MAIN` и `OPENAI_MODEL_FAST` с дефолтами `gpt-4.1-mini` / `gpt-4.1-nano`.
 - Кто использует: `chat`, `analyze-diagnosis`, `generate-appeal`, `generate-document`,
   `find-government-structures`, `lawyer-*` (ассистент/планнер/ревью/ready-check/suggest/
   extract-date), `chat-rag` (генерация ответа) и др.
-- **При переезде:** просто перенести `GROQ_API_KEY` на новый сервер. Привязки к
-  Lovable здесь НЕТ. Хотите ChatGPT/Opus/Gemini вместо Llama — поменять `GROQ_BASE_URL`
-  + ключ + имя модели (формат OpenAI-совместимый), кода не трогая.
+- **При переезде:** перенести `OPENAI_API_KEY` на новый сервер.
 
-### 6.2. Vision → Google Gemini через Lovable (ЕДИНСТВЕННАЯ AI-привязка к Lovable) 🔴
-- Эндпоинт `ai.gateway.lovable.dev` + `LOVABLE_API_KEY`, всего ~3 функции:
-  - `analyze-medical-document` — `google/gemini-2.5-flash`
-  - `parse-summons` — `google/gemini-2.5-flash`
-  - `enhance-document` — `google/gemini-2.5-flash-image-preview`
-- **При переезде ОБЯЗАТЕЛЬНО** заменить шлюз на прямой vision-API:
-  - **Google Gemini напрямую** — `generativelanguage.googleapis.com` (минимум правок,
-    те же модели `gemini-2.5-flash`), ИЛИ
-  - **OpenAI** (`api.openai.com`, vision у gpt-4o-класса), ИЛИ
-  - **Anthropic Claude** (`api.anthropic.com`, vision у Opus/Sonnet).
-- ⚠️ Провайдер обязан уметь **vision** (картинки/PDF→изображения) — все три умеют.
+### 6.2. Vision / изображения → OpenAI ✅
+- `analyze-medical-document` — OpenAI chat/completions с `OPENAI_MODEL_VISION`.
+- `parse-summons` — OpenAI chat/completions с `OPENAI_MODEL_VISION`.
+- `enhance-document` — OpenAI Images API (`gpt-image-1`).
 
 ### 6.3. Эмбеддинги (RAG-поиск) → Jina
 - `chat-rag` использует `jina-embeddings-v3` (внешний вызов). Перенести по ключу,

@@ -23,7 +23,7 @@
 - Edge Functions (Deno) — серверная логика и интеграции с AI
 
 **AI**
-- Lovable AI Gateway (модели Google Gemini, OpenAI) — через секрет `LOVABLE_API_KEY`
+- OpenAI API — через секрет `OPENAI_API_KEY` в Supabase Edge Functions
 
 ---
 
@@ -115,7 +115,7 @@ nepriziv/
 
 | Функция | Назначение |
 |---|---|
-| `chat` | AI-чат помощника (Lovable AI Gateway) |
+| `chat` | AI-чат помощника (OpenAI API) |
 | `analyze-medical-document` | Анализ загруженных медицинских документов |
 | `analyze-diagnosis` | Анализ диагноза по Расписанию болезней |
 | `generate-document` | Генерация юридических документов |
@@ -130,7 +130,8 @@ nepriziv/
 
 Менять их не нужно — они хранятся на стороне Supabase и доступны функциям через `Deno.env.get('...')`:
 
-- `LOVABLE_API_KEY` — доступ к AI Gateway
+- `OPENAI_API_KEY` — доступ к OpenAI API для AI-функций
+- `OPENAI_MODEL_MAIN`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_VISION` — модели OpenAI для основного, быстрого и vision-сценариев
 - `RESEND_API_KEY` — отправка писем
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — авто-инжектируются Supabase
 

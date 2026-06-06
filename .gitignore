@@ -30,3 +30,10 @@ supabase/.temp/
 
 # Разовый бандл для ручного применения через SQL Editor — не коммитим
 apply-pending-migrations.sql
+
+# Ключи для скрипта инжеста RAG (service_role + Jina) — НИКОГДА не коммитим
+scripts/ingest.secrets.env
+
+# Python bytecode (скрипты инжеста)
+__pycache__/
+*.pyc
