@@ -705,7 +705,7 @@ const AIChatDashboardPage = () => {
           {filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group max-w-full overflow-hidden rounded-lg p-3 transition-colors hover:bg-muted ${
+              className={`group relative isolate max-w-full overflow-hidden rounded-lg p-3 pr-12 transition-colors hover:bg-muted ${
                 currentConversationId === conv.id ? 'bg-muted' : ''
               }`}
             >
@@ -763,35 +763,35 @@ const AIChatDashboardPage = () => {
                       {new Date(conv.updated_at).toLocaleDateString('ru-RU')}
                     </span>
                   </button>
-                  <div className="mt-2 grid min-w-0 grid-cols-2 gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 min-w-0 gap-1 px-1.5 text-[11px] hover:scale-100"
-                      onClick={() => startRenameConversation(conv)}
-                      title="Переименовать диалог"
-                    >
-                      <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
-                      <span className="min-w-0 truncate">Переименовать</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 min-w-0 gap-1 px-1.5 text-[11px] text-destructive hover:scale-100 hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setConversationToDelete(conv)}
-                      disabled={deletingConversationId === conv.id}
-                      title="Удалить диалог"
-                    >
-                      {deletingConversationId === conv.id ? (
-                        <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
-                      )}
-                      <span className="min-w-0 truncate">Удалить</span>
-                    </Button>
-                  </div>
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md border border-destructive/25 bg-background text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setConversationToDelete(conv);
+                    }}
+                    disabled={deletingConversationId === conv.id}
+                    aria-label={`Удалить диалог ${conv.title || "Новый диалог"}`}
+                    title="Удалить диалог"
+                  >
+                    {deletingConversationId === conv.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="mt-2 flex h-8 w-full min-w-0 items-center justify-start gap-1.5 rounded-md border border-input bg-background px-2 text-[11px] font-medium transition-colors hover:border-primary/30 hover:bg-gradient-soft hover:text-primary"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      startRenameConversation(conv);
+                    }}
+                    title="Переименовать диалог"
+                  >
+                    <Pencil className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="min-w-0 truncate">Переименовать</span>
+                  </button>
                 </>
               )}
             </div>
