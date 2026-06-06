@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSubscription } from "@/hooks/useSubscription";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2, ChevronDown, ChevronUp, Search, Pencil, Check, X, Copy, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -77,16 +77,36 @@ const AIChatDashboardPage = () => {
   const [quickRepliesCollapsed, setQuickRepliesCollapsed] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renamingSaving, setRenamingSaving] = useState(false);
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
+  const [showScrollJump, setShowScrollJump] = useState(false);
   const [medicalContext, setMedicalContext] = useState<string>("");
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const chatViewportHeight = useVisualViewportHeight(isMobile);
+  const currentConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === currentConversationId) || null,
+    [conversations, currentConversationId],
+  );
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase();
+    if (!query) return conversations;
+    return conversations.filter((conversation) =>
+      `${conversation.title || "Новый диалог"} ${new Date(conversation.updated_at).toLocaleDateString("ru-RU")}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [conversations, conversationSearch]);
 
   useEffect(() => {
     setQuickRepliesCollapsed(isMobile);
@@ -199,8 +219,9 @@ const AIChatDashboardPage = () => {
     }
   };
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((force = false) => {
     setTimeout(() => {
+      if (!force && !shouldAutoScrollRef.current) return;
       messagesEndRef.current?.scrollIntoView({ block: "end" });
       if (scrollAreaRef.current) {
         const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -208,12 +229,37 @@ const AIChatDashboardPage = () => {
           viewport.scrollTop = viewport.scrollHeight;
         }
       }
+      shouldAutoScrollRef.current = true;
+      setShowScrollJump(false);
     }, 100);
+  }, []);
+
+  const handleChatScroll = useCallback(() => {
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const nearBottom = distanceToBottom < 160;
+    shouldAutoScrollRef.current = nearBottom;
+    setShowScrollJump(!nearBottom);
   }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, sending, scrollToBottom]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    setShowScrollJump(false);
+    scrollToBottom(true);
+  }, [currentConversationId, scrollToBottom]);
+
+  useEffect(() => {
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    viewport.addEventListener("scroll", handleChatScroll, { passive: true });
+    handleChatScroll();
+    return () => viewport.removeEventListener("scroll", handleChatScroll);
+  }, [handleChatScroll, currentConversationId, messages.length]);
 
   useEffect(() => {
     checkUser();
@@ -337,6 +383,63 @@ const AIChatDashboardPage = () => {
       });
     } finally {
       setDeletingConversationId(null);
+    }
+  };
+
+  const startRenameConversation = (conversation: Conversation) => {
+    setRenamingConversationId(conversation.id);
+    setRenameDraft(conversation.title || "Новый диалог");
+  };
+
+  const cancelRenameConversation = () => {
+    setRenamingConversationId(null);
+    setRenameDraft("");
+  };
+
+  const saveConversationTitle = async () => {
+    if (!renamingConversationId) return;
+    const title = renameDraft.trim() || "Новый диалог";
+    setRenamingSaving(true);
+    try {
+      const { error } = await supabase
+        .from("chat_conversations")
+        .update({ title, updated_at: new Date().toISOString() })
+        .eq("id", renamingConversationId);
+
+      if (error) throw error;
+
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === renamingConversationId
+            ? { ...conversation, title, updated_at: new Date().toISOString() }
+            : conversation,
+        ),
+      );
+      toast({ title: "Диалог переименован" });
+      cancelRenameConversation();
+    } catch (error: any) {
+      toast({
+        title: "Не удалось переименовать диалог",
+        description: error?.message || "Попробуйте ещё раз",
+        variant: "destructive",
+      });
+    } finally {
+      setRenamingSaving(false);
+    }
+  };
+
+  const copyMessage = async (content: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageKey(key);
+      toast({ title: "Сообщение скопировано" });
+      window.setTimeout(() => setCopiedMessageKey((current) => (current === key ? null : current)), 1600);
+    } catch {
+      toast({
+        title: "Не удалось скопировать",
+        description: "Браузер не дал доступ к буферу обмена",
+        variant: "destructive",
+      });
     }
   };
 
@@ -574,7 +677,7 @@ const AIChatDashboardPage = () => {
     <>
       <Button
         size="sm"
-        className="mb-4 w-full flex-shrink-0"
+        className="mb-3 w-full flex-shrink-0"
         onClick={() => {
           createNewConversation();
           setMobileSidebarOpen(false);
@@ -583,48 +686,111 @@ const AIChatDashboardPage = () => {
         <Plus className="h-4 w-4 mr-2" />
         Новый диалог
       </Button>
+      <div className="relative mb-3 flex-shrink-0">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={conversationSearch}
+          onChange={(event) => setConversationSearch(event.target.value)}
+          placeholder="Поиск диалогов"
+          className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+        />
+      </div>
       <ScrollArea className="min-h-0 flex-1 overscroll-contain pr-1">
         <div className="space-y-2 pb-2">
-          {conversations.map((conv) => (
+          {filteredConversations.length === 0 && (
+            <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              {conversationSearch ? "Ничего не найдено" : "Диалогов пока нет"}
+            </div>
+          )}
+          {filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group p-3 rounded-lg cursor-pointer hover:bg-muted flex items-start justify-between gap-2 ${
+              className={`group rounded-lg p-3 transition-colors hover:bg-muted ${
                 currentConversationId === conv.id ? 'bg-muted' : ''
               }`}
             >
-              <div 
-                className="flex-1 min-w-0"
-                onClick={() => {
-                  setCurrentConversationId(conv.id);
-                  setMobileSidebarOpen(false);
-                }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm font-medium truncate">{conv.title || "Новый диалог"}</span>
+              {renamingConversationId === conv.id ? (
+                <div className="space-y-2">
+                  <input
+                    value={renameDraft}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") saveConversationTitle();
+                      if (event.key === "Escape") cancelRenameConversation();
+                    }}
+                    autoFocus
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  />
+                  <div className="flex gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 flex-1"
+                      onClick={saveConversationTitle}
+                      disabled={renamingSaving}
+                    >
+                      {renamingSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                      Сохранить
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={cancelRenameConversation}
+                      disabled={renamingSaving}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(conv.updated_at).toLocaleDateString('ru-RU')}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 flex-shrink-0 p-0 text-muted-foreground opacity-100 hover:bg-destructive/10 hover:text-destructive md:opacity-70 md:group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConversationToDelete(conv);
-                }}
-                disabled={deletingConversationId === conv.id}
-                aria-label={`Удалить диалог ${conv.title || "Новый диалог"}`}
-                title="Удалить диалог"
-              >
-                {deletingConversationId === conv.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-              </Button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="w-full min-w-0 text-left"
+                    onClick={() => {
+                      setCurrentConversationId(conv.id);
+                      setMobileSidebarOpen(false);
+                    }}
+                  >
+                    <div className="mb-1 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate text-sm font-medium">{conv.title || "Новый диалог"}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(conv.updated_at).toLocaleDateString('ru-RU')}
+                    </span>
+                  </button>
+                  <div className="mt-2 flex gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 px-2 text-xs"
+                      onClick={() => startRenameConversation(conv)}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Переименовать
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setConversationToDelete(conv)}
+                      disabled={deletingConversationId === conv.id}
+                    >
+                      {deletingConversationId === conv.id ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      Удалить
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -734,23 +900,77 @@ const AIChatDashboardPage = () => {
                 {remainingDemoAI}/{demoAiLimit}
               </Button>
             )}
+            {isMobile && !isDemoMode && currentConversation && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setConversationToDelete(currentConversation)}
+                disabled={deletingConversationId === currentConversation.id}
+                className="h-9 w-9 flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Удалить текущий диалог"
+                title="Удалить текущий диалог"
+              >
+                {deletingConversationId === currentConversation.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
 
           <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 shadow-none md:rounded-lg md:border md:shadow-sm">
-            <CardHeader className="hidden flex-shrink-0 px-3 py-2.5 md:flex md:px-6 md:py-4">
-              <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                Консультация по вопросам призыва и воинского учёта
-              </p>
-              {medicalContextLoading ? (
-                <p className="text-xs text-muted-foreground animate-pulse">⏳ Загрузка данных вашего дела...</p>
-              ) : medicalContext ? (
-                <p className="text-xs text-success">✅ ИИ видит ваш профиль, документы, опросник и события дела</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">📋 Заполните профиль и загрузите документы — ИИ даст персональную консультацию</p>
+            <CardHeader className="hidden flex-shrink-0 gap-3 px-3 py-2.5 md:flex md:flex-row md:items-start md:justify-between md:px-6 md:py-4">
+              <div className="min-w-0">
+                <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Консультация по вопросам призыва и воинского учёта
+                </p>
+                {currentConversation && (
+                  <p className="mt-1 max-w-xl truncate text-xs text-muted-foreground">
+                    Текущий диалог: {currentConversation.title || "Новый диалог"}
+                  </p>
+                )}
+                {medicalContextLoading ? (
+                  <p className="text-xs text-muted-foreground animate-pulse">⏳ Загрузка данных вашего дела...</p>
+                ) : medicalContext ? (
+                  <p className="text-xs text-success">✅ ИИ видит ваш профиль, документы, опросник и события дела</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">📋 Заполните профиль и загрузите документы — ИИ даст персональную консультацию</p>
+                )}
+              </div>
+              {!isDemoMode && currentConversation && (
+                <div className="flex flex-shrink-0 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => startRenameConversation(currentConversation)}
+                    className="h-9"
+                  >
+                    <Pencil className="mr-1.5 h-4 w-4" />
+                    Переименовать
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConversationToDelete(currentConversation)}
+                    disabled={deletingConversationId === currentConversation.id}
+                    className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    {deletingConversationId === currentConversation.id ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-1.5 h-4 w-4" />
+                    )}
+                    Удалить диалог
+                  </Button>
+                </div>
               )}
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4">
+            <CardContent className="relative flex min-h-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4">
               <ScrollArea className="min-h-0 flex-1 overscroll-contain" ref={scrollAreaRef}>
                 <div className="space-y-3 pr-2 pb-3 sm:space-y-4 sm:pr-4">
                   {messages.length === 0 && (
@@ -805,56 +1025,76 @@ const AIChatDashboardPage = () => {
                       ? message.content.split(/\n\s*---\s*\n/).filter(b => b.trim())
                       : [message.content];
 
-                    return bubbles.map((bubble, bubbleIdx) => (
-                      <div
-                        key={`${index}-${bubbleIdx}`}
-                        className={`flex ${
-                          message.role === "user" ? "justify-end" : "justify-start"
-                        }`}
-                      >
+                    return bubbles.map((bubble, bubbleIdx) => {
+                      const messageKey = `${index}-${bubbleIdx}`;
+                      const isUserMessage = message.role === "user";
+                      const copied = copiedMessageKey === messageKey;
+
+                      return (
                         <div
-                          className={`sm:max-w-[420px] max-w-[85vw] p-3 sm:p-4 rounded-2xl overflow-hidden ${
-                            message.role === "user"
-                              ? "bg-primary text-primary-foreground rounded-br-md"
-                              : "bg-muted rounded-bl-md"
+                          key={messageKey}
+                          className={`flex ${
+                            isUserMessage ? "justify-end" : "justify-start"
                           }`}
-                          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                         >
-                          {message.role === "assistant" ? (
-                            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-gold-deep [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                  a: ({ href, children }) => {
-                                    // Внутренние ссылки на статьи Расписания болезней — react-router
-                                    if (href?.startsWith("/")) {
+                          <div
+                            className={`sm:max-w-[420px] max-w-[85vw] p-3 sm:p-4 rounded-2xl overflow-hidden ${
+                              isUserMessage
+                                ? "bg-primary text-primary-foreground rounded-br-md"
+                                : "bg-muted rounded-bl-md"
+                            }`}
+                            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                          >
+                            {message.role === "assistant" ? (
+                              <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-gold-deep [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    a: ({ href, children }) => {
+                                      // Внутренние ссылки на статьи Расписания болезней — react-router
+                                      if (href?.startsWith("/")) {
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => navigate(href)}
+                                            className="text-gold-deep font-semibold hover:underline inline"
+                                          >
+                                            {children}
+                                          </button>
+                                        );
+                                      }
                                       return (
-                                        <button
-                                          type="button"
-                                          onClick={() => navigate(href)}
-                                          className="text-gold-deep font-semibold hover:underline inline"
-                                        >
+                                        <a href={href} target="_blank" rel="noopener noreferrer">
                                           {children}
-                                        </button>
+                                        </a>
                                       );
-                                    }
-                                    return (
-                                      <a href={href} target="_blank" rel="noopener noreferrer">
-                                        {children}
-                                      </a>
-                                    );
-                                  },
-                                }}
+                                    },
+                                  }}
+                                >
+                                  {linkifyDiseaseArticles(enhanceTypography(bubble.trim()))}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <p className="whitespace-pre-wrap text-[13.5px] sm:text-[14.5px] leading-[1.65] break-words">{enhanceTypography(bubble)}</p>
+                            )}
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => copyMessage(bubble.trim(), messageKey)}
+                                className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors ${
+                                  isUserMessage
+                                    ? "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                                }`}
                               >
-                                {linkifyDiseaseArticles(enhanceTypography(bubble.trim()))}
-                              </ReactMarkdown>
+                                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                {copied ? "Скопировано" : "Копировать"}
+                              </button>
                             </div>
-                          ) : (
-                            <p className="whitespace-pre-wrap text-[13.5px] sm:text-[14.5px] leading-[1.65] break-words">{enhanceTypography(bubble)}</p>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ));
+                      );
+                    });
                   })}
                   {sending && messages.length > 0 && messages[messages.length - 1].role === "user" && (
                     <div className="flex justify-start">
@@ -873,6 +1113,20 @@ const AIChatDashboardPage = () => {
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
+              {showScrollJump && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-[96px] z-10 flex justify-center">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => scrollToBottom(true)}
+                    className="pointer-events-auto h-9 rounded-full border border-border/70 bg-background/95 px-3 shadow-md backdrop-blur"
+                  >
+                    <ArrowDown className="mr-1.5 h-4 w-4" />
+                    Вниз
+                  </Button>
+                </div>
+              )}
 
               {/* Быстрые подсказки-продолжения (Модуль 3): после ответа ИИ —
                   кликабельные чипы над полем ввода, отправляются сразу. */}
@@ -940,7 +1194,7 @@ const AIChatDashboardPage = () => {
                       e.currentTarget.style.height = "auto";
                       e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 132)}px`;
                     }}
-                    onFocus={scrollToBottom}
+                    onFocus={() => scrollToBottom(true)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey && !isMobile) {
                         e.preventDefault();
