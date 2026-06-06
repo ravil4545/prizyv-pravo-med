@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCircle2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { registerCyrillicFont } from "@/lib/cyrillicPdfFont";
@@ -19,6 +19,15 @@ interface QuestionSection {
   id: string;
   title: string;
   questions: { id: string; label: string; hint?: string }[];
+}
+
+// Результат AI-анализа опросника (P3.2) — функция questionnaire-analyze.
+interface AnalysisTopic {
+  topic: string;
+  articles?: string[];
+  followUps?: string[];
+  exams?: string[];
+  rationale?: string;
 }
 
 const questionnaireSections: QuestionSection[] = [
@@ -181,6 +190,8 @@ export default function MedicalQuestionnairePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<{ topics: AnalysisTopic[]; summary: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["1"]));
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set());
   // Редактирование ранее заполненного опросника: id записи + дата, которые
@@ -317,6 +328,33 @@ export default function MedicalQuestionnairePage() {
     });
 
     return lines.join("\n");
+  };
+
+  const handleAnalyze = async () => {
+    if (filledCount === 0) {
+      toast.error("Сначала заполните хотя бы несколько вопросов");
+      return;
+    }
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("questionnaire-analyze", {
+        body: { answers },
+      });
+      if (error) throw error;
+      const topics: AnalysisTopic[] = Array.isArray(data?.topics) ? data.topics : [];
+      setAnalysis({ topics, summary: typeof data?.summary === "string" ? data.summary : "" });
+      if (!topics.length) {
+        toast.info("Явных непризывных зацепок по ответам не найдено — дополните жалобы и анамнез.");
+      } else {
+        toast.success(`Найдено тем для проработки: ${topics.length}`);
+      }
+    } catch (e: unknown) {
+      console.error("questionnaire-analyze error:", e);
+      toast.error(e instanceof Error ? e.message : "Не удалось выполнить анализ. Попробуйте позже.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -587,6 +625,65 @@ export default function MedicalQuestionnairePage() {
           })}
         </div>
 
+        {/* AI-анализ опросника (P3.2) */}
+        {(analyzing || analysis) && (
+          <Card className="mt-6 border-blue-500/40">
+            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-blue-500" />
+                Анализ опросника — что проработать
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 space-y-3">
+              {analyzing && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Анализирую ответы по базе знаний…
+                </div>
+              )}
+              {!analyzing && analysis && (
+                <>
+                  {analysis.summary && <p className="text-sm">{analysis.summary}</p>}
+                  {analysis.topics.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Явных непризывных зацепок не найдено — дополните жалобы/анамнез и повторите анализ.
+                    </p>
+                  )}
+                  {analysis.topics.map((t, i) => (
+                    <div key={i} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-sm">{t.topic}</span>
+                        {(t.articles || []).map((a) => (
+                          <Badge key={a} variant="secondary" className="text-xs">Ст. {a}</Badge>
+                        ))}
+                      </div>
+                      {t.rationale && <p className="text-xs text-muted-foreground">{t.rationale}</p>}
+                      {(t.followUps?.length ?? 0) > 0 && (
+                        <div className="text-xs">
+                          <p className="font-medium mb-1">Уточнить:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {t.followUps!.map((f, j) => <li key={j}>{f}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {(t.exams?.length ?? 0) > 0 && (
+                        <div className="text-xs">
+                          <p className="font-medium mb-1">Обследования и документы:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {t.exams!.map((e, j) => <li key={j}>{e}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-muted-foreground">
+                    ⚠️ Справочный анализ ИИ по базе знаний — не диагноз и не замена ВВК/юриста.
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Submit buttons */}
         <div className="sticky bottom-20 md:bottom-4 mt-6 bg-background border rounded-xl p-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -595,23 +692,43 @@ export default function MedicalQuestionnairePage() {
                 ? "Изменения обновят существующий опросник. Скачаются PDF и DOCX, запустится AI-анализ."
                 : "После отправки: загрузка в «Медицинские документы», скачивание PDF и DOCX, AI-анализ."}
             </p>
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || filledCount === 0}
-              className="w-full sm:w-auto gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Сохранение...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  {editingDocId ? "Обновить" : "Сохранить"} · PDF+DOCX ({filledCount}/{totalQuestions})
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={handleAnalyze}
+                disabled={analyzing || submitting || filledCount === 0}
+                className="w-full sm:w-auto gap-2 border-blue-500/50 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+              >
+                {analyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Анализ...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Проанализировать
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={submitting || filledCount === 0}
+                className="w-full sm:w-auto gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Сохранение...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    {editingDocId ? "Обновить" : "Сохранить"} · PDF+DOCX ({filledCount}/{totalQuestions})
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </main>
