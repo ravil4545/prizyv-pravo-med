@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,11 +12,15 @@ import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 import {
-  ArrowLeft, Send, Paperclip, Loader2, Download,
-  Briefcase, Check, CheckCheck, MessageSquare, ChevronRight, Image as ImageIcon, Pencil, X,
-  ShieldCheck, ShieldAlert,
+  AlertTriangle, ArrowDown, ArrowLeft, Send, Paperclip, Loader2, Download,
+  Briefcase, Check, CheckCheck, MessageSquare, ChevronRight, Image as ImageIcon, Pencil,
+  ShieldCheck, ShieldAlert, Copy, MoreVertical, Search, UserMinus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sanitizeChatMessage, describeDetected } from "@/lib/chatSanitizer";
@@ -51,6 +55,9 @@ const ClientChatPage = () => {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showScrollJump, setShowScrollJump] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -62,13 +69,38 @@ const ClientChatPage = () => {
   // Доступ юриста к документам/профилю/ИИ. null = ещё не загрузили.
   const [accessActive, setAccessActive] = useState<boolean | null>(null);
   const [grantingAccess, setGrantingAccess] = useState(false);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   // messageId → подписанная ссылка на вложение (bucket приватный).
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = useCallback((force = false) => {
+    setTimeout(() => {
+      if (!force && !shouldAutoScrollRef.current) return;
+      bottomRef.current?.scrollIntoView({ block: "end" });
+      if (messagesScrollRef.current) {
+        messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
+      }
+      shouldAutoScrollRef.current = true;
+      setShowScrollJump(false);
+    }, 80);
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const viewport = messagesScrollRef.current;
+    if (!viewport) return;
+    const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const nearBottom = distanceToBottom < 160;
+    shouldAutoScrollRef.current = nearBottom;
+    setShowScrollJump(!nearBottom);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -77,8 +109,14 @@ const ClientChatPage = () => {
   }, [user?.id, lawyerClientId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, sending, scrollToBottom]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    setShowScrollJump(false);
+    scrollToBottom(true);
+  }, [lawyerClientId, scrollToBottom]);
 
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
@@ -119,7 +157,11 @@ const ClientChatPage = () => {
       .select("id, crm_stage, lawyer_id, updated_at")
       .eq("client_user_id", user!.id)
       .order("updated_at", { ascending: false });
-    if (!links?.length) return;
+    if (!links?.length) {
+      setAllConvs([]);
+      setUnreadMap({});
+      return;
+    }
 
     const lawyerIds = [...new Set(links.map((l) => l.lawyer_id))];
     const { data: profiles } = await supabase
@@ -209,6 +251,38 @@ const ClientChatPage = () => {
     });
   };
 
+  const unlinkFromLawyer = async () => {
+    if (!lawyerClientId) return;
+    setUnlinking(true);
+    const { error } = await supabase.rpc("client_unlink_from_lawyer", {
+      p_lawyer_client_id: lawyerClientId,
+    });
+    setUnlinking(false);
+    if (error) {
+      toast({ title: "Не удалось удалить диалог", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Диалог удалён", description: "Связь с юристом отключена, история сохранена в архиве." });
+    navigate("/client/messages", { replace: true });
+  };
+
+  const copyMessage = async (content: string, messageId: string) => {
+    const value = content.trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedMessageId(messageId);
+      toast({ title: "Сообщение скопировано" });
+      window.setTimeout(() => setCopiedMessageId((current) => (current === messageId ? null : current)), 1600);
+    } catch {
+      toast({
+        title: "Не удалось скопировать",
+        description: "Браузер не дал доступ к буферу обмена",
+        variant: "destructive",
+      });
+    }
+  };
+
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
     setSending(true);
 
@@ -296,6 +370,16 @@ const ClientChatPage = () => {
     else last.msgs.push(m);
   });
 
+  const filteredConvs = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase();
+    if (!query) return allConvs;
+    return allConvs.filter((c) =>
+      `${c.lawyerName || "Юрист"} ${CRM_STAGE_LABELS[c.crm_stage] || c.crm_stage} ${new Date(c.updated_at).toLocaleDateString("ru-RU")}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [allConvs, conversationSearch]);
+
   if (loading) return (
     <div
       className="flex h-[100dvh] flex-col overflow-hidden bg-background"
@@ -323,7 +407,7 @@ const ClientChatPage = () => {
         <div className="h-full flex overflow-hidden lg:rounded-xl lg:border lg:shadow-md bg-background lg:bg-card/50">
 
           {/* ── Sidebar (desktop) ──────────────────────────────────────────── */}
-          <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r bg-card/30 flex-shrink-0">
+          <aside className="hidden min-w-0 overflow-hidden lg:flex flex-col w-64 xl:w-72 border-r bg-card/30 flex-shrink-0">
             <div className="px-3 py-3 border-b flex items-center gap-2">
               <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
                 onClick={() => navigate("/client/messages")}>
@@ -334,14 +418,25 @@ const ClientChatPage = () => {
                 <span className="font-semibold text-sm">Переписка</span>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-              {allConvs.map((c) => (
+            <div className="px-3 py-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={conversationSearch}
+                  onChange={(event) => setConversationSearch(event.target.value)}
+                  placeholder="Поиск диалогов"
+                  className="h-8 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-0.5">
+              {filteredConvs.map((c) => (
                 <button key={c.id} onClick={() => navigate(`/client/chat/${c.id}`)}
                   className={cn(
-                    "w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted",
+                    "w-full min-w-0 text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted",
                     lawyerClientId === c.id ? "bg-primary/10 border border-primary/20" : ""
                   )}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <div className={cn("flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center",
                       lawyerClientId === c.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
                       <Briefcase className="h-3.5 w-3.5" />
@@ -362,11 +457,14 @@ const ClientChatPage = () => {
                   </div>
                 </button>
               ))}
+              {filteredConvs.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">Диалогов нет</p>
+              )}
             </div>
           </aside>
 
           {/* ── Chat area ────────────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="relative flex-1 min-w-0 flex flex-col">
             {/* Top bar */}
             <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
@@ -387,6 +485,24 @@ const ClientChatPage = () => {
                   <p className="text-xs text-muted-foreground truncate">{lawyerProfile.specialization}</p>
                 ) : null}
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" aria-label="Действия с диалогом">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => navigate("/client/messages")}>
+                    <MessageSquare className="h-4 w-4 mr-2" /> Все диалоги
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setUnlinkOpen(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <UserMinus className="h-4 w-4 mr-2" /> Удалить диалог
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* Баннер доступа: связь есть, но юрист не видит документы/ИИ */}
@@ -413,7 +529,7 @@ const ClientChatPage = () => {
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto overscroll-contain">
               <div className="mx-auto max-w-3xl space-y-0.5 px-3 py-3 pb-4">
                 {messages.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground text-sm">
@@ -437,18 +553,33 @@ const ClientChatPage = () => {
                           </div>
                         );
                       }
+                      const copyContent = m.message_type === "text" ? m.content : (m.file_name || m.content);
+                      const copied = copiedMessageId === m.id;
                       return (
                         <div key={m.id} className={cn("flex mb-1 items-end gap-1 group", isOwn ? "flex-row-reverse" : "")}>
-                          {/* Edit button for own text messages */}
-                          {isOwn && m.message_type === "text" && editingId !== m.id && (
-                            <Button variant="ghost" size="icon"
-                              className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 mb-1"
-                              onClick={() => { setEditingId(m.id); setEditText(m.content || ""); }}>
-                              <Pencil className="h-3 w-3" />
-                            </Button>
+                          {copyContent && (
+                            <div className="mb-1 flex flex-col gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                              {isOwn && m.message_type === "text" && editingId !== m.id && (
+                                <Button variant="ghost" size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={() => { setEditingId(m.id); setEditText(m.content || ""); }}
+                                  title="Редактировать">
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={() => copyMessage(copyContent, m.id)}
+                                title={copied ? "Скопировано" : "Копировать"}
+                              >
+                                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              </Button>
+                            </div>
                           )}
                           <div className={cn(
-                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%]",
+                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%] break-words",
                             isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border rounded-bl-sm"
                           )}>
                             {editingId === m.id ? (
@@ -529,6 +660,20 @@ const ClientChatPage = () => {
                 <div ref={bottomRef} />
               </div>
             </div>
+            {showScrollJump && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-[86px] z-10 flex justify-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => scrollToBottom(true)}
+                  className="pointer-events-auto h-9 rounded-full border border-border/70 bg-background/95 px-3 shadow-md backdrop-blur"
+                >
+                  <ArrowDown className="mr-1.5 h-4 w-4" />
+                  Вниз
+                </Button>
+              </div>
+            )}
 
             {/* Input bar */}
             <div className="flex-shrink-0 border-t bg-card/95 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] backdrop-blur sm:pb-2.5">
@@ -582,6 +727,34 @@ const ClientChatPage = () => {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={unlinkOpen} onOpenChange={setUnlinkOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Удалить диалог с юристом?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Диалог будет убран из ваших активных переписок, связь с юристом отключится. История сохраняется в архиве.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlinking}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                unlinkFromLawyer();
+              }}
+              disabled={unlinking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unlinking ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserMinus className="h-4 w-4 mr-2" />}
+              Удалить диалог
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Header from "@/components/Header";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,9 +13,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
-  ArrowLeft, Send, Paperclip, Loader2, Download, Users,
+  ArrowDown, ArrowLeft, Send, Paperclip, Loader2, Download, Users,
   Search, User, FileText, CheckCheck, Check, Pencil,
-  Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown,
+  Image as ImageIcon, Sparkles, RefreshCw, CornerDownLeft, ChevronDown, Copy,
   Wand2, AlertTriangle, MoreVertical, UserMinus,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -55,6 +55,45 @@ interface SuggestionSet {
 }
 
 const SUGGEST_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/lawyer-chat-suggest";
+const SUGGESTION_CACHE_PREFIX = "lawyer-chat-suggestions";
+const DATE_EXTRACT_CACHE_PREFIX = "lawyer-chat-date-extract";
+
+interface SuggestionCachePayload {
+  set?: SuggestionSet;
+  error?: string;
+  generatedAt: string;
+}
+
+const getSuggestionCacheKey = (clientId: string, messageId: string) =>
+  `${SUGGESTION_CACHE_PREFIX}:${clientId}:${messageId}`;
+
+const getDateExtractCacheKey = (clientId: string, messageId: string) =>
+  `${DATE_EXTRACT_CACHE_PREFIX}:${clientId}:${messageId}`;
+
+const readSuggestionCache = (clientId: string, messageId: string): SuggestionCachePayload | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(getSuggestionCacheKey(clientId, messageId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SuggestionCachePayload;
+    if (parsed?.set?.id === messageId || parsed?.error) return parsed;
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const writeSuggestionCache = (clientId: string, messageId: string, payload: Omit<SuggestionCachePayload, "generatedAt">) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      getSuggestionCacheKey(clientId, messageId),
+      JSON.stringify({ ...payload, generatedAt: new Date().toISOString() }),
+    );
+  } catch {
+    // localStorage may be unavailable in private mode; in-memory guards still prevent duplicate calls per session.
+  }
+};
 
 const LawyerChatPage = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -71,6 +110,8 @@ const LawyerChatPage = () => {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showScrollJump, setShowScrollJump] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -137,9 +178,32 @@ const LawyerChatPage = () => {
   };
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = useCallback((force = false) => {
+    setTimeout(() => {
+      if (!force && !shouldAutoScrollRef.current) return;
+      bottomRef.current?.scrollIntoView({ block: "end" });
+      if (messagesScrollRef.current) {
+        messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
+      }
+      shouldAutoScrollRef.current = true;
+      setShowScrollJump(false);
+    }, 80);
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const viewport = messagesScrollRef.current;
+    if (!viewport) return;
+    const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const nearBottom = distanceToBottom < 160;
+    shouldAutoScrollRef.current = nearBottom;
+    setShowScrollJump(!nearBottom);
+  }, []);
 
   // «Убрать из моих клиентов» прямо из чата (soft-archive карточки).
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -165,8 +229,14 @@ const LawyerChatPage = () => {
   }, [user, profileLoading, isLawyer, clientId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, sending, scrollToBottom]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    setShowScrollJump(false);
+    scrollToBottom(true);
+  }, [clientId, scrollToBottom]);
 
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
@@ -208,6 +278,7 @@ const LawyerChatPage = () => {
     setSuggestionHistory([]);
     setSuggestionsError(null);
     autoSuggestRef.current = null;
+    extractedDateRef.current = null;
     setMobileAiStripCollapsed(true);
   }, [clientId]);
 
@@ -220,9 +291,20 @@ const LawyerChatPage = () => {
     if (!messages.length || !user || !clientId) return;
     const lastText = [...messages].reverse().find(m => m.message_type === "text");
     if (!lastText || lastText.sender_id === user.id) return;
-    if (autoSuggestRef.current === lastText.id) return;
-    autoSuggestRef.current = lastText.id;
-    loadSuggestionsFor(messages);
+    const cacheKey = getSuggestionCacheKey(clientId, lastText.id);
+    if (autoSuggestRef.current === cacheKey) return;
+    const cached = readSuggestionCache(clientId, lastText.id);
+    if (cached?.set) {
+      autoSuggestRef.current = cacheKey;
+      setSuggestionsError(null);
+      upsertSuggestionSet(cached.set);
+    } else if (cached?.error) {
+      autoSuggestRef.current = cacheKey;
+      setSuggestionsError(cached.error);
+    } else {
+      autoSuggestRef.current = cacheKey;
+      loadSuggestionsFor(messages);
+    }
     // Параллельно — лёгкий парсер даты призыва. Если клиент упомянул дату повестки,
     // юристу появится тост с предложением одним кликом заполнить conscription_date.
     tryExtractDate(lastText.content || "", lastText.id);
@@ -231,12 +313,22 @@ const LawyerChatPage = () => {
   const extractedDateRef = useRef<string | null>(null);
 
   const tryExtractDate = async (text: string, msgId: string) => {
-    if (!clientId || extractedDateRef.current === msgId) return;
-    extractedDateRef.current = msgId;
+    if (!clientId) return;
+    const cacheKey = getDateExtractCacheKey(clientId, msgId);
+    if (extractedDateRef.current === cacheKey) return;
+    if (typeof window !== "undefined" && window.localStorage.getItem(cacheKey)) return;
+    extractedDateRef.current = cacheKey;
     if (text.length < 8 || !/(\d{1,2}|январ|феврал|март|апрел|мая|июн|июл|август|сентябр|октябр|ноябр|декабр|призыв|повестк)/i.test(text)) {
       return; // быстрый локальный фильтр чтобы не дёргать ИИ зря
     }
     try {
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(cacheKey, new Date().toISOString());
+        } catch {
+          // Ignore storage failures; the ref still prevents duplicates during this session.
+        }
+      }
       const { data: { session } } = await supabase.auth.getSession();
       const res = await supabase.functions.invoke("lawyer-extract-date", {
         body: { text },
@@ -306,7 +398,14 @@ const LawyerChatPage = () => {
     // Бейдж непрочитанных обновит ChatPresenceContext (он слушает UPDATE is_read).
   };
 
-  const loadSuggestionsFor = async (currentMessages: Message[]) => {
+  const upsertSuggestionSet = (newSet: SuggestionSet) => {
+    setSuggestionHistory(prev => [
+      ...prev.filter(s => s.id !== newSet.id).map(s => ({ ...s, collapsed: true })),
+      { ...newSet, collapsed: false },
+    ]);
+  };
+
+  const loadSuggestionsFor = async (currentMessages: Message[], options: { force?: boolean } = {}) => {
     if (!clientId || !user || currentMessages.length === 0) return;
 
     // Find last client text message — this is what we'll answer
@@ -314,6 +413,22 @@ const LawyerChatPage = () => {
       m => m.message_type === "text" && m.sender_id !== user.id && m.content?.trim()
     );
     if (!lastClientMsg?.content) return;
+
+    const cacheKey = getSuggestionCacheKey(clientId, lastClientMsg.id);
+    if (!options.force) {
+      const cached = readSuggestionCache(clientId, lastClientMsg.id);
+      if (cached?.set) {
+        autoSuggestRef.current = cacheKey;
+        setSuggestionsError(null);
+        upsertSuggestionSet(cached.set);
+        return;
+      }
+      if (cached?.error) {
+        autoSuggestRef.current = cacheKey;
+        setSuggestionsError(cached.error);
+        return;
+      }
+    }
 
     setSuggestionsLoading(true);
     setSuggestionsError(null);
@@ -348,13 +463,13 @@ const LawyerChatPage = () => {
         suggestions: data.suggestions || [],
         collapsed: false,
       };
-      // Collapse all previous, append new one
-      setSuggestionHistory(prev => [
-        ...prev.map(s => ({ ...s, collapsed: true })),
-        newSet,
-      ]);
+      upsertSuggestionSet(newSet);
+      autoSuggestRef.current = cacheKey;
+      writeSuggestionCache(clientId, lastClientMsg.id, { set: newSet });
     } catch (err) {
-      setSuggestionsError(err instanceof Error ? err.message : "Ошибка ИИ");
+      const message = err instanceof Error ? err.message : "Ошибка ИИ";
+      setSuggestionsError(message);
+      writeSuggestionCache(clientId, lastClientMsg.id, { error: message });
     } finally {
       setSuggestionsLoading(false);
     }
@@ -370,6 +485,23 @@ const LawyerChatPage = () => {
     setText(suggText);
     setAiPanelOpen(false);
     setTimeout(() => textareaRef.current?.focus(), 50);
+  };
+
+  const copyMessage = async (content: string, messageId: string) => {
+    const value = content.trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedMessageId(messageId);
+      toast({ title: "Сообщение скопировано" });
+      window.setTimeout(() => setCopiedMessageId((current) => (current === messageId ? null : current)), 1600);
+    } catch {
+      toast({
+        title: "Не удалось скопировать",
+        description: "Браузер не дал доступ к буферу обмена",
+        variant: "destructive",
+      });
+    }
   };
 
   const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
@@ -478,9 +610,9 @@ const LawyerChatPage = () => {
         </div>
         <Button
           variant="ghost" size="icon" className="h-7 w-7"
-          onClick={() => loadSuggestionsFor(messages)}
+          onClick={() => loadSuggestionsFor(messages, { force: true })}
           disabled={suggestionsLoading}
-          title="Обновить рекомендации"
+          title="Перегенерировать рекомендации"
         >
           {suggestionsLoading
             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -563,7 +695,7 @@ const LawyerChatPage = () => {
           {!suggestionsLoading && !currentItem && !suggestionsError && (
             <div className="text-center py-10 space-y-3 text-muted-foreground">
               <Sparkles className="h-9 w-9 mx-auto opacity-20" />
-              <p className="text-xs px-2">ИИ сформирует рекомендации автоматически, когда клиент напишет сообщение</p>
+              <p className="text-xs px-2">ИИ сформирует рекомендации один раз, когда клиент напишет сообщение. Повторный запуск — кнопкой сверху.</p>
             </div>
           )}
 
@@ -628,7 +760,7 @@ const LawyerChatPage = () => {
         <div className="h-full flex overflow-hidden lg:rounded-xl lg:border lg:shadow-md bg-background lg:bg-card/50">
 
           {/* ── Clients sidebar ─────────────────────────────────────────────── */}
-          <aside className="hidden lg:flex flex-col w-64 xl:w-72 border-r bg-card/30 flex-shrink-0">
+          <aside className="hidden min-w-0 overflow-hidden lg:flex flex-col w-64 xl:w-72 border-r bg-card/30 flex-shrink-0">
             <div className="px-3 py-3 border-b flex items-center gap-2">
               <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"
                 onClick={() => navigate("/lawyer/clients")}>
@@ -652,14 +784,14 @@ const LawyerChatPage = () => {
                   onChange={(e) => setSidebarSearch(e.target.value)} className="h-8 text-sm pl-8" />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-0.5">
               {sidebarClients.map((c) => (
                 <button key={c.id} onClick={() => navigate(`/lawyer/chat/${c.id}`)}
                   className={cn(
-                    "w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted group",
+                    "w-full min-w-0 text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-muted group",
                     clientId === c.id ? "bg-primary/10 border border-primary/20" : ""
                   )}>
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
                     <p className={cn("font-medium text-sm truncate", clientId === c.id ? "text-primary" : "")}>
                       {c.client_name}
                     </p>
@@ -681,7 +813,7 @@ const LawyerChatPage = () => {
           </aside>
 
           {/* ── Chat area ────────────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="relative flex-1 min-w-0 flex flex-col">
             {/* Top bar */}
             <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
@@ -753,7 +885,7 @@ const LawyerChatPage = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto overscroll-contain">
               <div className="mx-auto max-w-3xl space-y-0.5 px-3 py-3 pb-4">
                 {messages.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground text-sm">Нет сообщений.</div>
@@ -775,17 +907,33 @@ const LawyerChatPage = () => {
                           </div>
                         );
                       }
+                      const copyContent = m.message_type === "text" ? m.content : (m.file_name || m.content);
+                      const copied = copiedMessageId === m.id;
                       return (
                         <div key={m.id} className={cn("flex mb-1 items-end gap-1 group", isOwn ? "flex-row-reverse" : "")}>
-                          {isOwn && m.message_type === "text" && editingId !== m.id && (
-                            <Button variant="ghost" size="icon"
-                              className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 mb-1"
-                              onClick={() => { setEditingId(m.id); setEditText(m.content || ""); }}>
-                              <Pencil className="h-3 w-3" />
-                            </Button>
+                          {copyContent && (
+                            <div className="mb-1 flex flex-col gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                              {isOwn && m.message_type === "text" && editingId !== m.id && (
+                                <Button variant="ghost" size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={() => { setEditingId(m.id); setEditText(m.content || ""); }}
+                                  title="Редактировать">
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={() => copyMessage(copyContent, m.id)}
+                                title={copied ? "Скопировано" : "Копировать"}
+                              >
+                                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              </Button>
+                            </div>
                           )}
                           <div className={cn(
-                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%]",
+                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%] break-words",
                             isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border rounded-bl-sm"
                           )}>
                             {editingId === m.id ? (
@@ -866,6 +1014,20 @@ const LawyerChatPage = () => {
                 <div ref={bottomRef} />
               </div>
             </div>
+            {showScrollJump && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-[96px] z-10 flex justify-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => scrollToBottom(true)}
+                  className="pointer-events-auto h-9 rounded-full border border-border/70 bg-background/95 px-3 shadow-md backdrop-blur"
+                >
+                  <ArrowDown className="mr-1.5 h-4 w-4" />
+                  Вниз
+                </Button>
+              </div>
+            )}
 
             {showMobileAiStrip && (
               <div className="border-t bg-card/95 px-3 py-2 md:hidden">
