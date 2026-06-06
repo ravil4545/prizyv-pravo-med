@@ -674,10 +674,10 @@ const AIChatDashboardPage = () => {
   }
 
   const SidebarContent = () => (
-    <>
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-hidden">
       <Button
         size="sm"
-        className="mb-3 w-full flex-shrink-0"
+        className="mb-3 w-full min-w-0 flex-shrink-0"
         onClick={() => {
           createNewConversation();
           setMobileSidebarOpen(false);
@@ -686,17 +686,17 @@ const AIChatDashboardPage = () => {
         <Plus className="h-4 w-4 mr-2" />
         Новый диалог
       </Button>
-      <div className="relative mb-3 flex-shrink-0">
+      <div className="relative mb-3 w-full min-w-0 max-w-full flex-shrink-0">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           value={conversationSearch}
           onChange={(event) => setConversationSearch(event.target.value)}
           placeholder="Поиск диалогов"
-          className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className="h-9 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
       </div>
-      <ScrollArea className="min-h-0 flex-1 overscroll-contain pr-1">
-        <div className="space-y-2 pb-2">
+      <div className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
+        <div className="w-full min-w-0 max-w-full space-y-2 pb-2">
           {filteredConversations.length === 0 && (
             <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
               {conversationSearch ? "Ничего не найдено" : "Диалогов пока нет"}
@@ -705,12 +705,12 @@ const AIChatDashboardPage = () => {
           {filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group relative isolate max-w-full overflow-hidden rounded-lg p-3 pr-12 transition-colors hover:bg-muted ${
+              className={`group grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_2rem] gap-x-2 gap-y-2 overflow-hidden rounded-lg p-3 transition-colors hover:bg-muted ${
                 currentConversationId === conv.id ? 'bg-muted' : ''
               }`}
             >
               {renamingConversationId === conv.id ? (
-                <div className="space-y-2">
+                <div className="col-span-2 min-w-0 space-y-2">
                   <input
                     value={renameDraft}
                     onChange={(event) => setRenameDraft(event.target.value)}
@@ -719,7 +719,7 @@ const AIChatDashboardPage = () => {
                       if (event.key === "Escape") cancelRenameConversation();
                     }}
                     autoFocus
-                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <div className="grid min-w-0 grid-cols-[1fr_auto] gap-1.5">
                     <Button
@@ -749,7 +749,7 @@ const AIChatDashboardPage = () => {
                 <>
                   <button
                     type="button"
-                    className="w-full min-w-0 overflow-hidden text-left"
+                    className="min-w-0 max-w-full overflow-hidden text-left"
                     onClick={() => {
                       setCurrentConversationId(conv.id);
                       setMobileSidebarOpen(false);
@@ -765,7 +765,7 @@ const AIChatDashboardPage = () => {
                   </button>
                   <button
                     type="button"
-                    className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md border border-destructive/25 bg-background text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-destructive/25 bg-background text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
                     onClick={(event) => {
                       event.stopPropagation();
                       setConversationToDelete(conv);
@@ -782,7 +782,7 @@ const AIChatDashboardPage = () => {
                   </button>
                   <button
                     type="button"
-                    className="mt-2 flex h-8 w-full min-w-0 items-center justify-start gap-1.5 rounded-md border border-input bg-background px-2 text-[11px] font-medium transition-colors hover:border-primary/30 hover:bg-gradient-soft hover:text-primary"
+                    className="col-span-2 flex h-8 w-full min-w-0 max-w-full items-center justify-start gap-1.5 overflow-hidden rounded-md border border-input bg-background px-2 text-[11px] font-medium transition-colors hover:border-primary/30 hover:bg-gradient-soft hover:text-primary"
                     onClick={(event) => {
                       event.stopPropagation();
                       startRenameConversation(conv);
@@ -797,8 +797,8 @@ const AIChatDashboardPage = () => {
             </div>
           ))}
         </div>
-      </ScrollArea>
-    </>
+      </div>
+    </div>
   );
 
   return (
@@ -812,8 +812,8 @@ const AIChatDashboardPage = () => {
         {!isMobile && !isDemoMode && (
           <div className="hidden min-h-0 w-64 flex-shrink-0 flex-col gap-4 md:flex">
             <SubscriptionBanner compact />
-            <Card className="min-h-0 flex-1">
-              <CardContent className="flex h-full min-h-0 flex-col p-4">
+            <Card className="min-h-0 flex-1 overflow-hidden">
+              <CardContent className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-4">
                 <SidebarContent />
               </CardContent>
             </Card>
@@ -853,7 +853,7 @@ const AIChatDashboardPage = () => {
                     <Menu className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="flex w-[280px] flex-col sm:w-[320px]">
+                <SheetContent side="left" className="flex w-[280px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden sm:w-[320px]">
                   <SheetHeader className="mb-4 flex-shrink-0">
                     <SheetTitle>Диалоги</SheetTitle>
                   </SheetHeader>
