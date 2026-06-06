@@ -247,6 +247,130 @@ const STRAY_HEADERS = new Set([
   "III графа",
 ]);
 
+// ── формат «второго мозга» (rb_official): markdown с пунктами вида
+//    «- **а) …** → граф I/II/III: **Д / Д / Д**» ───────────────────────────────
+const MD_POINT_RE =
+  /^[-*]\s*\*\*\s*([а-яё])\)\s*(.+?)\*\*\s*(?:→|—|-+>)\s*граф[аы]?\s*I\s*\/\s*II\s*\/\s*III\s*:?\s*(.+?)\s*$/iu;
+
+/** Убирает markdown-разметку (**, #, >, маркеры списка) из строки. */
+function stripMd(s: string): string {
+  return s
+    .replace(/\*\*/g, "")
+    .replace(/^#{1,6}\s*/, "")
+    .replace(/^>\s?/, "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Нормализует токен графы: убирает **, «Б - 4» → «Б-4». */
+function normalizeCell(s: string): string {
+  return s
+    .replace(/\*\*/g, "")
+    .trim()
+    .replace(/^([АБВ])\s*-\s*(\d)/u, "$1-$2")
+    .replace(/\s+/g, " ");
+}
+
+/** Тело в формате rb_official (markdown), а не «сырой» consultant.ru. */
+function isOfficialFormat(body: string): boolean {
+  return /##\s*Статья/i.test(body) || /граф[аы]?\s*I\s*\/\s*II\s*\/\s*III/i.test(body);
+}
+
+/** Разбор rb_official-формата (markdown): пункты-буллеты, обычные пункты, «безбуквенная» строка. */
+function parseOfficialBody(body: string): ParsedArticle {
+  const result = emptyParsed("");
+  const lines = body
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let i = 0;
+  // пропускаем markdown-заголовок статьи и вводный blockquote
+  while (i < lines.length && (/^#{1,6}\s/.test(lines[i]) || /^>/.test(lines[i]))) i++;
+
+  // ведущая «безбуквенная» строка категорий — статья без пунктов а/б/в (напр. «временные расстройства»)
+  if (i < lines.length && CATEGORY_CELL_RE.test(normalizeCell(lines[i]))) {
+    const graphs: string[] = [];
+    while (i < lines.length && graphs.length < 3 && CATEGORY_CELL_RE.test(normalizeCell(lines[i]))) {
+      graphs.push(normalizeCell(lines[i]));
+      i++;
+    }
+    result.points.push({ letter: "", description: "", graphs });
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (EDIT_RE.test(line)) {
+      result.hasEdits = true;
+      i++;
+      continue;
+    }
+    // повторный markdown-заголовок (склейка чанков) — пропускаем
+    if (/^#{1,6}\s/.test(line)) {
+      i++;
+      continue;
+    }
+
+    const md = line.match(MD_POINT_RE);
+    if (md) {
+      const graphs = stripMd(md[3])
+        .split("/")
+        .map((g) => normalizeCell(g))
+        .filter(Boolean)
+        .slice(0, 3);
+      result.points.push({ letter: md[1].toLowerCase(), description: stripMd(md[2]), graphs });
+      i++;
+      continue;
+    }
+
+    const pm = line.match(POINT_RE);
+    if (pm && !/граф/i.test(line) && CATEGORY_CELL_RE.test(normalizeCell(lines[i + 1] ?? ""))) {
+      const graphs: string[] = [];
+      let j = i + 1;
+      while (j < lines.length && graphs.length < 3 && CATEGORY_CELL_RE.test(normalizeCell(lines[j]))) {
+        graphs.push(normalizeCell(lines[j]));
+        j++;
+      }
+      result.points.push({ letter: pm[1].toLowerCase(), description: stripMd(pm[2]), graphs });
+      i = j;
+      continue;
+    }
+
+    const ex = line.match(POINT_EXPL_RE);
+    if (ex) {
+      const paragraphs: string[] = [];
+      const inline = stripMd(ex[2] || "");
+      if (inline) paragraphs.push(inline);
+      let j = i + 1;
+      while (
+        j < lines.length &&
+        !MD_POINT_RE.test(lines[j]) &&
+        !POINT_EXPL_RE.test(lines[j]) &&
+        !(POINT_RE.test(lines[j]) && !/граф/i.test(lines[j]) && CATEGORY_CELL_RE.test(normalizeCell(lines[j + 1] ?? "")))
+      ) {
+        paragraphs.push(stripMd(lines[j]));
+        j++;
+      }
+      result.pointExplanations.push({ title: `Пункт «${ex[1].toLowerCase()}»`, paragraphs });
+      i = j;
+      continue;
+    }
+
+    result.notes.push(stripMd(line));
+    i++;
+  }
+
+  result.hasStructure = result.points.length > 0;
+  if (!result.hasStructure) {
+    result.fallbackText = lines
+      .filter((l) => !/^#{1,6}\s/.test(l))
+      .map(stripMd)
+      .join("\n\n");
+  }
+  return result;
+}
+
 function emptyParsed(fallback = ""): ParsedArticle {
   return {
     points: [],
@@ -266,6 +390,9 @@ function emptyParsed(fallback = ""): ParsedArticle {
  */
 export function parseArticleBody(body: string | null | undefined): ParsedArticle {
   if (!body || !body.trim()) return emptyParsed("");
+
+  // тело из «второго мозга» (rb_official) разбираем по своим правилам markdown-формата
+  if (isOfficialFormat(body)) return parseOfficialBody(body);
 
   let parts = body
     .split(/\n{2,}/)

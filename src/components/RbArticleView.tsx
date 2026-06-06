@@ -76,10 +76,12 @@ export default function RbArticleView({ body }: RbArticleViewProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {parsed.points.map((p) => (
-                <TableRow key={p.letter} className="align-top">
-                  <TableCell className="text-center align-top font-bold">{p.letter})</TableCell>
-                  <TableCell className="align-top text-xs leading-relaxed sm:text-sm">{p.description}</TableCell>
+              {parsed.points.map((p, idx) => (
+                <TableRow key={p.letter || idx} className="align-top">
+                  <TableCell className="text-center align-top font-bold">{p.letter ? `${p.letter})` : "—"}</TableCell>
+                  <TableCell className="align-top text-xs leading-relaxed sm:text-sm">
+                    {p.description || (p.letter ? "" : "По статье в целом")}
+                  </TableCell>
                   <TableCell className="bg-primary/5 text-center align-top">
                     <CategoryBadge token={p.graphs[0]} />
                   </TableCell>
