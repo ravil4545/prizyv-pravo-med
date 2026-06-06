@@ -2,6 +2,20 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+    .then(() => {
+      if ("caches" in window) {
+        return caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+      }
+      return undefined;
+    })
+    .catch(() => {
+      // Dev-only cache cleanup must never block app bootstrap.
+    });
+}
+
 // Catch dynamic-import / chunk-load failures BEFORE React mounts.
 window.addEventListener("unhandledrejection", (event) => {
   const msg = String(event.reason?.message ?? event.reason ?? "");

@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
+import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 import { supabase } from "@/integrations/supabase/client";
 
 const LEGAL_LINKS = [
@@ -35,6 +36,7 @@ export default function LawyerLayout() {
   // Полноэкранный чат-тред /lawyer/chat/* — десктоп-сайдбар оставляем, мобильные
   // верхнюю панель и нижние табы прячем (у чата своя шапка, поле ввода у низа).
   const chat = isChatThread(location.pathname);
+  const chatViewportHeight = useVisualViewportHeight(chat);
 
   const isItemActive = (item: LawyerNavItem) => {
     // «Кабинет» активен только точным совпадением, иначе светился бы на всех /lawyer/*
@@ -58,7 +60,10 @@ export default function LawyerLayout() {
   const tabs = [LAWYER_PRIMARY_NAV[0], LAWYER_PRIMARY_NAV[1], LAWYER_PRIMARY_NAV[2], LAWYER_PRIMARY_NAV[3]];
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div
+      className={cn("flex bg-background", chat ? "min-h-0 overflow-hidden" : "min-h-screen")}
+      style={chat && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       {/* ── Десктоп: левый сайдбар ─────────────────────────────────────── */}
       <aside className="hidden md:flex sticky top-0 h-screen w-60 flex-shrink-0 flex-col border-r border-ink/10 bg-paper-deep/30">
         <Link to="/lawyer" className="block border-b border-ink/10 px-5 py-5">
@@ -87,7 +92,7 @@ export default function LawyerLayout() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-w-0 flex-1 flex-col", chat && "min-h-0 overflow-hidden")}>
         {/* ── Мобайл: верхняя панель кабинета (на чат-тредах нет) ────────── */}
         {!chat && (
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-paper px-3 md:hidden">
@@ -113,7 +118,7 @@ export default function LawyerLayout() {
         </header>
         )}
 
-        <div className="flex-1">
+        <div className={cn("flex-1", chat && "min-h-0 overflow-hidden")}>
           <Outlet />
         </div>
 

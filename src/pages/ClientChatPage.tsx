@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download,
@@ -36,6 +41,8 @@ const ClientChatPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const chatViewportHeight = useVisualViewportHeight(isMobile);
 
   const [conv, setConv] = useState<Record<string, any> | null>(null);
   const [lawyerProfile, setLawyerProfile] = useState<{ full_name: string | null; specialization: string | null } | null>(null);
@@ -243,7 +250,7 @@ const ClientChatPage = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,7 +297,10 @@ const ClientChatPage = () => {
   });
 
   if (loading) return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div
+      className="flex h-[100dvh] flex-col overflow-hidden bg-background"
+      style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       <Header />
       <div className="flex-1 container mx-auto px-4 py-6 space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
@@ -303,7 +313,10 @@ const ClientChatPage = () => {
   const lawyerName = lawyerProfile?.full_name || "Ваш юрист";
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div
+      className="flex h-[100dvh] flex-col overflow-hidden bg-background"
+      style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       <Header />
 
       <div className="flex-1 min-h-0 p-0 lg:p-3">
@@ -355,7 +368,7 @@ const ClientChatPage = () => {
           {/* ── Chat area ────────────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col">
             {/* Top bar */}
-            <div className="border-b bg-card/80 px-3 py-2.5 flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
                 onClick={() => navigate("/client/messages")}>
                 <ArrowLeft className="h-4 w-4" />
@@ -378,12 +391,12 @@ const ClientChatPage = () => {
 
             {/* Баннер доступа: связь есть, но юрист не видит документы/ИИ */}
             {accessActive === false && (
-              <div className="border-b bg-amber-50 dark:bg-amber-950/20 px-3 py-2.5 flex items-center gap-2.5 flex-shrink-0">
+              <div className="flex flex-shrink-0 items-center gap-2.5 border-b bg-amber-50 px-3 py-2.5 dark:bg-amber-950/20">
                 <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0" />
                 <p className="text-xs text-amber-900 dark:text-amber-200 flex-1 leading-snug">
                   Юрист пока <strong>не видит</strong> ваши документы, профиль и ИИ-расшифровки — он не сможет полноценно помочь.
                 </p>
-                <Button size="sm" className="h-7 gap-1.5 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
+                <Button size="sm" className="h-8 flex-shrink-0 gap-1.5 bg-amber-600 text-white hover:bg-amber-700 sm:h-7"
                   onClick={grantAccess} disabled={grantingAccess}>
                   {grantingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
                   Открыть доступ
@@ -400,8 +413,8 @@ const ClientChatPage = () => {
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-3 py-3 max-w-3xl mx-auto space-y-0.5">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              <div className="mx-auto max-w-3xl space-y-0.5 px-3 py-3 pb-4">
                 {messages.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground text-sm">
                     Нет сообщений. Юрист напишет вам здесь.
@@ -435,7 +448,7 @@ const ClientChatPage = () => {
                             </Button>
                           )}
                           <div className={cn(
-                            "max-w-[78%] rounded-2xl px-3.5 py-2 shadow-sm",
+                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%]",
                             isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border rounded-bl-sm"
                           )}>
                             {editingId === m.id ? (
@@ -518,16 +531,32 @@ const ClientChatPage = () => {
             </div>
 
             {/* Input bar */}
-            <div className="border-t bg-card/80 px-3 py-2.5 flex-shrink-0">
-              <div className="max-w-3xl mx-auto flex items-end gap-1.5">
+            <div className="flex-shrink-0 border-t bg-card/95 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] backdrop-blur sm:pb-2.5">
+              <div className="mx-auto flex max-w-3xl items-end gap-1.5">
                 <input type="file" ref={imageRef} onChange={handleFile} className="hidden" accept="image/*" />
                 <input type="file" ref={fileRef} onChange={handleFile} className="hidden"
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" />
-                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0"
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-11 w-11 flex-shrink-0 sm:hidden"
+                      disabled={uploading} title="Прикрепить">
+                      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="top" className="w-44">
+                    <DropdownMenuItem onClick={() => imageRef.current?.click()}>
+                      <ImageIcon className="mr-2 h-4 w-4" /> Фото
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => fileRef.current?.click()}>
+                      <Paperclip className="mr-2 h-4 w-4" /> Файл
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
                   onClick={() => imageRef.current?.click()} disabled={uploading} title="Отправить фото">
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0"
+                <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
                   onClick={() => fileRef.current?.click()} disabled={uploading} title="Прикрепить файл">
                   <Paperclip className="h-4 w-4" />
                 </Button>
@@ -535,15 +564,17 @@ const ClientChatPage = () => {
                   ref={textareaRef}
                   value={text}
                   onChange={(e) => { setText(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
+                  onFocus={() => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80)}
                   onKeyDown={handleKeyDown}
                   placeholder="Написать сообщение..."
+                  enterKeyHint="send"
                   rows={1}
                   disabled={sending}
-                  className="flex-1 resize-none overflow-hidden bg-background border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 placeholder:text-muted-foreground disabled:opacity-50 leading-relaxed"
-                  style={{ minHeight: "40px", maxHeight: "120px" }}
+                  className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl border border-input bg-background px-3 py-2.5 text-[15px] leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50 sm:min-h-[40px] sm:py-2 sm:text-sm"
+                  style={{ maxHeight: "120px" }}
                 />
                 <Button size="icon" onClick={handleSend} disabled={!text.trim() || sending}
-                  className="h-9 w-9 flex-shrink-0 rounded-xl">
+                  className="h-11 w-11 flex-shrink-0 rounded-xl sm:h-9 sm:w-9">
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
