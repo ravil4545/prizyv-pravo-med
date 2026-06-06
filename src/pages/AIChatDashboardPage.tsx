@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, Plus, MessageSquare, Trash2, Menu, UserPlus, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -20,6 +20,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import { buildAIContext } from "@/lib/buildAIContext";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseConfig";
+import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 
 interface Message {
   role: "user" | "assistant";
@@ -63,14 +64,21 @@ const AIChatDashboardPage = () => {
   const [sending, setSending] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [limitDialogOpen, setLimitDialogOpen] = useState(false);
+  const [quickRepliesCollapsed, setQuickRepliesCollapsed] = useState(false);
   const [medicalContext, setMedicalContext] = useState<string>("");
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const chatViewportHeight = useVisualViewportHeight(isMobile);
+
+  useEffect(() => {
+    setQuickRepliesCollapsed(isMobile);
+  }, [currentConversationId, isMobile]);
 
   // ── Эскалация ИИ → живой юрист ──────────────────────────────────────────
   const [linkedCard, setLinkedCard] = useState<{ id: string; escalation_requested: boolean } | null>(null);
@@ -356,6 +364,7 @@ const AIChatDashboardPage = () => {
     setMessages((prev) => [...prev, userMessage]);
     if (!isDemoMode) await saveMessage(userMessage);
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "44px";
     setSending(true);
 
     try {
@@ -363,9 +372,8 @@ const AIChatDashboardPage = () => {
       console.log("[Chat] Sending message with medicalContext:", contextToSend ? contextToSend.length + " chars" : "NONE");
 
       // Прямой fetch вместо supabase.functions.invoke: invoke в браузере
-      // буферизирует ответ и не даёт настоящий SSE-стрим — keepalive-строки
-      // вида ": OPENROUTER PROCESSING" приходят как обычный текст и
-      // ошибочно показывались как ответ ИИ. fetch с ReadableStream — надёжнее.
+      // буферизирует ответ и не даёт настоящий SSE-стрим. fetch с
+      // ReadableStream надёжнее для обработки server-sent events.
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token || SUPABASE_ANON_KEY;
 
@@ -435,7 +443,7 @@ const AIChatDashboardPage = () => {
 
         for (const line of lines) {
           // SSE-комментарии (начинаются с ":") — keepalive, игнорируем.
-          // Пример: ": OPENROUTER PROCESSING"
+          // Пример: ": keepalive"
           if (!line || line.startsWith(":")) continue;
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6);
@@ -594,28 +602,12 @@ const AIChatDashboardPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div
+      className="flex h-[100dvh] min-h-0 flex-col bg-background md:h-auto md:min-h-screen"
+      style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       <Header />
-      <main className="flex-1 flex flex-col md:flex-row container mx-auto px-2 sm:px-4 py-4 md:py-8 pb-24 md:pb-8 gap-4 overflow-hidden">
-        {/* Demo banner */}
-        {isDemoMode && (
-          <div className="md:hidden mb-2">
-            <Card className="border-primary/40 bg-primary/5">
-              <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Демо: {remainingDemoAI} из {demoAiLimit} вопросов</span>
-                </div>
-                <Button size="sm" onClick={() => navigate("/auth")}>Регистрация</Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-        {!isDemoMode && (
-          <div className="md:hidden mb-2">
-            <SubscriptionBanner compact />
-          </div>
-        )}
+      <main className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-0 py-0 md:container md:mx-auto md:flex-row md:gap-4 md:px-4 md:py-8">
         {/* Desktop Sidebar */}
         {!isMobile && !isDemoMode && (
           <div className="hidden md:block w-64 flex-shrink-0 space-y-4">
@@ -652,8 +644,8 @@ const AIChatDashboardPage = () => {
         )}
 
         {/* Main Chat */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="flex min-h-0 flex-1 flex-col min-w-0">
+          <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur md:mb-4 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-0">
             {isMobile && !isDemoMode && (
               <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
                 <SheetTrigger asChild>
@@ -700,10 +692,21 @@ const AIChatDashboardPage = () => {
                 </span>
               </Button>
             )}
+            {isMobile && isDemoMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/auth")}
+                className="ml-auto h-8 flex-shrink-0 gap-1.5 px-2 text-xs"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                {remainingDemoAI}/{demoAiLimit}
+              </Button>
+            )}
           </div>
 
-          <Card className="flex flex-col h-[calc(100vh-240px)] md:h-[calc(100vh-180px)]">
-            <CardHeader className="pb-3 sm:pb-4 flex-shrink-0">
+          <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none md:h-[calc(100vh-180px)] md:rounded-lg md:border md:shadow-sm">
+            <CardHeader className="hidden flex-shrink-0 px-3 py-2.5 md:flex md:px-6 md:py-4">
               <CardTitle className="text-lg sm:text-xl">AI Юридический консультант</CardTitle>
               <p className="text-xs sm:text-sm text-muted-foreground">
                 Консультация по вопросам призыва и воинского учёта
@@ -716,9 +719,9 @@ const AIChatDashboardPage = () => {
                 <p className="text-xs text-muted-foreground">📋 Заполните профиль и загрузите документы — ИИ даст персональную консультацию</p>
               )}
             </CardHeader>
-            <CardContent className="flex flex-col flex-1 p-2 sm:p-6 min-h-0 overflow-hidden">
-              <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
-                <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-6">
+              <ScrollArea className="mb-2 min-h-0 flex-1 sm:mb-4" ref={scrollAreaRef}>
+                <div className="space-y-3 pr-2 pb-2 sm:space-y-4 sm:pr-4">
                   {messages.length === 0 && (
                     <div className="flex flex-col items-center text-center py-6 sm:py-10 px-3 sm:px-4">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 shadow-md">
@@ -845,24 +848,67 @@ const AIChatDashboardPage = () => {
               {!sending &&
                 messages.length > 0 &&
                 messages[messages.length - 1].role === "assistant" && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {QUICK_REPLIES_FOLLOWUP.map((q) => (
+                  <div className="mb-2 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-sm">
+                    {quickRepliesCollapsed ? (
                       <button
-                        key={q}
                         type="button"
-                        onClick={() => sendMessage(q)}
-                        className="rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                        aria-expanded="false"
+                        onClick={() => setQuickRepliesCollapsed(false)}
+                        className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50"
                       >
-                        {q}
+                        <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate">
+                          Подсказки: {QUICK_REPLIES_FOLLOWUP[0]}
+                        </span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          {QUICK_REPLIES_FOLLOWUP.length}
+                        </span>
+                        <ChevronUp className="h-3.5 w-3.5 flex-shrink-0" />
                       </button>
-                    ))}
+                    ) : (
+                      <div className="p-2">
+                        <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
+                          <span className="text-xs font-medium text-foreground">Быстрые подсказки</span>
+                          <button
+                            type="button"
+                            aria-label="Свернуть подсказки"
+                            onClick={() => setQuickRepliesCollapsed(true)}
+                            className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted"
+                          >
+                            Свернуть
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="scrollbar-hide flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                          {QUICK_REPLIES_FOLLOWUP.map((q) => (
+                            <button
+                              key={q}
+                              type="button"
+                              onClick={() => {
+                                setQuickRepliesCollapsed(true);
+                                sendMessage(q);
+                              }}
+                              className="min-h-[36px] flex-none rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                            >
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-              <div className="flex gap-2 items-end">
+              <div className="flex items-end gap-2">
                 <Textarea
+                  ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    e.currentTarget.style.height = "auto";
+                    e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 132)}px`;
+                  }}
+                  onFocus={scrollToBottom}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey && !isMobile) {
                       e.preventDefault();
@@ -870,15 +916,17 @@ const AIChatDashboardPage = () => {
                     }
                   }}
                   placeholder="Введите ваш вопрос..."
-                  className="resize-none text-[15px] sm:text-base rounded-xl flex-1"
-                  rows={isMobile ? 2 : 3}
+                  enterKeyHint="send"
+                  className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl text-[15px] leading-relaxed sm:text-base"
+                  rows={1}
                   disabled={sending}
+                  style={{ maxHeight: 132 }}
                 />
                 <Button
                   onClick={() => sendMessage()}
                   disabled={sending || !input.trim()}
                   size="icon"
-                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md hover:shadow-lg transition-shadow"
+                  className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent shadow-md transition-shadow hover:shadow-lg sm:h-12 sm:w-12"
                   aria-label="Отправить"
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

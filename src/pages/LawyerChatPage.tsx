@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ArrowLeft, Send, Paperclip, Loader2, Download, Users,
@@ -60,6 +62,8 @@ const LawyerChatPage = () => {
   const { user } = useAuth();
   const { isLawyer, loading: profileLoading } = useLawyerProfile();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const chatViewportHeight = useVisualViewportHeight(isMobile);
 
   const [client, setClient] = useState<Record<string, any> | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -81,6 +85,7 @@ const LawyerChatPage = () => {
 
   // AI suggestions
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [mobileAiStripCollapsed, setMobileAiStripCollapsed] = useState(true);
   const [suggestionHistory, setSuggestionHistory] = useState<SuggestionSet[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
@@ -203,7 +208,12 @@ const LawyerChatPage = () => {
     setSuggestionHistory([]);
     setSuggestionsError(null);
     autoSuggestRef.current = null;
+    setMobileAiStripCollapsed(true);
   }, [clientId]);
+
+  useEffect(() => {
+    setMobileAiStripCollapsed(true);
+  }, [suggestionHistory.length]);
 
   // Auto-trigger AI suggestions when last text message is from client
   useEffect(() => {
@@ -403,7 +413,7 @@ const LawyerChatPage = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -454,6 +464,8 @@ const LawyerChatPage = () => {
   const currentItem = suggestionHistory.length > 0
     ? suggestionHistory[suggestionHistory.length - 1]
     : null;
+  const showMobileAiStrip = suggestionsLoading || !!suggestionsError || !!currentItem;
+  const firstMobileSuggestion = currentItem?.suggestions[0] || null;
 
   // AI panel content as JSX variable (avoids component-inside-render issues)
   const aiPanelContent = (
@@ -592,7 +604,10 @@ const LawyerChatPage = () => {
   );
 
   if (loading || profileLoading) return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div
+      className="flex h-[100dvh] flex-col overflow-hidden bg-background"
+      style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       <Header />
       <div className="flex-1 container mx-auto px-4 py-6 space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
@@ -603,7 +618,10 @@ const LawyerChatPage = () => {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div
+      className="flex h-[100dvh] flex-col overflow-hidden bg-background"
+      style={isMobile && chatViewportHeight ? { height: chatViewportHeight } : undefined}
+    >
       <Header />
 
       <div className="flex-1 min-h-0 p-0 lg:p-3">
@@ -665,7 +683,7 @@ const LawyerChatPage = () => {
           {/* ── Chat area ────────────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col">
             {/* Top bar */}
-            <div className="border-b bg-card/80 px-3 py-2.5 flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
                 onClick={() => navigate("/lawyer/clients")}>
                 <ArrowLeft className="h-4 w-4" />
@@ -735,8 +753,8 @@ const LawyerChatPage = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-3 py-3 max-w-3xl mx-auto space-y-0.5">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              <div className="mx-auto max-w-3xl space-y-0.5 px-3 py-3 pb-4">
                 {messages.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground text-sm">Нет сообщений.</div>
                 )}
@@ -767,7 +785,7 @@ const LawyerChatPage = () => {
                             </Button>
                           )}
                           <div className={cn(
-                            "max-w-[78%] rounded-2xl px-3.5 py-2 shadow-sm",
+                            "max-w-[86%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[78%]",
                             isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border rounded-bl-sm"
                           )}>
                             {editingId === m.id ? (
@@ -849,17 +867,118 @@ const LawyerChatPage = () => {
               </div>
             </div>
 
+            {showMobileAiStrip && (
+              <div className="border-t bg-card/95 px-3 py-2 md:hidden">
+                <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border border-primary/20 bg-background/95 shadow-sm">
+                  {mobileAiStripCollapsed ? (
+                    <button
+                      type="button"
+                      aria-expanded="false"
+                      onClick={() => setMobileAiStripCollapsed(false)}
+                      className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-muted-foreground hover:bg-muted/50"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {suggestionsLoading
+                          ? "ИИ готовит подсказки ответа"
+                          : firstMobileSuggestion
+                            ? `Подсказка: ${firstMobileSuggestion.label}`
+                            : suggestionsError || "ИИ-подсказки"}
+                      </span>
+                      {currentItem?.suggestions.length ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          {currentItem.suggestions.length}
+                        </span>
+                      ) : null}
+                      <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />
+                    </button>
+                  ) : (
+                    <div className="p-2">
+                      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                        <span className="text-xs font-medium">ИИ-подсказки к ответу</span>
+                        <button
+                          type="button"
+                          onClick={() => setMobileAiStripCollapsed(true)}
+                          className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted"
+                        >
+                          Свернуть
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {suggestionsLoading && (
+                        <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ИИ анализирует последнее сообщение клиента
+                        </div>
+                      )}
+                      {suggestionsError && (
+                        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{suggestionsError}</p>
+                      )}
+                      {!suggestionsLoading && currentItem && (
+                        <div className="space-y-2">
+                          {currentItem.suggestions.slice(0, 2).map((s, i) => (
+                            <div key={`${s.label}-${i}`} className="rounded-lg border bg-card p-2">
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold text-primary">{s.label}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 flex-shrink-0 gap-1 px-2 text-xs"
+                                  onClick={() => {
+                                    insertSuggestion(s.text);
+                                    setMobileAiStripCollapsed(true);
+                                  }}
+                                >
+                                  <CornerDownLeft className="h-3 w-3" />
+                                  Вставить
+                                </Button>
+                              </div>
+                              <p className="max-h-16 overflow-hidden text-xs leading-relaxed text-foreground/75">{s.text}</p>
+                            </div>
+                          ))}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-full text-xs"
+                            onClick={() => setAiPanelOpen(true)}
+                          >
+                            Открыть все подсказки
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Input bar */}
-            <div className="border-t bg-card/80 px-3 py-2.5 flex-shrink-0">
-              <div className="max-w-3xl mx-auto flex items-end gap-1.5">
+            <div className="flex-shrink-0 border-t bg-card/95 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] backdrop-blur sm:pb-2.5">
+              <div className="mx-auto flex max-w-3xl items-end gap-1.5">
                 <input type="file" ref={imageRef} onChange={handleFile} className="hidden" accept="image/*" />
                 <input type="file" ref={fileRef} onChange={handleFile} className="hidden"
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" />
-                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0"
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-11 w-11 flex-shrink-0 sm:hidden"
+                      disabled={uploading} title="Прикрепить">
+                      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="top" className="w-44">
+                    <DropdownMenuItem onClick={() => imageRef.current?.click()}>
+                      <ImageIcon className="mr-2 h-4 w-4" /> Фото
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => fileRef.current?.click()}>
+                      <Paperclip className="mr-2 h-4 w-4" /> Файл
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
                   onClick={() => imageRef.current?.click()} disabled={uploading} title="Отправить фото">
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0"
+                <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
                   onClick={() => fileRef.current?.click()} disabled={uploading} title="Прикрепить файл">
                   <Paperclip className="h-4 w-4" />
                 </Button>
@@ -867,12 +986,14 @@ const LawyerChatPage = () => {
                   ref={textareaRef}
                   value={text}
                   onChange={(e) => { setText(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
+                  onFocus={() => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80)}
                   onKeyDown={handleKeyDown}
                   placeholder="Написать сообщение..."
+                  enterKeyHint="send"
                   rows={1}
                   disabled={sending}
-                  className="flex-1 resize-none overflow-hidden bg-background border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 placeholder:text-muted-foreground disabled:opacity-50 leading-relaxed"
-                  style={{ minHeight: "40px", maxHeight: "120px" }}
+                  className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl border border-input bg-background px-3 py-2.5 text-[15px] leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50 sm:min-h-[40px] sm:py-2 sm:text-sm"
+                  style={{ maxHeight: "120px" }}
                 />
                 {/* ИИ-проверка черновика перед отправкой — страхует от ошибок в формулировках */}
                 <Button
@@ -880,13 +1001,13 @@ const LawyerChatPage = () => {
                   size="icon"
                   onClick={reviewDraft}
                   disabled={!text.trim() || sending || reviewLoading}
-                  className="h-9 w-9 flex-shrink-0"
+                  className="h-11 w-11 flex-shrink-0 sm:h-9 sm:w-9"
                   title="ИИ-проверка черновика"
                 >
                   {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4 text-primary" />}
                 </Button>
                 <Button size="icon" onClick={handleSend} disabled={!text.trim() || sending}
-                  className="h-9 w-9 flex-shrink-0 rounded-xl">
+                  className="h-11 w-11 flex-shrink-0 rounded-xl sm:h-9 sm:w-9">
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
