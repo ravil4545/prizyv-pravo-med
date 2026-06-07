@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   DOC_TEMPLATES, DOC_CATEGORIES, FIELD_DEFS, fieldLabel, todayRu, autofillValue,
-  renderTemplate, type DocTemplate, type FillContext,
+  renderTemplate, extractTokens, type DocTemplate, type FillContext,
 } from "@/lib/docTemplates";
 import {
   downloadDocx, printDoc, splitHeaderBody, isTitleLine,
@@ -38,8 +38,10 @@ import {
 // ── Поля, которые умеет заполнять поиск гос-структур по адресу ───────────────
 const GOV_KEYS = new Set([
   "military_commissariat", "military_commissariat_address", "superior_military_commissariat",
-  "court_name", "prosecutor_office", "polyclinic",
-  "psychoneurological_dispensary", "narcological_dispensary",
+  "court_name", "prosecutor_office",
+  "polyclinic", "polyclinic_address",
+  "psychoneurological_dispensary", "pnd_address",
+  "narcological_dispensary", "kvd", "kvd_address",
 ]);
 
 interface EditorField { id: string; key: string; label: string; value: string; multiline: boolean; }
@@ -80,6 +82,7 @@ const UserTemplatesPage = () => {
   const [docs, setDocs] = useState<{ id: string; title: string | null; document_date: string | null }[]>([]);
   const [gov, setGov] = useState<Record<string, string> | null>(null);
   const [govLoading, setGovLoading] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -100,6 +103,7 @@ const UserTemplatesPage = () => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session && !session.user.is_anonymous) {
+        setEmail(session.user.email ?? null);
         const [{ data: prof }, { data: md }] = await Promise.all([
           supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle(),
           supabase.from("medical_documents_v2")
@@ -114,7 +118,7 @@ const UserTemplatesPage = () => {
     })();
   }, []);
 
-  const fillCtx = (): FillContext => ({ profile, gov, today: todayRu() });
+  const fillCtx = (): FillContext => ({ profile, gov, email, today: todayRu() });
 
   const values = useMemo(
     () => (ed ? Object.fromEntries(ed.fields.map((f) => [f.key, f.value])) : {}),
@@ -128,11 +132,11 @@ const UserTemplatesPage = () => {
   // ── Открыть базовый шаблон в редакторе с автозаполнением ──────────────────
   const openTemplate = (t: DocTemplate) => {
     const ctx = fillCtx();
-    const fields: EditorField[] = t.fieldKeys.map((k, i) => ({
+    const fields: EditorField[] = extractTokens(t.bodyTemplate).map((k, i) => ({
       id: `${k}-${i}`,
       key: k,
       label: fieldLabel(k),
-      value: autofillValue(k, ctx),
+      value: autofillValue(k, ctx) || t.defaults?.[k] || "",
       multiline: !!FIELD_DEFS[k]?.multiline,
     }));
     setEd({

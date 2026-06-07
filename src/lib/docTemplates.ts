@@ -1,19 +1,19 @@
 // ════════════════════════════════════════════════════════════════════════
 //  Движок клиентских шаблонов документов (/dashboard/templates).
 //
-//  Модель: каждый шаблон — это bodyTemplate с токенами {{ключ}} + список
-//  ключей полей. Значения полей автозаполняются из профиля пользователя,
-//  гос-структур (find-government-structures) и медкарты. Тело редактируемо,
-//  поля добавляются/удаляются. Рендер = подстановка значений в {{ключ}}.
+//  Каталог построен на ОФИЦИАЛЬНЫХ образцах 2026 (заявления/жалобы в военкомат,
+//  призывную комиссию и медицинские организации) + доверенность и админ-иск.
 //
-//  Экспорт (DOCX/печать) — в lib/docxBuilder.ts. Здесь только данные и рендер.
+//  Модель: bodyTemplate с токенами {{ключ}}. Значения автозаполняются из профиля,
+//  гос-структур (find-government-structures) и медкарты. Поля редактируются,
+//  добавляются/удаляются; список полей выводится из токенов (extractTokens).
+//  Экспорт (DOCX/печать) — в lib/docxBuilder.ts.
 // ════════════════════════════════════════════════════════════════════════
 
 export interface FieldDef {
   key: string;
   label: string;
   multiline?: boolean;
-  /** Подсказка-пример в инпуте. */
   placeholder?: string;
 }
 
@@ -22,61 +22,94 @@ export interface DocTemplate {
   category: string;
   title: string;
   description: string;
-  /** Упорядоченный список ключей полей. */
-  fieldKeys: string[];
   /** Тело с токенами {{ключ}}. */
   bodyTemplate: string;
+  /** Значения по умолчанию (подсказки/перечни), если автозаполнения нет. */
+  defaults?: Record<string, string>;
 }
 
-// ── Словарь полей: ярлык + пример. Источник истины для меток в форме и превью ──
+// ── Словарь полей: ярлык + пример. Метки для формы и превью ──────────────────
 export const FIELD_DEFS: Record<string, FieldDef> = {
-  full_name: { key: "full_name", label: "ФИО", placeholder: "Петров Пётр Петрович" },
+  // Профиль
+  full_name: { key: "full_name", label: "ФИО полностью", placeholder: "Петров Пётр Петрович" },
   birth_date: { key: "birth_date", label: "Дата рождения", placeholder: "01.01.2005" },
   birth_place: { key: "birth_place", label: "Место рождения", placeholder: "г. Москва" },
   phone: { key: "phone", label: "Телефон", placeholder: "+7 999 000 00 00" },
-  passport: { key: "passport", label: "Паспортные данные", placeholder: "серия 4515 № 123456, выдан...", multiline: true },
-  registration_address: { key: "registration_address", label: "Адрес регистрации", placeholder: "г. Москва, ул. Пушкина, д. 1, кв. 1" },
-  actual_address: { key: "actual_address", label: "Фактический адрес", placeholder: "г. Москва, ул. ..." },
+  email: { key: "email", label: "E-mail", placeholder: "name@example.com" },
+  passport: { key: "passport", label: "Паспорт (серия, №, кем выдан)", placeholder: "серия 4515 № 123456, выдан...", multiline: true },
+  policy: { key: "policy", label: "Полис ОМС", placeholder: "1234 5678 9012 3456" },
+  snils: { key: "snils", label: "СНИЛС", placeholder: "123-456-789 00" },
+  registration_address: { key: "registration_address", label: "Адрес для ответа (регистрации)", placeholder: "г. Москва, ул. Пушкина, д. 1, кв. 1" },
   region: { key: "region", label: "Субъект РФ", placeholder: "г. Москва" },
-  military_commissariat: { key: "military_commissariat", label: "Военкомат", placeholder: "Военкомат г. Москвы ЦАО", multiline: true },
+  municipality: { key: "municipality", label: "Муниципальное образование", placeholder: "район / городской округ" },
+  card_number: { key: "card_number", label: "Прикрепление / участок / № карты", placeholder: "если известно" },
+  work_study: { key: "work_study", label: "Место работы / учёбы", placeholder: "организация, адрес, должность / курс" },
+
+  // Гос-структуры (find-government-structures)
+  military_commissariat: { key: "military_commissariat", label: "Военкомат (отдел воинского учёта)", placeholder: "Военкомат г. Москвы ЦАО", multiline: true },
   military_commissariat_address: { key: "military_commissariat_address", label: "Адрес военкомата", placeholder: "г. Москва, ул. ..." },
-  commissar_name: { key: "commissar_name", label: "ФИО военного комиссара", placeholder: "Иванову И.И." },
-  superior_military_commissariat: { key: "superior_military_commissariat", label: "Вышестоящий военкомат", placeholder: "Военный комиссариат г. Москвы" },
+  superior_military_commissariat: { key: "superior_military_commissariat", label: "Вышестоящий военкомат (субъекта РФ)", placeholder: "Военный комиссариат г. Москвы" },
   court_name: { key: "court_name", label: "Наименование суда", placeholder: "Пресненский районный суд г. Москвы" },
   prosecutor_office: { key: "prosecutor_office", label: "Прокуратура", placeholder: "Прокуратура ЦАО г. Москвы" },
   polyclinic: { key: "polyclinic", label: "Поликлиника", placeholder: "ГБУЗ ГП № 5 ДЗМ" },
+  polyclinic_address: { key: "polyclinic_address", label: "Адрес поликлиники", placeholder: "г. Москва, ул. ..." },
   psychoneurological_dispensary: { key: "psychoneurological_dispensary", label: "ПНД (психоневрологический диспансер)", placeholder: "ПНД № 1" },
+  pnd_address: { key: "pnd_address", label: "Адрес ПНД", placeholder: "г. Москва, ул. ..." },
   narcological_dispensary: { key: "narcological_dispensary", label: "Наркологический диспансер", placeholder: "НД № 1" },
-  chief_doctor: { key: "chief_doctor", label: "ФИО главного врача", placeholder: "Главному врачу" },
-  policy: { key: "policy", label: "Полис ОМС", placeholder: "1234 5678 9012 3456" },
-  diagnosis: { key: "diagnosis", label: "Диагноз", placeholder: "Остеохондроз шейного отдела позвоночника...", multiline: true },
-  docs_list: { key: "docs_list", label: "Перечень прилагаемых документов", placeholder: "1. Выписка из истории болезни...\n2. Заключение врача...", multiline: true },
-  decision_date: { key: "decision_date", label: "Дата решения комиссии", placeholder: "20.05.2026" },
-  decision_content: { key: "decision_content", label: "Суть обжалуемого решения", placeholder: "Признан годным к военной службе (категория А)...", multiline: true },
-  arguments: { key: "arguments", label: "Доводы / основания", placeholder: "Считаю решение незаконным, поскольку...", multiline: true },
-  request: { key: "request", label: "Просительная часть", placeholder: "Прошу отменить решение и направить на доп. обследование.", multiline: true },
-  request_court: { key: "request_court", label: "Требования к суду", placeholder: "Признать решение незаконным. Обязать...", multiline: true },
-  respondent: { key: "respondent", label: "Административный ответчик", placeholder: "Призывная комиссия муниципального образования..." },
-  exam_requested: { key: "exam_requested", label: "Запрашиваемые обследования", placeholder: "МРТ шейного отдела, консультация невролога...", multiline: true },
-  docs_requested: { key: "docs_requested", label: "Запрашиваемые документы", placeholder: "Выписку из амбулаторной карты за 2023–2026 гг....", multiline: true },
-  purpose: { key: "purpose", label: "Цель запроса", placeholder: "для представления в призывную комиссию" },
+  kvd: { key: "kvd", label: "КВД (кожно-венерологический диспансер)", placeholder: "КВД № 1" },
+  kvd_address: { key: "kvd_address", label: "Адрес КВД", placeholder: "г. Москва, ул. ..." },
+  med_org: { key: "med_org", label: "Медицинская организация", placeholder: "ГБУЗ ..." },
+  med_address: { key: "med_address", label: "Адрес медорганизации", placeholder: "г. Москва, ул. ..." },
+  health_dept_address: { key: "health_dept_address", label: "Адрес департамента здравоохранения", placeholder: "г. Москва, ..." },
+
+  // Содержательные поля
+  diagnosis: { key: "diagnosis", label: "Диагноз, жалобы, результаты обследований", placeholder: "указать заболевание и подтверждающие документы", multiline: true },
+  exam_profile: { key: "exam_profile", label: "Профиль / направление обследования", placeholder: "неврология, МРТ шейного отдела..." },
+  health_circumstances: { key: "health_circumstances", label: "Обстоятельства здоровья", placeholder: "кратко: диагнозы, жалобы, лечение, наблюдение", multiline: true },
+  decision: { key: "decision", label: "Принятое решение комиссии", placeholder: "о призыве / об отказе в отсрочке / ..." },
+  decision_date: { key: "decision_date", label: "Дата заседания / решения", placeholder: "20.05.2026" },
+  category: { key: "category", label: "Категория годности (если известна)", placeholder: "А / Б / В / Г / Д" },
+  complaint_grounds: { key: "complaint_grounds", label: "Основания несогласия / нарушения", placeholder: "не учтены документы, не выдано направление, неверно применено РБ...", multiline: true },
+  new_decision: { key: "new_decision", label: "Требуемое новое решение", placeholder: "предоставить отсрочку / признать ограниченно годным / направить на обследование", multiline: true },
+  study_org: { key: "study_org", label: "Образовательная организация", placeholder: "полное наименование" },
+  study_level: { key: "study_level", label: "Уровень и программа обучения", placeholder: "бакалавриат, направление..." },
+  study_from: { key: "study_from", label: "Обучение с", placeholder: "01.09.2024" },
+  study_to: { key: "study_to", label: "Обучение по", placeholder: "30.06.2028" },
+  family_basis: { key: "family_basis", label: "Семейное основание отсрочки", placeholder: "уход за родственником / дети / опека / иное", multiline: true },
+  beliefs: { key: "beliefs", label: "Основание для АГС", placeholder: "убеждения / вероисповедание" },
+  beliefs_details: { key: "beliefs_details", label: "В чём выражаются убеждения", placeholder: "устойчивость, проявления, почему служба им противоречит", multiline: true },
+  transfer_subject: { key: "transfer_subject", label: "Вопрос передачи документов", placeholder: "медицинские документы / отсрочка / обжалование / воинский учёт" },
+  reg_reason: { key: "reg_reason", label: "Причина постановки на учёт", placeholder: "переезд / гражданство / возраст / иное" },
+  period_from: { key: "period_from", label: "Период с", placeholder: "01.01.2023" },
+  period_to: { key: "period_to", label: "Период по", placeholder: "01.06.2026" },
+  purpose: { key: "purpose", label: "Цель (куда нужен документ)", placeholder: "для представления в призывную комиссию" },
+  doctor_name: { key: "doctor_name", label: "ФИО врача, специальность", placeholder: "Смирнов А.А., невролог" },
+  subdivision: { key: "subdivision", label: "Подразделение / филиал", placeholder: "наименование подразделения" },
+  diagnosis_doc_info: { key: "diagnosis_doc_info", label: "Диагноз и подтверждающие документы", placeholder: "указать диагноз и документы", multiline: true },
+  complaint_org: { key: "complaint_org", label: "Медорганизация (объект жалобы)", placeholder: "наименование, ФИО врача при наличии" },
+  prior_appeal: { key: "prior_appeal", label: "Сведения о предыдущем обращении", placeholder: "заявление от ДД.ММ.ГГГГ; ответ не получен / формальный", multiline: true },
+
+  // Доверенность / суд (бонус-шаблоны)
   representative_name: { key: "representative_name", label: "ФИО представителя", placeholder: "Сидоров Сидор Сидорович" },
   representative_passport: { key: "representative_passport", label: "Паспорт представителя", placeholder: "серия 4515 № 654321, выдан..." },
-  powers: { key: "powers", label: "Полномочия", placeholder: "представлять мои интересы в военкомате, комиссии, судах...", multiline: true },
-  valid_until: { key: "valid_until", label: "Срок действия", placeholder: "31.12.2026" },
+  powers: { key: "powers", label: "Полномочия", placeholder: "представлять интересы в военкомате, комиссии, судах...", multiline: true },
+  valid_until: { key: "valid_until", label: "Срок действия доверенности", placeholder: "31.12.2026" },
+  respondent: { key: "respondent", label: "Административный ответчик", placeholder: "Призывная комиссия муниципального образования..." },
+  request_court: { key: "request_court", label: "Требования к суду", placeholder: "Признать решение незаконным. Обязать...", multiline: true },
+
   today: { key: "today", label: "Дата документа", placeholder: "01.06.2026" },
+  docs_list: { key: "docs_list", label: "Приложения (перечень документов)", placeholder: "1. ...\n2. ...", multiline: true },
+  docs_requested: { key: "docs_requested", label: "Запрашиваемые документы / копии", placeholder: "перечислить, какие копии нужны", multiline: true },
 };
 
-/** Метка поля (с безопасным фолбэком на ключ). */
 export function fieldLabel(key: string): string {
   return FIELD_DEFS[key]?.label || key;
 }
 
-// ── Дата в формате DD.MM.YYYY ───────────────────────────────────────────────
+// ── Дата ────────────────────────────────────────────────────────────────────
 export function todayRu(now: Date = new Date()): string {
   return `${String(now.getDate()).padStart(2, "0")}.${String(now.getMonth() + 1).padStart(2, "0")}.${now.getFullYear()}`;
 }
-
 export function formatDateRu(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -84,12 +117,14 @@ export function formatDateRu(iso: string | null | undefined): string {
   return todayRu(d);
 }
 
-// ── Автозаполнение из профиля + гос-структур ────────────────────────────────
+// ── Автозаполнение ──────────────────────────────────────────────────────────
 export interface FillContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- профиль из БД без сгенерированного типа здесь
   profile?: Record<string, any> | null;
   /** suggestions из find-government-structures (перекрывают профиль). */
   gov?: Record<string, string> | null;
+  /** e-mail авторизованного пользователя (в profiles не хранится). */
+  email?: string | null;
   today?: string;
 }
 
@@ -105,7 +140,6 @@ function buildPassport(p: Record<string, unknown> | null | undefined): string {
   return parts.join(", ");
 }
 
-/** Автозаполненное значение для ключа поля (пустая строка, если данных нет). */
 export function autofillValue(key: string, ctx: FillContext): string {
   const p = ctx.profile || {};
   const g = ctx.gov || {};
@@ -117,9 +151,9 @@ export function autofillValue(key: string, ctx: FillContext): string {
     case "birth_date": return formatDateRu(p.birth_date as string);
     case "birth_place": return (p.birth_place as string) || "";
     case "phone": return (p.phone as string) || "";
+    case "email": return ctx.email || "";
     case "passport": return buildPassport(p);
     case "registration_address": return (p.registration_address as string) || (p.actual_address as string) || "";
-    case "actual_address": return (p.actual_address as string) || "";
     case "region": return (p.region as string) || (p.city as string) || "";
     case "military_commissariat": return pick("military_commissariat", "military_commissariat");
     case "military_commissariat_address": return pick("military_commissariat_address", "military_commissariat_address");
@@ -127,30 +161,25 @@ export function autofillValue(key: string, ctx: FillContext): string {
     case "court_name": return pick("court_by_military", "court_by_military") || pick("court_by_registration", "court_by_registration");
     case "prosecutor_office": return pick("prosecutor_office", "prosecutor_office");
     case "polyclinic": return (g.polyclinic as string) || "";
+    case "polyclinic_address": return (g.polyclinic_address as string) || "";
     case "psychoneurological_dispensary": return (g.psychoneurological_dispensary as string) || "";
+    case "pnd_address": return (g.psychoneurological_dispensary_address as string) || "";
     case "narcological_dispensary": return (g.narcological_dispensary as string) || "";
+    case "kvd": return (g.kvd as string) || "";
+    case "kvd_address": return (g.kvd_address as string) || "";
+    case "work_study": {
+      const wp = [(p.work_place as string), (p.work_position as string)].filter(Boolean).join(", ");
+      const ed = [(p.education_institution as string), (p.education_specialty as string)].filter(Boolean).join(", ");
+      return wp || ed || "";
+    }
+    case "study_org": return (p.education_institution as string) || "";
+    case "study_level": return (p.education_specialty as string) || "";
     case "today": return ctx.today || todayRu();
     default: return "";
   }
 }
 
-/** Заполняет значения всех полей шаблона из контекста (без перезаписи уже введённого). */
-export function autofillTemplate(
-  template: DocTemplate,
-  ctx: FillContext,
-  existing: Record<string, string> = {},
-): Record<string, string> {
-  const out: Record<string, string> = { ...existing };
-  for (const key of template.fieldKeys) {
-    const current = out[key];
-    if (current && current.trim()) continue; // не затираем введённое вручную
-    const v = autofillValue(key, ctx);
-    if (v) out[key] = v;
-  }
-  return out;
-}
-
-// ── Рендер тела: {{ключ}} → значение (или [Метка], если пусто) ──────────────
+// ── Рендер ──────────────────────────────────────────────────────────────────
 const TOKEN_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 
 export function renderTemplate(bodyTemplate: string, values: Record<string, string>): string {
@@ -161,7 +190,6 @@ export function renderTemplate(bodyTemplate: string, values: Record<string, stri
   });
 }
 
-/** Извлекает уникальные ключи токенов {{...}} из текста (для редактируемого тела). */
 export function extractTokens(bodyTemplate: string): string[] {
   const out: string[] = [];
   let m: RegExpExecArray | null;
@@ -172,177 +200,515 @@ export function extractTokens(bodyTemplate: string): string[] {
   return out;
 }
 
-// ── Каталог шаблонов (юридически выверенные тела, токены {{...}}) ────────────
+// ── Повторяемые фрагменты ───────────────────────────────────────────────────
+const FROM_MIL = `от {{full_name}}
+{{birth_date}}, {{birth_place}}
+адрес для ответа: {{registration_address}}
+тел.: {{phone}}, e-mail: {{email}}
+воинский учёт: {{military_commissariat}}`;
+
+const FROM_MED = `от пациента: {{full_name}}
+дата рождения: {{birth_date}}
+паспорт: {{passport}}
+полис ОМС: {{policy}}, СНИЛС: {{snils}}
+адрес для ответа: {{registration_address}}
+тел.: {{phone}}, e-mail: {{email}}`;
+
+const SIGN = `{{today}}                    _______________ / {{full_name}} /`;
+
+const ACCEPT = `Отметка о принятии (заполняется органом при подаче):
+Входящий № ______ от __________ 20__ г.    Принял: должность, ФИО, подпись, печать`;
+
+const APPENDIX = `Приложения:
+{{docs_list}}`;
+
+// общий «хвост» документа
+const TAIL = `${APPENDIX}
+
+${SIGN}
+
+${ACCEPT}`;
+
+// ── Каталог шаблонов ────────────────────────────────────────────────────────
 export const DOC_TEMPLATES: DocTemplate[] = [
   {
-    key: "attach_docs",
-    category: "Военкомат",
+    key: "attach_docs", category: "Военкомат",
     title: "Заявление о приобщении медицинских документов",
-    description: "Подаётся в отдел делопроизводства военкомата, регистрируется в 2-х экземплярах.",
-    fieldKeys: ["military_commissariat", "commissar_name", "full_name", "registration_address", "phone", "docs_list", "today"],
-    bodyTemplate: `Военному комиссару {{military_commissariat}}
-{{commissar_name}}
+    description: "Регистрируется в 2 экз., приобщается к личному делу призывника (ст. 5.1 ФЗ № 53-ФЗ, ПП № 565).",
+    defaults: { docs_list: "1. [медицинский документ] — [дата, №] — [кем выдан] — [листов]\n2. [медицинский документ] — [дата, №] — [кем выдан] — [листов]" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
 
-от {{full_name}},
-проживающего по адресу: {{registration_address}},
-тел.: {{phone}}
+${FROM_MIL}
 
 ЗАЯВЛЕНИЕ
 о приобщении медицинских документов к личному делу призывника
 
-Прошу приобщить к моему личному делу призывника прилагаемые медицинские документы, подтверждающие наличие у меня заболевания, являющегося основанием для определения категории годности в соответствии с Расписанием болезней (приложение к Положению о военно-врачебной экспертизе, утверждённому Постановлением Правительства РФ № 565).
+Я, {{full_name}}, {{birth_date}}, состою на воинском учёте в {{military_commissariat}}. У меня имеются медицинские документы, подтверждающие: {{diagnosis}}.
 
-Перечень прилагаемых документов:
-{{docs_list}}
+На основании ст. 5.1 ФЗ от 28.03.1998 № 53-ФЗ, Положения о военно-врачебной экспертизе (ПП РФ от 04.07.2013 № 565) и ФЗ от 02.05.2006 № 59-ФЗ прошу:
+1. Зарегистрировать заявление и приобщить его с приложениями к моему личному делу призывника.
+2. Передать приложенные документы врачам-специалистам и врачу, руководящему освидетельствованием.
+3. Учесть документы при определении категории годности и принятии решения призывной комиссии.
+4. При необходимости запросить дополнительные сведения в выдавших документы организациях.
+5. В случае отказа выдать письменный мотивированный ответ и вернуть непринятые материалы.
 
-Прошу учесть данные документы при проведении медицинского освидетельствования.
-
-{{today}}                                    {{full_name}} _____________`,
+${TAIL}`,
   },
   {
-    key: "additional_exam",
-    category: "Военкомат",
-    title: "Ходатайство о направлении на дополнительное обследование",
-    description: "При несогласии с заключением врача-специалиста военкомата.",
-    fieldKeys: ["military_commissariat", "commissar_name", "full_name", "registration_address", "diagnosis", "exam_requested", "today"],
-    bodyTemplate: `Военному комиссару {{military_commissariat}}
-{{commissar_name}}
+    key: "additional_exam", category: "Военкомат",
+    title: "Заявление о направлении на дополнительное обследование",
+    description: "Для уточнения диагноза и степени нарушения функций до решения комиссии.",
+    defaults: { docs_list: "1. [медицинский документ] — [дата, №] — [кем выдан]\n2. [результат обследования] — [дата] — [организация]" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
 
-от {{full_name}},
-адрес: {{registration_address}}
+${FROM_MIL}
 
-ХОДАТАЙСТВО
+ЗАЯВЛЕНИЕ
 о направлении на дополнительное медицинское обследование
 
-В связи с наличием у меня заболевания — {{diagnosis}} — прошу направить меня на дополнительное медицинское обследование для уточнения диагноза и степени нарушения функций в целях правильного применения Расписания болезней (ПП РФ № 565).
+Я, {{full_name}}, {{birth_date}}, прохожу мероприятия, связанные с призывом. При освидетельствовании необходимо уточнить диагноз и степень нарушения функций по заболеванию: {{diagnosis}}.
 
-Прошу назначить следующие обследования:
-{{exam_requested}}
+Имеющиеся документы подтверждают необходимость обследования по профилю: {{exam_profile}}. На основании ст. 5.1 ФЗ № 53-ФЗ и ПП РФ № 565 прошу:
+1. Приобщить заявление и приложенные документы к личному делу призывника.
+2. Направить меня на дополнительное обследование в медорганизацию государственной/муниципальной системы здравоохранения по профилю {{exam_profile}}.
+3. Выдать направление и учётные формы, разъяснить порядок и срок представления результатов.
+4. До получения и рассмотрения результатов не принимать окончательное решение о категории годности и призыве.
+5. Дать письменный ответ по существу и поставить отметку о принятии на моём экземпляре.
 
-Результаты обследований будут представлены в военкомат для приобщения к личному делу.
-
-{{today}}                                    {{full_name}} _____________`,
+${TAIL}`,
   },
   {
-    key: "acquaint_case",
-    category: "Военкомат",
-    title: "Заявление об ознакомлении с личным делом",
-    description: "Право закреплено в ФЗ «О воинской обязанности» и ст. 24 Конституции РФ.",
-    fieldKeys: ["military_commissariat", "commissar_name", "full_name", "registration_address", "phone", "today"],
-    bodyTemplate: `Военному комиссару {{military_commissariat}}
-{{commissar_name}}
+    key: "medical_exam", category: "Военкомат",
+    title: "Заявление о проведении медицинского освидетельствования",
+    description: "Фиксация медицинских обстоятельств до решения призывной комиссии.",
+    defaults: { docs_list: "1. [медицинский документ] — [дата, №] — [кем выдан]\n2. [медицинский документ] — [дата, №] — [кем выдан]" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
 
-от {{full_name}},
-адрес: {{registration_address}},
-тел.: {{phone}}
+${FROM_MIL}
 
 ЗАЯВЛЕНИЕ
-об ознакомлении с материалами личного дела призывника
+о проведении медицинского освидетельствования и учёте состояния здоровья
 
-На основании п. 5 ст. 5.1 Федерального закона от 28.03.1998 № 53-ФЗ «О воинской обязанности и военной службе» и ст. 24 Конституции Российской Федерации прошу предоставить мне возможность ознакомиться с материалами моего личного дела призывника, а также снять с него копии и сделать выписки в разумный срок.
+Я, {{full_name}}, {{birth_date}}, состою на воинском учёте в {{military_commissariat}}. У меня имеются обстоятельства, связанные с состоянием здоровья: {{health_circumstances}}.
 
-Прошу сообщить дату и время ознакомления.
+Прошу провести освидетельствование с учётом представленных документов и фактического состояния здоровья:
+1. Зарегистрировать заявление и приобщить его к личному делу призывника.
+2. Обеспечить рассмотрение приложенных документов врачами-специалистами соответствующего профиля.
+3. При невозможности определить категорию годности по имеющимся материалам направить меня на дополнительное обследование.
+4. После освидетельствования объявить заключение о категории годности и решение призывной комиссии.
+5. Выдать копию/выписку решения по отдельному заявлению либо направить письменный ответ по адресу выше.
 
-{{today}}                                    {{full_name}} _____________`,
+${TAIL}`,
   },
   {
-    key: "appeal_commission",
-    category: "Обжалование",
-    title: "Жалоба на решение призывной комиссии",
-    description: "В призывную комиссию субъекта РФ. Рассматривается в течение 5 рабочих дней.",
-    fieldKeys: ["region", "full_name", "registration_address", "phone", "decision_date", "decision_content", "arguments", "request", "today"],
-    bodyTemplate: `В призывную комиссию {{region}}
+    key: "deferment_study", category: "Отсрочки",
+    title: "Заявление об отсрочке по учёбе",
+    description: "Отсрочка при очном обучении (п. 2 ст. 24 ФЗ № 53-ФЗ, ПП № 663).",
+    defaults: { docs_list: "1. Справка об обучении по установленной форме — [дата, №] — [образовательная организация]\n2. Копия паспорта — [орган, выдавший паспорт]" },
+    bodyTemplate: `В призывную комиссию {{municipality}}
+через {{military_commissariat}}
+адрес: {{military_commissariat_address}}
 
-от {{full_name}},
-адрес: {{registration_address}},
-тел.: {{phone}}
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+о предоставлении отсрочки от призыва в связи с обучением
+
+Я, {{full_name}}, {{birth_date}}, обучаюсь по очной форме в {{study_org}} по программе {{study_level}}. Срок обучения: с {{study_from}} по {{study_to}}.
+
+На основании п. 2 ст. 24 ФЗ № 53-ФЗ и Положения о призыве (ПП РФ № 663) прошу:
+1. Предоставить мне отсрочку от призыва в связи с обучением по очной форме.
+2. Приобщить к личному делу призывника справку об обучении и иные приложенные документы.
+3. Рассмотреть вопрос на заседании призывной комиссии с внесением решения в протокол.
+4. Выдать мне копию/выписку решения призывной комиссии после его принятия.
+5. Поставить отметку о принятии на моём экземпляре заявления.
+
+${TAIL}`,
+  },
+  {
+    key: "deferment_family", category: "Отсрочки",
+    title: "Заявление об отсрочке по семейным обстоятельствам",
+    description: "Отсрочка по п. 1 ст. 24 ФЗ № 53-ФЗ (уход, дети, опека и др.).",
+    defaults: { docs_list: "1. [документ, подтверждающий семейное основание] — [дата, №] — [кем выдан]\n2. [документ о родстве / составе семьи / опеке] — [дата, №] — [кем выдан]" },
+    bodyTemplate: `В призывную комиссию {{municipality}}
+через {{military_commissariat}}
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+о предоставлении отсрочки от призыва по семейным обстоятельствам
+
+Я, {{full_name}}, {{birth_date}}, имею семейные обстоятельства, предусмотренные п. 1 ст. 24 ФЗ № 53-ФЗ: {{family_basis}}.
+
+Обстоятельства подтверждаются приложенными документами. Прошу:
+1. Предоставить мне отсрочку от призыва по семейным обстоятельствам.
+2. Приобщить заявление и приложенные документы к личному делу призывника.
+3. Рассмотреть вопрос на заседании призывной комиссии и внести решение в протокол.
+4. Выдать копию/выписку решения призывной комиссии после его принятия.
+5. В случае необходимости дополнительных документов указать их перечень письменно.
+
+${TAIL}`,
+  },
+  {
+    key: "decision_copy", category: "Военкомат",
+    title: "Заявление о выдаче копии решения призывной комиссии",
+    description: "Право на копию/выписку решения (п. 6 ст. 28 ФЗ № 53-ФЗ).",
+    defaults: { docs_list: "1. Копия паспорта — [орган, выдавший паспорт]\n2. Копия повестки/документа о явке (если есть) — [дата, №]" },
+    bodyTemplate: `В {{military_commissariat}} (председателю призывной комиссии {{municipality}})
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+о выдаче копии / выписки решения призывной комиссии
+
+Я, {{full_name}}, {{birth_date}}, состою на воинском учёте в {{military_commissariat}}. {{decision_date}} призывной комиссией принято решение в отношении меня: {{decision}}.
+
+На основании п. 6 ст. 28 ФЗ № 53-ФЗ прошу:
+1. Выдать мне копию решения / выписку из протокола призывной комиссии от {{decision_date}}.
+2. Указать в выписке принятое решение, категорию годности, дату и реквизиты заседания.
+3. Выдать документ лично под расписку либо направить по адресу для ответа выше.
+4. Поставить отметку о принятии на моём экземпляре заявления.
+
+${TAIL}`,
+  },
+  {
+    key: "acquaint_case", category: "Военкомат",
+    title: "Заявление об ознакомлении с личным делом",
+    description: "Право знать материалы дела (ч. 2 ст. 24 Конституции РФ, ФЗ № 152-ФЗ, № 59-ФЗ).",
+    defaults: { docs_list: "1. Копия паспорта — [орган, выдавший паспорт]\n2. Копия доверенности представителя (если применимо) — [нотариус/орган]" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+об ознакомлении с личным делом призывника
+
+Я, {{full_name}}, {{birth_date}}, состою на воинском учёте в {{military_commissariat}}. Прошу предоставить мне возможность ознакомиться с материалами моего личного дела призывника.
+
+Основания: ч. 2 ст. 24 Конституции РФ, ст. 14 ФЗ № 152-ФЗ о персональных данных, ФЗ № 59-ФЗ. Прошу:
+1. Назначить дату и время ознакомления с материалами личного дела.
+2. Предоставить возможность фотофиксации материалов либо изготовить копии документов.
+3. Предоставить копии следующих документов из дела: {{docs_requested}}.
+4. Приобщить настоящее заявление к личному делу призывника.
+5. Дать письменный ответ по адресу выше и поставить отметку о принятии.
+
+${TAIL}`,
+    // примечание: docs_requested переиспользуем как «какие копии нужны»
+  },
+  {
+    key: "appeal_commission", category: "Обжалование",
+    title: "Жалоба на решение призывной комиссии",
+    description: "В призывную комиссию субъекта РФ (п. 7 ст. 28, раздел V.1 ФЗ № 53-ФЗ).",
+    defaults: { docs_list: "1. Копия решения/выписки призывной комиссии — [дата, №]\n2. Медицинские документы / документы об отсрочке — [дата, №]\n3. Копии ранее поданных заявлений и отметок о принятии\n4. Копия паспорта" },
+    bodyTemplate: `В призывную комиссию {{region}}
+через {{superior_military_commissariat}}
+
+${FROM_MIL}
 
 ЖАЛОБА
-на решение призывной комиссии
+на решение призывной комиссии и/или заключение о категории годности
 
-{{decision_date}} призывной комиссией принято решение: {{decision_content}}
+{{decision_date}} призывная комиссия {{municipality}} приняла в отношении меня решение: {{decision}}. Основанием стало заключение о категории годности {{category}}.
 
-С данным решением я не согласен по следующим основаниям:
+С решением и заключением не согласен по основаниям: {{complaint_grounds}}.
 
-{{arguments}}
+На основании п. 7 ст. 28 и раздела V.1 ФЗ № 53-ФЗ прошу:
+1. Отменить решение призывной комиссии {{municipality}} от {{decision_date}} в отношении меня.
+2. Отменить / пересмотреть заключение о категории годности {{category}} с учётом приложенных документов.
+3. Назначить контрольное освидетельствование и/или дополнительное обследование, если необходимо.
+4. Принять новое решение: {{new_decision}}.
+5. До рассмотрения жалобы не совершать действий по реализации обжалуемого решения.
+6. Направить мне письменное решение по жалобе по адресу выше.
 
-На основании ст. 28 Федерального закона «О воинской обязанности и военной службе», главы 22 КАС РФ —
-
-ПРОШУ:
-
-{{request}}
-
-Приложения: медицинские документы согласно описи.
-
-{{today}}                                    {{full_name}} _____________`,
+${TAIL}`,
   },
   {
-    key: "admin_claim",
-    category: "Суд",
-    title: "Административный иск об оспаривании решения комиссии",
-    description: "В районный суд по месту нахождения военкомата (гл. 22 КАС РФ).",
-    fieldKeys: ["court_name", "full_name", "registration_address", "phone", "respondent", "decision_date", "decision_content", "arguments", "request_court", "today"],
-    bodyTemplate: `В {{court_name}}
+    key: "appeal_notice", category: "Обжалование",
+    title: "Уведомление военкомата о поданной жалобе",
+    description: "Фиксация подачи жалобы и приостановление действий по решению.",
+    defaults: { docs_list: "1. Копия жалобы в призывную комиссию субъекта РФ — [дата]\n2. Подтверждение подачи/отправки жалобы — [почта/МФЦ/Госуслуги]\n3. Копия обжалуемого решения (если есть)" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
 
-Административный истец: {{full_name}}
-адрес: {{registration_address}}
-тел.: {{phone}}
-
-Административный ответчик: {{respondent}}
-
-АДМИНИСТРАТИВНОЕ ИСКОВОЕ ЗАЯВЛЕНИЕ
-об оспаривании решения призывной комиссии
-
-{{decision_date}} {{respondent}} принято решение: {{decision_content}}.
-
-Считаю данное решение незаконным и необоснованным по следующим основаниям:
-
-{{arguments}}
-
-На основании главы 22 КАС РФ, ст. 28 ФЗ № 53-ФЗ —
-
-ПРОШУ:
-{{request_court}}
-
-Приложения:
-1. Копия оспариваемого решения
-2. Медицинские документы согласно описи
-3. Квитанция об уплате государственной пошлины
-
-{{today}}                                    {{full_name}} _____________`,
-  },
-  {
-    key: "medical_records_request",
-    category: "Медицина",
-    title: "Запрос медицинских документов из поликлиники",
-    description: "Запрос выписки/заключений по ст. 22 ФЗ № 323-ФЗ.",
-    fieldKeys: ["polyclinic", "chief_doctor", "full_name", "birth_date", "policy", "docs_requested", "purpose", "today"],
-    bodyTemplate: `Главному врачу {{polyclinic}}
-{{chief_doctor}}
-
-от пациента {{full_name}},
-дата рождения: {{birth_date}},
-полис ОМС: {{policy}}
+${FROM_MIL}
 
 ЗАЯВЛЕНИЕ
-о выдаче медицинских документов
+о приобщении копии жалобы и уведомлении о её подаче
 
-В соответствии со ст. 22 Федерального закона от 21.11.2011 № 323-ФЗ «Об основах охраны здоровья граждан в Российской Федерации» прошу выдать мне следующие документы:
+Я, {{full_name}}, {{birth_date}}, состою на воинском учёте в {{military_commissariat}}. {{decision_date}} мной подана жалоба в призывную комиссию {{region}} на решение призывной комиссии {{municipality}}.
 
-{{docs_requested}}
+В целях фиксации подачи жалобы и актуализации личного дела прошу:
+1. Приобщить копию жалобы и подтверждающие документы к моему личному делу призывника.
+2. Не осуществлять действий по реализации обжалуемого решения до рассмотрения жалобы и получения результата.
+3. Сообщить мне письменно о приобщении документов либо о причинах отказа.
+4. Поставить отметку о принятии на моём экземпляре заявления.
 
-Документы необходимы {{purpose}}.
-
-Прошу выдать заверенные копии в срок, предусмотренный законодательством.
-
-{{today}}                                    {{full_name}} _____________`,
+${TAIL}`,
   },
   {
-    key: "poa",
-    category: "Юридические",
+    key: "ags", category: "АГС",
+    title: "Заявление о замене службы на АГС",
+    description: "Альтернативная гражданская служба (ч. 3 ст. 59 Конституции РФ, ФЗ № 113-ФЗ).",
+    defaults: { docs_list: "1. Автобиография — составлена заявителем\n2. Характеристика с места учёбы/работы — [организация]\n3. Документы, подтверждающие убеждения/вероисповедание\n4. Копия паспорта" },
+    bodyTemplate: `В {{military_commissariat}}
+через призывную комиссию {{municipality}}
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+о замене военной службы по призыву альтернативной гражданской службой
+
+Я, {{full_name}}, {{birth_date}}, прошу заменить мне военную службу по призыву альтернативной гражданской службой, поскольку несение военной службы противоречит моим убеждениям / вероисповеданию ({{beliefs}}).
+
+Мои убеждения выражаются в следующем: {{beliefs_details}}.
+
+На основании ч. 3 ст. 59 Конституции РФ и ФЗ от 25.07.2002 № 113-ФЗ прошу:
+1. Рассмотреть заявление на заседании призывной комиссии с моим участием.
+2. Заменить мне военную службу по призыву альтернативной гражданской службой.
+3. Приобщить заявление, автобиографию, характеристику и подтверждающие документы к личному делу.
+4. Заблаговременно уведомить меня о дате, времени и месте заседания комиссии.
+5. Выдать копию решения призывной комиссии по результатам рассмотрения.
+
+${TAIL}`,
+  },
+  {
+    key: "military_registration", category: "Воинский учёт",
+    title: "Заявление о постановке на воинский учёт",
+    description: "При переезде, получении гражданства, достижении возраста и др.",
+    defaults: { docs_list: "1. Паспорт гражданина РФ — [кем выдан]\n2. Документ о регистрации по месту жительства/пребывания\n3. Документ воинского учёта при наличии\n4. Документы об образовании/работе при необходимости" },
+    bodyTemplate: `Военному комиссару {{military_commissariat}}
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+ЗАЯВЛЕНИЕ
+о постановке на воинский учёт
+
+1. Фамилия, имя, отчество: {{full_name}}
+2. Дата рождения: {{birth_date}}
+3. Место рождения: {{birth_place}}
+4. Место жительства/пребывания: {{registration_address}}
+5. Место работы/учёбы: {{work_study}}
+6. Прошу поставить меня на воинский учёт в связи с: {{reg_reason}}.
+7. Ответственность за неисполнение обязанностей воинского учёта мне разъяснена.
+
+Прошу зарегистрировать заявление, принять приложенные документы и поставить отметку о принятии на моём экземпляре.
+
+${TAIL}`,
+  },
+  {
+    key: "cover_letter", category: "Военкомат",
+    title: "Сопроводительное заявление о передаче документов",
+    description: "Передача документов по описи с приобщением к делу.",
+    defaults: { docs_list: "1. [наименование документа] — [дата, №] — [организация]\n2. [наименование документа] — [дата, №] — [организация]" },
+    bodyTemplate: `В {{military_commissariat}}
+адрес: {{military_commissariat_address}}
+
+${FROM_MIL}
+
+СОПРОВОДИТЕЛЬНОЕ ЗАЯВЛЕНИЕ
+о передаче документов в военный комиссариат
+
+Я, {{full_name}}, {{birth_date}}, передаю в {{military_commissariat}} документы, указанные в приложении, для рассмотрения по вопросу: {{transfer_subject}}.
+
+Прошу:
+1. Зарегистрировать настоящее сопроводительное заявление.
+2. Принять документы по описи и приобщить их к моему личному делу призывника / материалам обращения.
+3. Рассмотреть документы при принятии решения по существу вопроса.
+4. В случае отказа принять документы выдать письменный мотивированный ответ.
+5. Поставить отметку о принятии на моём экземпляре заявления.
+
+${TAIL}`,
+  },
+  {
+    key: "form027_polyclinic", category: "Медицина",
+    title: "Запрос выписки 027/у из поликлиники",
+    description: "Выписка из медкарты по форме 027/у (ст. 22 ФЗ № 323-ФЗ, приказ № 789н).",
+    defaults: { docs_list: "1. Копия паспорта пациента — [орган, выдавший паспорт]\n2. Копия полиса ОМС / СНИЛС\n3. Копия доверенности представителя (если применимо)" },
+    bodyTemplate: `Главному врачу {{polyclinic}}
+адрес: {{polyclinic_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о предоставлении выписки из медицинской карты по форме 027/у
+
+Я, {{full_name}}, являюсь пациентом {{polyclinic}} и прошу предоставить выписку из моей медицинской карты амбулаторного пациента за период с {{period_from}} по {{period_to}}. Выписка необходима {{purpose}}.
+
+На основании ст. 22 ФЗ от 21.11.2011 № 323-ФЗ, приказа Минздрава России от 31.07.2020 № 789н и ФЗ № 59-ФЗ прошу:
+1. Выдать выписку из медкарты амбулаторного пациента по форме № 027/у (или с полным перечнем необходимых сведений).
+2. Включить сведения о диагнозах, жалобах, датах обращений, осмотрах, лабораторных и инструментальных исследованиях, лечении, динамике состояния и рекомендациях.
+3. Отразить представленные мной документы из иных медорганизаций: {{diagnosis}}.
+4. Оформить выписку на бумажном носителе, заверить подписью, датой и печатью при наличии.
+5. Выдать выписку лично мне/представителю либо направить по адресу для ответа.
+
+${TAIL}`,
+  },
+  {
+    key: "kvd_extract", category: "Медицина",
+    title: "Запрос выписки из КВД",
+    description: "Выписка из кожно-венерологического диспансера (ст. 22 ФЗ № 323-ФЗ).",
+    defaults: { docs_list: "1. Копия паспорта пациента\n2. Копия полиса ОМС / СНИЛС\n3. Копия доверенности представителя (если применимо)" },
+    bodyTemplate: `Главному врачу {{kvd}}
+адрес: {{kvd_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о предоставлении выписки из кожно-венерологического диспансера
+
+Я, {{full_name}}, обращался(ась)/наблюдаюсь в {{kvd}} по поводу: {{diagnosis}}. Прошу предоставить выписку из медицинской документации за период с {{period_from}} по {{period_to}}.
+
+На основании ст. 22 ФЗ № 323-ФЗ и приказа Минздрава России № 789н прошу:
+1. Выдать выписку из медицинской документации КВД за указанный период.
+2. Включить сведения о диагнозах, датах обращений, осмотрах дерматовенеролога, исследованиях, лечении, диспансерном наблюдении и рекомендациях.
+3. Отразить документы, предоставленные мной из иных медорганизаций.
+4. Оформить выписку на бумажном носителе и заверить подписью, датой и печатью при наличии.
+5. При невозможности выдать в запрошенном объёме — предоставить письменный мотивированный ответ.
+
+${TAIL}`,
+  },
+  {
+    key: "pnd_extract", category: "Медицина",
+    title: "Запрос выписки из ПНД",
+    description: "Выписка из психоневрологического диспансера (ст. 22 ФЗ № 323-ФЗ, Закон № 3185-1).",
+    defaults: { docs_list: "1. Копия паспорта пациента\n2. Копия полиса ОМС / СНИЛС\n3. Копия доверенности представителя (если применимо)" },
+    bodyTemplate: `Главному врачу {{psychoneurological_dispensary}}
+адрес: {{pnd_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о предоставлении выписки из психоневрологического диспансера
+
+Я, {{full_name}}, обращался(ась)/наблюдаюсь в {{psychoneurological_dispensary}} по поводу: {{diagnosis}}. Прошу предоставить выписку из медицинской документации за период с {{period_from}} по {{period_to}}.
+
+На основании ст. 22 ФЗ № 323-ФЗ, Закона РФ от 02.07.1992 № 3185-1 и приказа Минздрава России № 789н прошу:
+1. Выдать выписку из медицинской документации ПНД за указанный период.
+2. Включить сведения о датах обращений, консультациях психиатров/психотерапевтов, обследованиях, диагнозах, лечении, динамике, рекомендациях и наличии/отсутствии диспансерного наблюдения.
+3. Отразить представленные мной документы из иных медорганизаций.
+4. Оформить выписку на бумажном носителе и заверить подписью, датой и печатью при наличии.
+5. При невозможности выдать в запрошенном объёме — предоставить письменный мотивированный ответ.
+
+${TAIL}`,
+  },
+  {
+    key: "med_card_kvd_pnd", category: "Медицина",
+    title: "Запрос копии медкарты из КВД / ПНД",
+    description: "Полная копия медкарты диспансера (ст. 22 ФЗ № 323-ФЗ, приказы № 789н, № 1050н).",
+    defaults: { docs_list: "1. Копия паспорта пациента\n2. Копия полиса ОМС / СНИЛС\n3. Копия доверенности представителя (если применимо)" },
+    bodyTemplate: `Главному врачу {{med_org}}
+адрес: {{med_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о предоставлении копии медицинской карты из КВД / ПНД
+
+Я, {{full_name}}, являюсь пациентом {{med_org}}. Прошу предоставить копию моей медицинской карты и иных медицинских документов за период с {{period_from}} по {{period_to}}.
+
+На основании ст. 22 ФЗ № 323-ФЗ, приказов Минздрава России № 789н и № 1050н прошу:
+1. Предоставить полную копию медкарты за период (титульные листы, записи врачей, результаты обследований, заключения, направления, сведения о диагнозах, лечении, наблюдении и рекомендациях).
+2. Предоставить копии приложенных к карте документов и результатов из иных медорганизаций.
+3. Заверить копии: отметкой о верности, подписью, датой выдачи и печатью при наличии.
+4. Если копирование невозможно в день обращения — письменно сообщить дату готовности и порядок получения.
+5. Выдать копии лично мне/представителю либо направить по адресу для ответа.
+
+${TAIL}`,
+  },
+  {
+    key: "med_card_polyclinic", category: "Медицина",
+    title: "Запрос копии медкарты из поликлиники",
+    description: "Полная копия амбулаторной медкарты (ст. 22 ФЗ № 323-ФЗ, приказы № 789н, № 1050н, № 274н).",
+    defaults: { docs_list: "1. Копия паспорта пациента\n2. Копия полиса ОМС / СНИЛС\n3. Копия доверенности представителя (если применимо)" },
+    bodyTemplate: `Главному врачу {{polyclinic}}
+адрес: {{polyclinic_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о предоставлении копии медицинской карты из поликлиники
+
+Я, {{full_name}}, являюсь пациентом {{polyclinic}} по месту жительства/прикрепления. Прошу предоставить копию моей медицинской карты пациента, получающего помощь в амбулаторных условиях, за период с {{period_from}} по {{period_to}}.
+
+На основании ст. 22 ФЗ № 323-ФЗ, приказов Минздрава России № 789н, № 1050н и № 274н прошу:
+1. Предоставить полную копию медкарты (титульный лист, записи терапевта и специалистов, анализы и исследования, направления, заключения, сведения о диагнозах, лечении, наблюдении и рекомендациях).
+2. Предоставить копии документов, приложенных к карте или полученных из иных медорганизаций.
+3. Заверить копии отметкой о верности, подписью, датой выдачи и печатью при наличии.
+4. Если карта ведётся в электронной форме — предоставить копию на бумажном носителе и/или в форме электронного документа.
+5. Выдать копии лично мне/представителю либо направить по адресу для ответа.
+
+${TAIL}`,
+  },
+  {
+    key: "doctor_diagnosis_quality", category: "Жалобы (медицина)",
+    title: "Заявление главврачу о неполном оформлении диагноза",
+    description: "Проверка качества ведения медкарты и отражения диагноза.",
+    defaults: { docs_list: "1. Копия документа, где диагноз указан — [дата, №] — [медорганизация]\n2. Копия выписки/заключения, где диагноз не отражён — [дата, №]\n3. Копии результатов обследований\n4. Копия паспорта пациента" },
+    bodyTemplate: `Главному врачу {{polyclinic}}
+адрес: {{polyclinic_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЗАЯВЛЕНИЕ
+о проверке качества ведения медицинской документации и отражения диагноза
+
+{{decision_date}} я обратился(ась) к {{doctor_name}} в {{subdivision}}. Я предоставил(а) документы, подтверждающие: {{diagnosis_doc_info}}. Однако в медицинской документации/выписке/заключении указанный диагноз и документы не отражены либо отражены неполно.
+
+Я не прошу формально установить диагноз без медицинской оценки. На основании ст. 19, 22, 48, 64 и 70 ФЗ № 323-ФЗ, приказа № 789н и ФЗ № 59-ФЗ прошу:
+1. Провести внутреннюю проверку качества помощи и ведения документации по моему обращению.
+2. Проверить, были ли приложенные документы рассмотрены врачом и приобщены к медкарте.
+3. При необходимости вынести вопрос на врачебную комиссию/консилиум и оценить наличие диагноза с учётом документов и обследований.
+4. Если диагноз подтверждается — внести корректные сведения в документацию и выдать исправленную/дополненную выписку.
+5. Если не подтверждается — дать письменный мотивированный ответ с указанием медицинских причин и порядка дальнейшего обращения.
+
+${TAIL}`,
+  },
+  {
+    key: "health_dept_complaint", category: "Жалобы (медицина)",
+    title: "Жалоба в депздрав о неоформлении диагноза",
+    description: "Жалоба на ненадлежащее ведение меддокументации и отказ отразить диагноз.",
+    defaults: { docs_list: "1. Копия заявления главврачу/в медорганизацию — [дата, вх. №]\n2. Копия ответа медорганизации (если есть) — [дата, №]\n3. Документы, подтверждающие диагноз\n4. Выписка/заключение, где диагноз не отражён\n5. Копия паспорта заявителя" },
+    bodyTemplate: `В Департамент здравоохранения {{region}}
+адрес: {{health_dept_address}}
+
+${FROM_MED}
+прикрепление / участок / карта №: {{card_number}}
+
+ЖАЛОБА
+на ненадлежащее ведение медицинской документации и отказ от отражения диагноза
+
+Я, {{full_name}}, обращаюсь с жалобой на действия/бездействие {{complaint_org}}. Мной были представлены документы, подтверждающие: {{diagnosis_doc_info}}. Несмотря на это, в медицинской документации/выписке указанный диагноз не отражён либо отражён неполно.
+
+Ранее я обращался(ась) к главному врачу: {{prior_appeal}}. Отсутствие корректного отражения сведений препятствует защите моих прав и представлению документов {{purpose}}.
+
+На основании ФЗ № 59-ФЗ, ст. 19, 22, 48, 64 и 70 ФЗ № 323-ФЗ прошу:
+1. Провести проверку соблюдения {{complaint_org}} требований к качеству помощи и ведению документации.
+2. Запросить у медорганизации объяснения, копии записей, сведения о рассмотрении моих документов и результаты внутренней проверки.
+3. Проверить обоснованность отказа/бездействия по отражению диагноза либо полноты фиксации документов.
+4. При выявлении нарушений обязать организацию устранить их (в т.ч. рассмотреть вопрос врачебной комиссией, выдать корректную выписку).
+5. Сообщить мне о результатах рассмотрения письменно по адресу выше; при наличии оснований перенаправить материалы в Росздравнадзор/страховую/ТФОМС.
+
+${TAIL}`,
+  },
+  // ── Бонус: не из официального набора ──────────────────────────────────────
+  {
+    key: "poa", category: "Юридические",
     title: "Доверенность на представителя",
     description: "Простая письменная доверенность с правом передоверия (нотариус необязателен).",
-    fieldKeys: ["today", "full_name", "passport", "registration_address", "representative_name", "representative_passport", "powers", "valid_until"],
     bodyTemplate: `ДОВЕРЕННОСТЬ
 
 {{today}} г.
@@ -358,27 +724,33 @@ export const DOC_TEMPLATES: DocTemplate[] = [
 {{full_name}} _____________`,
   },
   {
-    key: "psychoneuro_request",
-    category: "Медицина",
-    title: "Запрос сведений из ПНД / наркодиспансера",
-    description: "Запрос справки об отсутствии/наличии учёта для ВВК.",
-    fieldKeys: ["psychoneurological_dispensary", "full_name", "birth_date", "registration_address", "purpose", "today"],
-    bodyTemplate: `Главному врачу {{psychoneurological_dispensary}}
+    key: "admin_claim", category: "Суд",
+    title: "Административный иск об оспаривании решения комиссии",
+    description: "В районный суд по месту нахождения военкомата (гл. 22 КАС РФ).",
+    defaults: { docs_list: "1. Копия оспариваемого решения\n2. Медицинские документы согласно описи\n3. Квитанция об уплате госпошлины" },
+    bodyTemplate: `В {{court_name}}
 
-от {{full_name}},
-дата рождения: {{birth_date}},
+Административный истец: {{full_name}}
 адрес: {{registration_address}}
+тел.: {{phone}}
 
-ЗАЯВЛЕНИЕ
-о выдаче справки
+Административный ответчик: {{respondent}}
 
-Прошу выдать мне справку о том, состою (состоял) ли я на диспансерном учёте, с указанием диагноза и периода наблюдения.
+АДМИНИСТРАТИВНОЕ ИСКОВОЕ ЗАЯВЛЕНИЕ
+об оспаривании решения призывной комиссии
 
-Справка необходима {{purpose}}.
+{{decision_date}} {{respondent}} принято решение: {{decision}}.
 
-Прошу выдать документ в срок, предусмотренный законодательством.
+Считаю данное решение незаконным и необоснованным по основаниям: {{complaint_grounds}}.
 
-{{today}}                                    {{full_name}} _____________`,
+На основании главы 22 КАС РФ, ст. 28 ФЗ № 53-ФЗ —
+
+ПРОШУ:
+{{request_court}}
+
+${APPENDIX}
+
+${SIGN}`,
   },
 ];
 
