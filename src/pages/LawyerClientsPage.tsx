@@ -729,7 +729,7 @@ const LawyerClientsPage = () => {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold">{c.client_name}</span>
+                          <span className="font-semibold break-words">{c.client_name}</span>
                           {c.escalation_requested && (
                             <Badge className="text-xs bg-rose-600 text-white border-rose-700">🔴 Просит юриста</Badge>
                           )}
@@ -760,7 +760,7 @@ const LawyerClientsPage = () => {
                           {c.client_phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.client_phone}</span>}
                           {c.client_birth_year && <span>{c.client_birth_year} г.р.</span>}
                           {c.conscription_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />до {new Date(c.conscription_date).toLocaleDateString("ru-RU")}</span>}
-                          {c.diagnosis && <span className="truncate max-w-[200px]">{c.diagnosis}</span>}
+                          {c.diagnosis && <span className="truncate max-w-[55vw] sm:max-w-[220px]">{c.diagnosis}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -849,7 +849,7 @@ const LawyerClientsPage = () => {
                               >
                                 <CardContent className="p-3 space-y-1.5">
                                   <div className="flex items-start justify-between gap-1">
-                                    <p className="font-medium text-sm leading-tight">{c.client_name}</p>
+                                    <p className="min-w-0 font-medium text-sm leading-tight break-words">{c.client_name}</p>
                                     {unreadByConv[c.id] > 0 && (
                                       <span className="flex-shrink-0 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                                         {unreadByConv[c.id] > 9 ? "9+" : unreadByConv[c.id]}

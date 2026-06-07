@@ -632,14 +632,14 @@ const LawyerClientDetail = () => {
             как инпуты — на других вкладках их не было видно. */}
         {client && (
           <div className="mb-4 flex flex-wrap gap-2 text-sm">
-            <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Диагноз:</span>
-              <span className="font-medium">{client.diagnosis || "—"}</span>
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+              <FileText className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              <span className="flex-shrink-0 text-muted-foreground">Диагноз:</span>
+              <span className="min-w-0 truncate font-medium">{client.diagnosis || "—"}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
-              <span className="text-muted-foreground">Категория:</span>
-              <span className="font-medium">{client.expected_category || "—"}</span>
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
+              <span className="flex-shrink-0 text-muted-foreground">Категория:</span>
+              <span className="min-w-0 truncate font-medium">{client.expected_category || "—"}</span>
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />

@@ -185,9 +185,9 @@ const ClientLawyerRequests = () => {
                 </div>
 
                 <div className="flex-1 min-w-0 space-y-1">
-                  <p className="font-semibold text-sm">{req.lawyer_name || "Юрист"}</p>
+                  <p className="font-semibold text-sm truncate">{req.lawyer_name || "Юрист"}</p>
                   {req.lawyer_specialization && (
-                    <p className="text-xs text-muted-foreground">{req.lawyer_specialization}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">{req.lawyer_specialization}</p>
                   )}
                   <p className="text-[11px] text-muted-foreground">
                     Запрос отправлен{" "}
