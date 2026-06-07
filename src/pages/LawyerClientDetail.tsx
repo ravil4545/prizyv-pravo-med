@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import { extractFnError } from "@/lib/edgeError";
 import PdfViewer from "@/components/PdfViewer";
 import DocxViewer from "@/components/DocxViewer";
 import {
@@ -116,7 +117,7 @@ const LawyerClientDetail = () => {
         body: { lawyerClientId: clientId },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await extractFnError(res.error));
       setReadyCheck(res.data);
       toast({ title: `Готовность: ${res.data.score}%` });
     } catch (e) {
@@ -471,7 +472,7 @@ const LawyerClientDetail = () => {
         body: { lawyerClientId: clientId },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await extractFnError(res.error));
       const analysis: AIAnalysis = res.data.analysis;
       setAiAnalysis(analysis);
       // Auto-save to case_notes so it persists across tab switches
@@ -485,6 +486,23 @@ const LawyerClientDetail = () => {
       toast({ title: "ИИ-анализ сохранён в заметках" });
     } catch (e) { setAiError(e instanceof Error ? e.message : "Ошибка анализа"); }
     setAiLoading(false);
+  };
+
+  // Удалить сохранённый ИИ-анализ (case_notes ai_analysis) и убрать его с экрана —
+  // например, когда документы клиента удалены и прежний вывод устарел.
+  const clearAnalysis = async () => {
+    const { error } = await supabase
+      .from("case_notes")
+      .delete()
+      .eq("lawyer_client_id", clientId)
+      .eq("note_type", "ai_analysis");
+    if (error) { toast({ title: "Не удалось очистить", description: error.message, variant: "destructive" }); return; }
+    setAiAnalysis(null);
+    setLastAnalysisAt(null);
+    setNewDocsDetected(false);
+    setAiError("");
+    loadNotes();
+    toast({ title: "Анализ удалён", description: "Запустите новый анализ после загрузки актуальных документов." });
   };
 
   if (loading || profileLoading) return (
@@ -1167,7 +1185,29 @@ const LawyerClientDetail = () => {
                 </CardContent>
               </Card>
             )}
+            {aiAnalysis && hasDocAccess && medDocs.length === 0 && (
+              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Документы клиента удалены</p>
+                    <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                      Анализ ниже построен по документам, которых больше нет, — он неактуален. Очистите его
+                      или дождитесь новых документов и обновите анализ.
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="flex-shrink-0" onClick={clearAnalysis}>
+                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Очистить анализ
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
             <div className="flex justify-end gap-2 flex-wrap">
+              {aiAnalysis && (
+                <Button variant="ghost" onClick={clearAnalysis} className="text-muted-foreground">
+                  <Trash2 className="h-4 w-4 mr-2" /> Очистить анализ
+                </Button>
+              )}
               <Button variant="outline" onClick={runReadyCheck} disabled={readyLoading || !isPro}>
                 {readyLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Проверяю...</> : <><ShieldCheck className="h-4 w-4 mr-2" />Готовность к военкомату</>}
               </Button>
