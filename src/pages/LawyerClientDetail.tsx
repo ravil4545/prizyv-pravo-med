@@ -35,6 +35,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
+import ClientProfileEditor from "@/components/ClientProfileEditor";
 import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
@@ -1018,99 +1019,17 @@ const LawyerClientDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Полный профиль клиента из его личного кабинета (/profile) — read-only.
-                Виден ТОЛЬКО когда клиент привязан И открыл доступ (RLS гейтит по
-                client_document_access). Это паспорт, адреса, военкомат, образование,
-                работа, реквизиты для жалоб/исков — то, что юристу нужно для заявлений. */}
-            {client?.client_user_id && hasDocAccess && clientProfile && (() => {
-              const p = clientProfile;
-              const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("ru-RU") : null);
-              const groups: { title: string; rows: [string, string | null | undefined][] }[] = [
-                { title: "Личные данные", rows: [
-                  ["ФИО", p.full_name], ["Дата рождения", fmtDate(p.birth_date)],
-                  ["Место рождения", p.birth_place], ["Телефон", p.phone],
-                ] },
-                { title: "Паспорт", rows: [
-                  ["Серия и номер", [p.passport_series, p.passport_number].filter(Boolean).join(" ") || null],
-                  ["Кем выдан", p.passport_issued_by], ["Дата выдачи", fmtDate(p.passport_issue_date)],
-                  ["Код подразделения", p.passport_code],
-                ] },
-                { title: "Адреса", rows: [
-                  ["Регистрация", p.registration_address], ["Фактический", p.actual_address],
-                  ["Город", p.city], ["Регион", p.region],
-                ] },
-                { title: "Воинский учёт", rows: [
-                  ["Военкомат", p.military_commissariat], ["Адрес военкомата", p.military_commissariat_address],
-                  ["Вышестоящий ВК", p.superior_military_commissariat],
-                  ["Адрес вышестоящего ВК", p.superior_military_commissariat_address],
-                ] },
-                { title: "Образование", rows: [
-                  ["Учебное заведение", p.education_institution], ["Тип обучения", p.education_type],
-                  ["Специальность", p.education_specialty], ["Курс", p.education_course],
-                ] },
-                { title: "Работа", rows: [
-                  ["Место работы", p.work_place], ["Должность", p.work_position],
-                  ["Адрес работы", p.work_address],
-                ] },
-                { title: "Для жалоб и исков", rows: [
-                  ["Суд (по военкомату)", p.court_by_military], ["Суд (по прописке)", p.court_by_registration],
-                  ["Прокуратура", p.prosecutor_office],
-                ] },
-              ];
-              // Показываем ВЕСЬ профиль: все разделы и поля целиком; незаполненные — «—».
-              const totalRows = groups.reduce((n, g) => n + g.rows.length, 0);
-              const filledCount = groups.reduce(
-                (n, g) => n + g.rows.filter(([, v]) => v && String(v).trim()).length,
-                0,
-              );
-              return (
-                <Card>
-                  <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      Профиль клиента из личного кабинета
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px] gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
-                      <ShieldCheck className="h-3 w-3" /> Открыт клиентом
-                    </Badge>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {groups.map((g) => {
-                        const groupFilled = g.rows.filter(([, v]) => v && String(v).trim()).length;
-                        return (
-                          <div key={g.title}>
-                            <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-                              {g.title}
-                              <span className="text-[10px] normal-case tracking-normal text-muted-foreground/60">
-                                {groupFilled}/{g.rows.length}
-                              </span>
-                            </p>
-                            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-                              {g.rows.map(([label, value]) => {
-                                const v = value && String(value).trim();
-                                return (
-                                  <div key={label} className="flex flex-col">
-                                    <span className="text-[11px] text-muted-foreground">{label}</span>
-                                    <span className={`text-sm break-words ${v ? "font-medium" : "text-muted-foreground/50"}`}>
-                                      {v || "—"}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <p className="text-[11px] text-muted-foreground pt-2 border-t">
-                        Заполнено {filledCount} из {totalRows} полей. Данные из профиля клиента (только чтение) —
-                        изменить их может сам клиент в своём кабинете.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            {/* Полный профиль клиента из его личного кабинета (/profile). Виден ТОЛЬКО
+                когда клиент привязан И открыл доступ (RLS гейтит по client_document_access).
+                Юрист может заполнить/поправить данные за клиента (если тот не заполнил) —
+                запись в profiles (RLS «Lawyer updates granted client profile»). */}
+            {client?.client_user_id && hasDocAccess && clientProfile && (
+              <ClientProfileEditor
+                profile={clientProfile}
+                clientUserId={client.client_user_id}
+                onSaved={(u) => setClientProfile((prev) => ({ ...(prev || {}), ...u }))}
+              />
+            )}
 
             {/* Карточка дела — заполняет юрист */}
             <Card>
