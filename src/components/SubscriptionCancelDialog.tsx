@@ -63,7 +63,7 @@ export default function SubscriptionCancelDialog({ open, onOpenChange }: Subscri
 
   const losses = [
     { icon: FileText, text: "История болезни и все загруженные документы" },
-    { icon: MessagesSquare, text: "Переписка с ИИ-адвокатом и юристом" },
+    { icon: MessagesSquare, text: "Переписка с ИИ-помощником и юристом" },
     { icon: CalendarDays, text: "Календарь дедлайнов и напоминания" },
   ];
 
@@ -82,7 +82,7 @@ export default function SubscriptionCancelDialog({ open, onOpenChange }: Subscri
             <div className="space-y-5">
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Отключение подписки в разгар призывных мероприятий означает потерю доступа к
-                ИИ-адвокату именно тогда, когда он нужнее всего. При отключении вы рискуете потерять:
+                ИИ-помощнику именно тогда, когда он нужнее всего. При отключении вы рискуете потерять:
               </p>
 
               <ul className="space-y-2">

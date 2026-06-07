@@ -102,8 +102,8 @@ const ServicesPage = () => {
     },
     {
       step: "05",
-      title: "Достижение результата",
-      description: "Получение военного билета или отсрочки"
+      title: "Итоговое решение",
+      description: "Сопровождение до итогового решения призывной комиссии"
     }
   ];
 
@@ -120,7 +120,7 @@ const ServicesPage = () => {
               <span className="block text-accent-light">для призывников</span>
             </h1>
             <p className="text-xl md:text-2xl mb-8 text-primary-foreground/90 max-w-3xl mx-auto leading-relaxed">
-              От первичной консультации до получения военного билета — 
+              От первичной консультации до итогового решения призывной комиссии —
               профессиональное сопровождение на каждом этапе
             </p>
             <Button 

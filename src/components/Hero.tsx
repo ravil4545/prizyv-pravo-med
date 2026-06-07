@@ -88,26 +88,26 @@ const Hero = () => {
 
             {/* Selling headline — outcome-first */}
             <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.02] mb-5 sm:mb-6">
-              Военный билет по здоровью —
+              Юридический разбор вашего дела —
               <span className="block italic font-light text-gold mt-1">
-                законно, без серых схем.
+                по закону, без серых схем.
               </span>
             </h1>
 
             {/* Selling subtitle — concrete numbers + guarantee */}
             <p className="text-base sm:text-lg md:text-xl text-paper/85 leading-relaxed max-w-xl mb-6 sm:mb-8">
-              <span className="font-semibold text-paper">500+ выигранных дел</span> за 10 лет. Защищаю призывников
-              по всей РФ — от первой повестки до военного билета.
+              <span className="font-semibold text-paper">10 лет практики</span> в призывном праве. Анализирую
+              медицинские документы и личное дело, выстраиваю защиту на нормах права — по всей РФ.
               <span className="block mt-2 text-paper/70 text-sm sm:text-base">
-                Возврат гонорара при отрицательном решении суда — фиксируется в договоре.
+                От первой повестки до итогового решения призывной комиссии и суда.
               </span>
             </p>
 
             {/* Trust-bar — moved above the fold, before CTAs */}
             <div className="grid grid-cols-3 gap-3 sm:gap-6 mb-8 pb-8 border-b border-paper/15">
               {[
-                { num: "10+", label: "лет защиты" },
-                { num: "500+", label: "дел доведено" },
+                { num: "10+", label: "лет практики" },
+                { num: "500+", label: "дел в практике" },
                 { num: "88", label: "статей №565" },
               ].map((t) => (
                 <div key={t.label}>
@@ -226,7 +226,7 @@ const Hero = () => {
               <div className="absolute -bottom-8 -right-4 sm:-right-8 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-seal/80 bg-paper backdrop-blur-sm flex items-center justify-center rotate-[-8deg] shadow-medium">
                 <div className="text-center px-2">
                   <div className="font-mono text-[9px] sm:text-[10px] tracking-[0.2em] text-seal uppercase font-semibold">
-                    Подтверждено
+                    Из практики
                   </div>
                   <div className="font-serif italic text-seal text-base sm:text-lg mt-1 leading-none font-semibold">
                     500+ дел

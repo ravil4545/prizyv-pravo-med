@@ -305,7 +305,7 @@ const BlogDetailPage = () => {
             >
               <h3 className="font-serif text-lg text-ink mb-1">Проверить свою категорию</h3>
               <p className="text-sm text-ink-soft mb-3 flex-1">
-                Загрузите медицинские документы — ИИ оценит ваши шансы на освобождение.
+                Загрузите медицинские документы — ИИ сопоставит их со статьями Расписания болезней.
               </p>
               <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold-deep inline-flex items-center gap-1">
                 Бесплатно <ArrowRight className="h-3 w-3" />
