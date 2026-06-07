@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Таблицы планов дела ещё не в сгенерированных типах Supabase → доступ через
+// (supabase as any) (см. примечание ниже). any здесь намеренный и локальный.
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,8 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { extractFnError } from "@/lib/edgeError";
 import {
   Sparkles, Loader2, Stethoscope, ListChecks, AlertCircle,
-  Plus, Pencil, Trash2, Check, X,
+  Plus, Pencil, Trash2, Check, X, CalendarClock,
 } from "lucide-react";
+import { deadlineBucket, deadlineToneClass, formatDueLabel } from "@/lib/deadlines";
 
 // Планировщик A3: показывает сохранённые examination_plan_items / action_plan_items
 // и умеет (пере)генерировать их через edge-функцию lawyer-build-plan.
@@ -32,6 +36,7 @@ interface ExamItem {
   reason: string | null;
   status: string; // planned | in_progress | done | cancelled
   source: string; // ai | lawyer
+  due_date: string | null;
 }
 interface ActionItem {
   id: string;
@@ -40,6 +45,7 @@ interface ActionItem {
   status: string; // todo | doing | done | cancelled
   priority: string; // low | normal | high
   source: string;
+  due_date: string | null;
 }
 
 const EXAM_TYPE_LABEL: Record<string, string> = {
@@ -50,8 +56,8 @@ const EXAM_TYPE_LABEL: Record<string, string> = {
 const PRIORITY_LABEL: Record<string, string> = { low: "низкий", normal: "обычный", high: "высокий" };
 
 // Черновики редактора (id=null → добавление нового пункта, id задан → правка).
-interface ExamDraft { id: string | null; item_type: string; name: string; reason: string; }
-interface ActionDraft { id: string | null; title: string; description: string; priority: string; }
+interface ExamDraft { id: string | null; item_type: string; name: string; reason: string; due_date: string; }
+interface ActionDraft { id: string | null; title: string; description: string; priority: string; due_date: string; }
 
 interface Props {
   lawyerClientId: string;
@@ -77,12 +83,12 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
     const [{ data: e }, { data: a }] = await Promise.all([
       (supabase as any)
         .from("examination_plan_items")
-        .select("id,item_type,name,reason,status,source")
+        .select("id,item_type,name,reason,status,source,due_date")
         .eq("lawyer_client_id", lawyerClientId)
         .order("created_at", { ascending: true }),
       (supabase as any)
         .from("action_plan_items")
-        .select("id,title,description,status,priority,source")
+        .select("id,title,description,status,priority,source,due_date")
         .eq("lawyer_client_id", lawyerClientId)
         .order("order_index", { ascending: true }),
     ]);
@@ -157,23 +163,24 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
     const name = examDraft.name.trim();
     if (!name) { toast({ title: "Введите название пункта", variant: "destructive" }); return; }
     const reason = examDraft.reason.trim() || null;
+    const due_date = examDraft.due_date || null;
     setSavingDraft(true);
     if (examDraft.id) {
       const { error } = await (supabase as any)
         .from("examination_plan_items")
-        .update({ item_type: examDraft.item_type, name, reason })
+        .update({ item_type: examDraft.item_type, name, reason, due_date })
         .eq("id", examDraft.id);
       if (error) { toast({ title: "Не сохранилось", description: error.message, variant: "destructive" }); setSavingDraft(false); return; }
-      setExam((prev) => prev.map((x) => (x.id === examDraft.id ? { ...x, item_type: examDraft.item_type, name, reason } : x)));
+      setExam((prev) => prev.map((x) => (x.id === examDraft.id ? { ...x, item_type: examDraft.item_type, name, reason, due_date } : x)));
     } else {
       const { data, error } = await (supabase as any)
         .from("examination_plan_items")
         .insert({
           lawyer_client_id: lawyerClientId, lawyer_id: user.id,
-          item_type: examDraft.item_type, name, reason,
+          item_type: examDraft.item_type, name, reason, due_date,
           status: "planned", source: "lawyer", created_by: user.id,
         })
-        .select("id,item_type,name,reason,status,source").single();
+        .select("id,item_type,name,reason,status,source,due_date").single();
       if (error || !data) { toast({ title: "Не удалось добавить", description: error?.message, variant: "destructive" }); setSavingDraft(false); return; }
       setExam((prev) => [...prev, data as ExamItem]);
     }
@@ -194,23 +201,24 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
     const title = actionDraft.title.trim();
     if (!title) { toast({ title: "Введите название шага", variant: "destructive" }); return; }
     const description = actionDraft.description.trim() || null;
+    const due_date = actionDraft.due_date || null;
     setSavingDraft(true);
     if (actionDraft.id) {
       const { error } = await (supabase as any)
         .from("action_plan_items")
-        .update({ title, description, priority: actionDraft.priority })
+        .update({ title, description, priority: actionDraft.priority, due_date })
         .eq("id", actionDraft.id);
       if (error) { toast({ title: "Не сохранилось", description: error.message, variant: "destructive" }); setSavingDraft(false); return; }
-      setActions((prev) => prev.map((x) => (x.id === actionDraft.id ? { ...x, title, description, priority: actionDraft.priority } : x)));
+      setActions((prev) => prev.map((x) => (x.id === actionDraft.id ? { ...x, title, description, priority: actionDraft.priority, due_date } : x)));
     } else {
       const { data, error } = await (supabase as any)
         .from("action_plan_items")
         .insert({
           lawyer_client_id: lawyerClientId, lawyer_id: user.id,
-          title, description, priority: actionDraft.priority,
+          title, description, priority: actionDraft.priority, due_date,
           status: "todo", order_index: actions.length, source: "lawyer", created_by: user.id,
         })
-        .select("id,title,description,status,priority,source").single();
+        .select("id,title,description,status,priority,source,due_date").single();
       if (error || !data) { toast({ title: "Не удалось добавить", description: error?.message, variant: "destructive" }); setSavingDraft(false); return; }
       setActions((prev) => [...prev, data as ActionItem]);
     }
@@ -254,6 +262,24 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         value={examDraft!.reason}
         onChange={(e) => setExamDraft((d) => (d ? { ...d, reason: e.target.value } : d))}
       />
+      <div className="flex items-center gap-2">
+        <CalendarClock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Срок:</span>
+        <Input
+          type="date"
+          className="h-8 w-auto text-sm"
+          value={examDraft!.due_date}
+          onChange={(e) => setExamDraft((d) => (d ? { ...d, due_date: e.target.value } : d))}
+        />
+        {examDraft!.due_date && (
+          <Button
+            size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => setExamDraft((d) => (d ? { ...d, due_date: "" } : d))}
+          >
+            Сбросить
+          </Button>
+        )}
+      </div>
       <div className="flex justify-end gap-1.5">
         <Button size="sm" variant="ghost" onClick={() => setExamDraft(null)} disabled={savingDraft}>
           <X className="h-3.5 w-3.5 mr-1" />Отмена
@@ -294,6 +320,24 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         value={actionDraft!.description}
         onChange={(e) => setActionDraft((d) => (d ? { ...d, description: e.target.value } : d))}
       />
+      <div className="flex items-center gap-2">
+        <CalendarClock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Срок:</span>
+        <Input
+          type="date"
+          className="h-8 w-auto text-sm"
+          value={actionDraft!.due_date}
+          onChange={(e) => setActionDraft((d) => (d ? { ...d, due_date: e.target.value } : d))}
+        />
+        {actionDraft!.due_date && (
+          <Button
+            size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => setActionDraft((d) => (d ? { ...d, due_date: "" } : d))}
+          >
+            Сбросить
+          </Button>
+        )}
+      </div>
       <div className="flex justify-end gap-1.5">
         <Button size="sm" variant="ghost" onClick={() => setActionDraft(null)} disabled={savingDraft}>
           <X className="h-3.5 w-3.5 mr-1" />Отмена
@@ -305,6 +349,19 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
       </div>
     </div>
   );
+
+  // Чип срока для пункта плана: цвет по близости дедлайна, перечёркнут если выполнено.
+  const dueChip = (due: string | null, done: boolean) => {
+    if (!due) return null;
+    const bucket = deadlineBucket(due);
+    const tone = done || !bucket ? "text-muted-foreground" : deadlineToneClass(bucket);
+    return (
+      <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${done ? "line-through " : ""}${tone}`}>
+        <CalendarClock className="h-3 w-3" />
+        {formatDueLabel(due)}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -356,7 +413,7 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
               </CardTitle>
               <Button
                 size="sm" variant="outline" className="h-7 gap-1"
-                onClick={() => setExamDraft({ id: null, item_type: "examination", name: "", reason: "" })}
+                onClick={() => setExamDraft({ id: null, item_type: "examination", name: "", reason: "", due_date: "" })}
                 disabled={!!examDraft}
               >
                 <Plus className="h-3.5 w-3.5" /> Пункт
@@ -387,13 +444,14 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
                           <span className={`text-sm font-medium ${item.status === "done" ? "line-through text-muted-foreground" : ""}`}>
                             {item.name}
                           </span>
+                          {dueChip(item.due_date, item.status === "done")}
                         </div>
                         {item.reason && <p className="text-xs text-muted-foreground mt-0.5">{item.reason}</p>}
                       </div>
                       <div className="flex gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
                         <Button
                           size="icon" variant="ghost" className="h-7 w-7"
-                          onClick={() => setExamDraft({ id: item.id, item_type: item.item_type, name: item.name, reason: item.reason || "" })}
+                          onClick={() => setExamDraft({ id: item.id, item_type: item.item_type, name: item.name, reason: item.reason || "", due_date: item.due_date || "" })}
                           aria-label="Редактировать"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -423,7 +481,7 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
               </CardTitle>
               <Button
                 size="sm" variant="outline" className="h-7 gap-1"
-                onClick={() => setActionDraft({ id: null, title: "", description: "", priority: "normal" })}
+                onClick={() => setActionDraft({ id: null, title: "", description: "", priority: "normal", due_date: "" })}
                 disabled={!!actionDraft}
               >
                 <Plus className="h-3.5 w-3.5" /> Шаг
@@ -459,13 +517,14 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
                           <span className={`text-sm font-medium ${item.status === "done" ? "line-through text-muted-foreground" : ""}`}>
                             {item.title}
                           </span>
+                          {dueChip(item.due_date, item.status === "done")}
                         </div>
                         {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
                       </div>
                       <div className="flex gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
                         <Button
                           size="icon" variant="ghost" className="h-7 w-7"
-                          onClick={() => setActionDraft({ id: item.id, title: item.title, description: item.description || "", priority: item.priority || "normal" })}
+                          onClick={() => setActionDraft({ id: item.id, title: item.title, description: item.description || "", priority: item.priority || "normal", due_date: item.due_date || "" })}
                           aria-label="Редактировать"
                         >
                           <Pencil className="h-3.5 w-3.5" />

@@ -7,6 +7,7 @@ import {
   BarChart3,
   Palette,
   Search,
+  CalendarClock,
 } from "lucide-react";
 
 /**
@@ -36,6 +37,7 @@ export const LAWYER_PRIMARY_NAV: LawyerNavItem[] = [
 
 /** Вторичные: сайдбар ниже разделителя и лист «Ещё». */
 export const LAWYER_SECONDARY_NAV: LawyerNavItem[] = [
+  { label: "Сроки", to: "/lawyer/agenda", icon: CalendarClock },
   { label: "Аналитика", to: "/lawyer/analytics", icon: BarChart3 },
   { label: "Бренд и white-label", to: "/lawyer/branding", icon: Palette },
   { label: "Каталог юристов", to: "/lawyers", icon: Search, external: true },

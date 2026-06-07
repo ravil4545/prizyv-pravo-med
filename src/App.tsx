@@ -97,6 +97,7 @@ const RequisitesPage = lazy(() => import("./pages/RequisitesPage"));
 const LawyerDashboard = lazy(() => import("./pages/LawyerDashboard"));
 const LawyerClientsPage = lazy(() => import("./pages/LawyerClientsPage"));
 const LawyerClientDetail = lazy(() => import("./pages/LawyerClientDetail"));
+const LawyerAgendaPage = lazy(() => import("./pages/LawyerAgendaPage"));
 const LawyerChatPage = lazy(() => import("./pages/LawyerChatPage"));
 const LawyerTemplatesPage = lazy(() => import("./pages/LawyerTemplatesPage"));
 const LawyerChatsPage = lazy(() => import("./pages/LawyerChatsPage"));
@@ -237,6 +238,7 @@ const App = () => (
                   <Route path="/lawyer" element={<RoleGuard role="lawyer"><LawyerDashboard /></RoleGuard>} />
                   <Route path="/lawyer/clients" element={<RoleGuard role="lawyer"><LawyerClientsPage /></RoleGuard>} />
                   <Route path="/lawyer/clients/:clientId" element={<RoleGuard role="lawyer"><LawyerClientDetail /></RoleGuard>} />
+                  <Route path="/lawyer/agenda" element={<RoleGuard role="lawyer"><LawyerAgendaPage /></RoleGuard>} />
                   <Route path="/lawyer/templates" element={<RoleGuard role="lawyer"><LawyerTemplatesPage /></RoleGuard>} />
                   <Route path="/lawyer/chats" element={<RoleGuard role="lawyer"><LawyerChatsPage /></RoleGuard>} />
                   <Route path="/lawyer/analytics" element={<RoleGuard role="lawyer"><LawyerAnalyticsPage /></RoleGuard>} />

@@ -12,8 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, User, AlertTriangle, Trophy, TrendingUp,
   Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
-  LogOut, Settings, Palette,
+  LogOut, Settings, Palette, CalendarClock, Flag, ListChecks, Stethoscope,
 } from "lucide-react";
+import { loadAgendaItems, type AgendaItem, type AgendaKind } from "@/lib/lawyerAgendaData";
+import { deadlineBucket, deadlineToneClass, formatDueLabel } from "@/lib/deadlines";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -32,6 +34,12 @@ interface RecentClient {
   crm_stage: string; priority: string; updated_at: string;
 }
 
+const KIND_ICON: Record<AgendaKind, typeof Flag> = {
+  conscription: Flag,
+  action: ListChecks,
+  exam: Stethoscope,
+};
+
 const LawyerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,6 +53,7 @@ const LawyerDashboard = () => {
   const [wonCount, setWonCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [deadlines, setDeadlines] = useState<AgendaItem[]>([]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -53,13 +62,23 @@ const LawyerDashboard = () => {
     // Залогинен, но не юрист — на обычный кабинет
     if (!isLawyer) { navigate("/dashboard", { replace: true }); return; }
     loadStats();
+    loadDeadlines();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, profileLoading, isLawyer]);
+
+  // Ближайшие сроки по всем делам (P4): просроченные/скорые сверху, топ-5.
+  const loadDeadlines = async () => {
+    const items = await loadAgendaItems(user!.id);
+    items.sort((a, b) => a.date.localeCompare(b.date));
+    setDeadlines(items.slice(0, 5));
+  };
 
   // Считаем агрегаты count-запросами (head: true — строки не тянем), а не
   // вытягиванием всей таблицы. При росте базы у Pro-юриста (лимит клиентов
   // снят) полный select деградировал; теперь нагрузка O(1) по объёму данных.
   const loadStats = async () => {
     // База: count по строкам юриста; build добавляет фильтр конкретной метрики.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- цепочка query-builder без сгенерированного типа
     const countClients = (build?: (q: any) => any) => {
       const q = supabase
         .from("lawyer_clients")
@@ -210,6 +229,45 @@ const LawyerDashboard = () => {
             </Card>
           ))}
         </div>
+
+        {/* Ближайшие сроки — сводка дедлайнов по всем делам (P4). Виден, только
+            если есть хотя бы один срок; полная картина — на /lawyer/agenda. */}
+        {!dataLoading && deadlines.length > 0 && (
+          <Card className="mb-8 border-primary/20">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                Ближайшие сроки
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs" asChild>
+                <Link to="/lawyer/agenda">Все сроки <ChevronRight className="ml-0.5 h-3.5 w-3.5" /></Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {deadlines.map((item) => {
+                const bucket = deadlineBucket(item.date);
+                const tone = bucket ? deadlineToneClass(bucket) : "text-muted-foreground";
+                const Icon = KIND_ICON[item.kind];
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => navigate(`/lawyer/clients/${item.clientId}`)}
+                    className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted"
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.clientName}</p>
+                    </div>
+                    <span className={cn("flex-shrink-0 text-xs font-medium", tone)}>
+                      {formatDueLabel(item.date)}
+                    </span>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Pipeline — горизонтальные прогресс-бары, чтобы было видно «куда уходят клиенты» */}
