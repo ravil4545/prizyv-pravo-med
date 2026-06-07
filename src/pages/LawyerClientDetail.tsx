@@ -1057,10 +1057,12 @@ const LawyerClientDetail = () => {
                   ["Прокуратура", p.prosecutor_office],
                 ] },
               ];
-              const visibleGroups = groups
-                .map((g) => ({ ...g, rows: g.rows.filter(([, v]) => v && String(v).trim()) }))
-                .filter((g) => g.rows.length > 0);
-              const filledCount = visibleGroups.reduce((n, g) => n + g.rows.length, 0);
+              // Показываем ВЕСЬ профиль: все разделы и поля целиком; незаполненные — «—».
+              const totalRows = groups.reduce((n, g) => n + g.rows.length, 0);
+              const filledCount = groups.reduce(
+                (n, g) => n + g.rows.filter(([, v]) => v && String(v).trim()).length,
+                0,
+              );
               return (
                 <Card>
                   <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
@@ -1073,30 +1075,38 @@ const LawyerClientDetail = () => {
                     </Badge>
                   </CardHeader>
                   <CardContent>
-                    {filledCount === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Клиент открыл доступ, но ещё не заполнил профиль в своём кабинете.
-                      </p>
-                    ) : (
-                      <div className="space-y-4">
-                        {visibleGroups.map((g) => (
+                    <div className="space-y-4">
+                      {groups.map((g) => {
+                        const groupFilled = g.rows.filter(([, v]) => v && String(v).trim()).length;
+                        return (
                           <div key={g.title}>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">{g.title}</p>
+                            <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                              {g.title}
+                              <span className="text-[10px] normal-case tracking-normal text-muted-foreground/60">
+                                {groupFilled}/{g.rows.length}
+                              </span>
+                            </p>
                             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-                              {g.rows.map(([label, value]) => (
-                                <div key={label} className="flex flex-col">
-                                  <span className="text-[11px] text-muted-foreground">{label}</span>
-                                  <span className="text-sm font-medium break-words">{value}</span>
-                                </div>
-                              ))}
+                              {g.rows.map(([label, value]) => {
+                                const v = value && String(value).trim();
+                                return (
+                                  <div key={label} className="flex flex-col">
+                                    <span className="text-[11px] text-muted-foreground">{label}</span>
+                                    <span className={`text-sm break-words ${v ? "font-medium" : "text-muted-foreground/50"}`}>
+                                      {v || "—"}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        ))}
-                        <p className="text-[11px] text-muted-foreground pt-2 border-t">
-                          Данные из профиля клиента (только чтение). Изменить их может сам клиент в своём кабинете.
-                        </p>
-                      </div>
-                    )}
+                        );
+                      })}
+                      <p className="text-[11px] text-muted-foreground pt-2 border-t">
+                        Заполнено {filledCount} из {totalRows} полей. Данные из профиля клиента (только чтение) —
+                        изменить их может сам клиент в своём кабинете.
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               );
