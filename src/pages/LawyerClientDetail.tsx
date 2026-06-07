@@ -25,7 +25,7 @@ import {
   Phone, Calendar, AlertCircle, CheckCircle, Clock,
   ClipboardList, Plus, Loader2, Eye, Download, Trophy, ChevronDown,
   ShieldCheck, Lock, FileSignature, MoreVertical, UserMinus, Trash2, AlertTriangle,
-  ArrowRight, ListChecks,
+  ArrowRight, ListChecks, Copy,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -519,6 +519,41 @@ const LawyerClientDetail = () => {
     form.priority === "urgent" || urgentByDate ? "Зафиксируйте срочный план: что сделать сегодня, завтра и до комиссии." : null,
   ].filter((item): item is string => Boolean(item));
 
+  // Продублировать данные клиента из его профиля (+ ожидаемую категорию из лучшего
+  // меддокумента) в карточку CRM. Заполняем только ПУСТЫЕ поля и сразу сохраняем.
+  // Email и диагноз в профиле клиента не хранятся — их юрист вносит вручную.
+  const fillFromClientProfile = async () => {
+    if (!clientProfile) return;
+    const p = clientProfile;
+    const year = p.birth_date ? String(new Date(p.birth_date).getFullYear()) : "";
+    const next = {
+      client_name: form.client_name || p.full_name || "",
+      client_phone: form.client_phone || p.phone || "",
+      client_birth_year: form.client_birth_year || year,
+      expected_category: form.expected_category || bestDocument?.ai_fitness_category || "",
+    };
+    const added: string[] = [];
+    if (!form.client_name && next.client_name) added.push("ФИО");
+    if (!form.client_phone && next.client_phone) added.push("телефон");
+    if (!form.client_birth_year && next.client_birth_year) added.push("год рождения");
+    if (!form.expected_category && next.expected_category) added.push("ожидаемую категорию");
+    const { error } = await supabase.from("lawyer_clients").update({
+      client_name: next.client_name || null,
+      client_phone: next.client_phone || null,
+      client_birth_year: next.client_birth_year ? parseInt(next.client_birth_year) : null,
+      expected_category: next.expected_category || null,
+    }).eq("id", clientId);
+    if (error) { toast({ title: "Не удалось сохранить", description: error.message, variant: "destructive" }); return; }
+    setForm((f) => ({ ...f, ...next }));
+    setClient((prev) => ({ ...prev, ...next, client_birth_year: next.client_birth_year ? parseInt(next.client_birth_year) : null }));
+    toast({
+      title: added.length ? "Данные продублированы в карточку" : "Нечего дублировать",
+      description: added.length
+        ? `Заполнено: ${added.join(", ")}. Email и диагноз в профиле клиента не хранятся — при необходимости добавьте вручную.`
+        : "В профиле клиента нет данных, которых ещё нет в карточке.",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -966,11 +1001,18 @@ const LawyerClientDetail = () => {
                     </Button>
                   </div>
                 ) : (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div><Label>ФИО</Label><Input value={form.client_name} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))} /></div>
-                    <div><Label>Телефон</Label><Input value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} /></div>
-                    <div><Label>Email</Label><Input value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} /></div>
-                    <div><Label>Год рождения</Label><Input type="number" value={form.client_birth_year} onChange={(e) => setForm((f) => ({ ...f, client_birth_year: e.target.value }))} /></div>
+                  <div className="space-y-3">
+                    {hasDocAccess && clientProfile && (
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={fillFromClientProfile}>
+                        <Copy className="h-3.5 w-3.5" /> Дублировать из профиля клиента
+                      </Button>
+                    )}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div><Label>ФИО</Label><Input value={form.client_name} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))} /></div>
+                      <div><Label>Телефон</Label><Input value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} /></div>
+                      <div><Label>Email</Label><Input value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} /></div>
+                      <div><Label>Год рождения</Label><Input type="number" value={form.client_birth_year} onChange={(e) => setForm((f) => ({ ...f, client_birth_year: e.target.value }))} /></div>
+                    </div>
                   </div>
                 )}
               </CardContent>
