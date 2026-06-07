@@ -55,6 +55,11 @@ ${
 3. Название районного суда по адресу военкомата
 4. Название районного суда по адресу регистрации
 5. Название прокуратуры района/города
+6. Название и адрес взрослой районной поликлиники по адресу регистрации (к которой прикрепляются по месту жительства)
+7. Название и адрес психоневрологического диспансера (ПНД), обслуживающего адрес регистрации
+8. Название и адрес наркологического диспансера, обслуживающего адрес регистрации
+
+Если по какому-то пункту нет точных данных — верни пустую строку для этого поля, не выдумывай несуществующие учреждения.
 
 Предоставь информацию в формате JSON:
 {
@@ -64,7 +69,13 @@ ${
   "superior_military_commissariat_address": "адрес",
   "court_by_military": "название суда",
   "court_by_registration": "название суда",
-  "prosecutor_office": "название прокуратуры"
+  "prosecutor_office": "название прокуратуры",
+  "polyclinic": "название поликлиники",
+  "polyclinic_address": "адрес поликлиники",
+  "psychoneurological_dispensary": "название ПНД",
+  "psychoneurological_dispensary_address": "адрес ПНД",
+  "narcological_dispensary": "название наркодиспансера",
+  "narcological_dispensary_address": "адрес наркодиспансера"
 }`;
 
     const response = await llmChat({
@@ -109,6 +120,12 @@ ${
         court_by_military: "",
         court_by_registration: "",
         prosecutor_office: "",
+        polyclinic: "",
+        polyclinic_address: "",
+        psychoneurological_dispensary: "",
+        psychoneurological_dispensary_address: "",
+        narcological_dispensary: "",
+        narcological_dispensary_address: "",
       };
     }
 
