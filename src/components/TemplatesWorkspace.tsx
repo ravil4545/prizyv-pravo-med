@@ -23,7 +23,7 @@ import {
 } from "@/lib/docxBuilder";
 import {
   FileText, Search, Sparkles, MapPin, Download, Printer, Plus, Trash2, ArrowLeft,
-  Save, Settings2, Loader2, Pencil, FilePlus2, FolderOpen, MoreVertical, Table as TableIcon,
+  Save, Settings2, Loader2, Pencil, FilePlus2, FolderOpen, MoreVertical, RotateCcw, Table as TableIcon,
 } from "lucide-react";
 
 // Поля, которые умеет заполнять поиск гос-структур по адресу.
@@ -35,9 +35,27 @@ const GOV_KEYS = new Set([
   "narcological_dispensary", "kvd", "kvd_address",
 ]);
 
-export interface DocItem { id: string; title: string | null; document_date: string | null; }
+export interface DocItem {
+  id: string;
+  title: string | null;
+  document_date: string | null;
+  typeName?: string | null;
+  issuer?: string | null;
+}
 
-interface EditorField { id: string; key: string; label: string; value: string; multiline: boolean; }
+/** Маппинг строк medical_documents_v2 (с join типов + meta) в DocItem. */
+// eslint-disable-next-line react-refresh/only-export-components -- небольшой data-хелпер рядом с движком
+export function mapMedicalDocs(rows: any[] | null | undefined): DocItem[] {
+  return (rows || []).map((d) => ({
+    id: d.id,
+    title: d.title ?? null,
+    document_date: d.document_date ?? null,
+    typeName: d.document_subtypes?.name || d.document_types?.name || null,
+    issuer: d.meta?.issued_by || d.meta?.issuer || d.meta?.organization || d.meta?.org || null,
+  }));
+}
+
+interface EditorField { id: string; key: string; label: string; value: string; multiline: boolean; disabled?: boolean; }
 interface EditorState {
   savedId: string | null;
   baseKey: string | null;
@@ -100,11 +118,17 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
 
   const fillCtx = (): FillContext => ({ profile, gov, email, today: todayRu() });
 
-  const values = useMemo(
-    () => (ed ? Object.fromEntries(ed.fields.map((f) => [f.key, f.value])) : {}),
-    [ed],
-  );
-  const previewText = useMemo(() => (ed ? renderTemplate(ed.bodyTemplate, values) : ""), [ed, values]);
+  // Превью: отключённые («затенённые») поля исключаются из документа — их токены
+  // рендерятся пустыми; активные подставляют значения.
+  const previewText = useMemo(() => {
+    if (!ed) return "";
+    let body = ed.bodyTemplate;
+    for (const f of ed.fields) {
+      if (f.disabled) body = body.replace(new RegExp(`\\{\\{\\s*${f.key}\\s*\\}\\}`, "g"), "");
+    }
+    const active = Object.fromEntries(ed.fields.filter((f) => !f.disabled).map((f) => [f.key, f.value]));
+    return renderTemplate(body, active);
+  }, [ed]);
 
   const openTemplate = (t: DocTemplate) => {
     const ctx = fillCtx();
@@ -183,14 +207,10 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
     setAddFieldOpen(false);
     toast({ title: "Поле добавлено", description: `«${field.label}». Нажмите «в текст», чтобы вставить в документ.` });
   };
-  const removeField = (id: string) => {
-    if (!ed) return;
-    const f = ed.fields.find((x) => x.id === id);
-    const fields = ed.fields.filter((x) => x.id !== id);
-    let body = ed.bodyTemplate;
-    if (f) body = body.replace(new RegExp(`\\{\\{\\s*${f.key}\\s*\\}\\}`, "g"), "");
-    patch({ fields, bodyTemplate: body });
-  };
+  // «Удаление» поля = мягкое отключение: поле остаётся в списке (затенённым) и
+  // исключается из документа; можно вернуть обратно. Токен в тексте сохраняется.
+  const toggleFieldDisabled = (id: string) =>
+    setEd((e) => (e ? { ...e, fields: e.fields.map((f) => (f.id === id ? { ...f, disabled: !f.disabled } : f)) } : e));
   const insertToken = (key: string) => {
     if (!ed) return;
     const sep = ed.bodyTemplate.endsWith("\n") ? "" : "\n";
@@ -198,14 +218,9 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
     toast({ title: "Вставлено в текст", description: `{{${key}}} добавлено в конец документа.` });
   };
 
-  const insertDocs = (ids: string[]) => {
-    if (!ed) return;
-    const chosen = docs.filter((d) => ids.includes(d.id));
-    if (!chosen.length) { setDocsOpen(false); return; }
-    const listStr = chosen
-      .map((d, i) => `${i + 1}. ${d.title || "Документ"}${d.document_date ? ` (от ${new Date(d.document_date).toLocaleDateString("ru-RU")})` : ""}`)
-      .join("\n");
-    const target = ed.fields.find((f) => /docs|exam/.test(f.key));
+  const insertDocs = (listStr: string, count: number) => {
+    if (!ed || !listStr.trim()) { setDocsOpen(false); return; }
+    const target = ed.fields.find((f) => /docs|exam/.test(f.key) && !f.disabled);
     if (target) {
       const merged = target.value.trim() ? `${target.value.trim()}\n${listStr}` : listStr;
       setField(target.id, merged);
@@ -215,7 +230,7 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
       insertToken("docs_list");
     }
     setDocsOpen(false);
-    toast({ title: "Документы вставлены", description: `${chosen.length} шт. добавлено в перечень.` });
+    toast({ title: "Документы вставлены", description: `${count} шт. добавлено в перечень.` });
   };
 
   const addTable = () => { if (ed) patch({ tables: [...ed.tables, { headerRow: true, rows: [["Колонка 1", "Колонка 2"], ["", ""]] }] }); };
@@ -258,10 +273,13 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
     <>
       <AddFieldDialog open={addFieldOpen} onOpenChange={setAddFieldOpen} unusedKeys={unusedFieldKeys} onAdd={addField} />
       <Dialog open={docsOpen} onOpenChange={setDocsOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Вставить документы</DialogTitle>
-            <DialogDescription>Выберите загруженные медицинские документы — они добавятся в перечень приложений.</DialogDescription>
+            <DialogTitle>Документы в перечень приложений</DialogTitle>
+            <DialogDescription>
+              Отметьте галочками документы — они добавятся в «Приложения». «Кем выдан / организацию»
+              при необходимости впишите в таблице.
+            </DialogDescription>
           </DialogHeader>
           <DocsPicker docs={docs} onInsert={insertDocs} />
         </DialogContent>
@@ -427,17 +445,25 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
                 <CardContent className="space-y-3">
                   {ed.fields.length === 0 && <p className="text-sm text-muted-foreground">Полей нет. Добавьте поле или редактируйте текст.</p>}
                   {ed.fields.map((f) => (
-                    <div key={f.id} className="group">
+                    <div key={f.id} className={cn("group", f.disabled && "opacity-50")}>
                       <div className="mb-1 flex items-center justify-between gap-2">
-                        <Label className="min-w-0 truncate text-xs text-muted-foreground">{f.label}</Label>
+                        <Label className={cn("min-w-0 truncate text-xs text-muted-foreground", f.disabled && "line-through")}>
+                          {f.label}{f.disabled && <span className="ml-1 no-underline">(убрано)</span>}
+                        </Label>
                         <div className="flex flex-shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
-                          <button onClick={() => insertToken(f.key)} className="rounded px-1.5 py-0.5 text-[11px] text-primary hover:bg-primary/10" title="Вставить {{поле}} в текст">в текст</button>
-                          <button onClick={() => removeField(f.id)} className="rounded p-1 text-muted-foreground hover:text-destructive" title="Удалить поле"><Trash2 className="h-3.5 w-3.5" /></button>
+                          {!f.disabled && (
+                            <button onClick={() => insertToken(f.key)} className="rounded px-1.5 py-0.5 text-[11px] text-primary hover:bg-primary/10" title="Вставить {{поле}} в текст">в текст</button>
+                          )}
+                          {f.disabled ? (
+                            <button onClick={() => toggleFieldDisabled(f.id)} className="rounded p-1 text-muted-foreground hover:text-emerald-600" title="Вернуть поле в документ"><RotateCcw className="h-3.5 w-3.5" /></button>
+                          ) : (
+                            <button onClick={() => toggleFieldDisabled(f.id)} className="rounded p-1 text-muted-foreground hover:text-destructive" title="Убрать поле из документа"><Trash2 className="h-3.5 w-3.5" /></button>
+                          )}
                         </div>
                       </div>
                       {f.multiline
-                        ? <Textarea value={f.value} onChange={(e) => setField(f.id, e.target.value)} rows={3} placeholder={FIELD_DEFS[f.key]?.placeholder} />
-                        : <Input value={f.value} onChange={(e) => setField(f.id, e.target.value)} placeholder={FIELD_DEFS[f.key]?.placeholder} />}
+                        ? <Textarea value={f.value} disabled={f.disabled} onChange={(e) => setField(f.id, e.target.value)} rows={3} placeholder={FIELD_DEFS[f.key]?.placeholder} />
+                        : <Input value={f.value} disabled={f.disabled} onChange={(e) => setField(f.id, e.target.value)} placeholder={FIELD_DEFS[f.key]?.placeholder} />}
                     </div>
                   ))}
                 </CardContent>
@@ -615,25 +641,67 @@ function AddFieldDialog({ open, onOpenChange, unusedKeys, onAdd }: {
 }
 
 // ── Пикер документов ────────────────────────────────────────────────────────
-function DocsPicker({ docs, onInsert }: { docs: DocItem[]; onInsert: (ids: string[]) => void }) {
-  const [sel, setSel] = useState<string[]>([]);
-  const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+function DocsPicker({ docs, onInsert }: { docs: DocItem[]; onInsert: (listStr: string, count: number) => void }) {
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [issuers, setIssuers] = useState<Record<string, string>>({});
+  const toggle = (id: string) =>
+    setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allSelected = docs.length > 0 && sel.size === docs.length;
+  const toggleAll = () => setSel(allSelected ? new Set() : new Set(docs.map((d) => d.id)));
+
+  const build = () => {
+    const chosen = docs.filter((d) => sel.has(d.id));
+    const lines = chosen
+      .map((d, i) => {
+        const meta: string[] = [];
+        if (d.document_date) meta.push(`от ${new Date(d.document_date).toLocaleDateString("ru-RU")}`);
+        const issuer = (issuers[d.id] ?? d.issuer ?? "").trim();
+        if (issuer) meta.push(issuer);
+        return `${i + 1}. ${d.title || "Документ"}${meta.length ? ` — ${meta.join(" — ")}` : ""}`;
+      })
+      .join("\n");
+    onInsert(lines, chosen.length);
+  };
+
   return (
     <>
-      <div className="max-h-72 space-y-1.5 overflow-y-auto">
-        {docs.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Нет доступных документов.</p>}
-        {docs.map((d) => (
-          <label key={d.id} className="flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5 hover:bg-muted/50">
-            <Checkbox checked={sel.includes(d.id)} onCheckedChange={() => toggle(d.id)} className="mt-0.5" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{d.title || "Без названия"}</p>
-              {d.document_date && <p className="text-xs text-muted-foreground">от {new Date(d.document_date).toLocaleDateString("ru-RU")}</p>}
-            </div>
-          </label>
-        ))}
-      </div>
-      <DialogFooter>
-        <Button disabled={!sel.length} onClick={() => onInsert(sel)}>Вставить ({sel.length})</Button>
+      {docs.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Нет доступных документов.</p>
+      ) : (
+        <div className="max-h-[60vh] overflow-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+              <tr className="text-left">
+                <th className="p-2"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Выбрать все" /></th>
+                <th className="p-2 font-medium">Документ</th>
+                <th className="whitespace-nowrap p-2 font-medium">Дата</th>
+                <th className="p-2 font-medium">Тип</th>
+                <th className="p-2 font-medium">Кем выдан / организация</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docs.map((d) => (
+                <tr key={d.id} className="border-t align-top hover:bg-muted/30">
+                  <td className="p-2"><Checkbox checked={sel.has(d.id)} onCheckedChange={() => toggle(d.id)} /></td>
+                  <td className="p-2"><span className="block max-w-[220px] break-words font-medium leading-tight">{d.title || "Без названия"}</span></td>
+                  <td className="whitespace-nowrap p-2 text-muted-foreground">{d.document_date ? new Date(d.document_date).toLocaleDateString("ru-RU") : "—"}</td>
+                  <td className="p-2 text-muted-foreground">{d.typeName || "—"}</td>
+                  <td className="p-2">
+                    <Input
+                      value={issuers[d.id] ?? d.issuer ?? ""}
+                      onChange={(e) => setIssuers((m) => ({ ...m, [d.id]: e.target.value }))}
+                      placeholder="организация / кем выдан"
+                      className="h-8 min-w-[150px] text-xs"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <DialogFooter className="mt-3">
+        <Button disabled={!sel.size} onClick={build}>Вставить в перечень ({sel.size})</Button>
       </DialogFooter>
     </>
   );

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShieldCheck, ShieldOff, ExternalLink } from "lucide-react";
-import TemplatesWorkspace, { type DocItem } from "@/components/TemplatesWorkspace";
+import TemplatesWorkspace, { mapMedicalDocs, type DocItem } from "@/components/TemplatesWorkspace";
 
 interface ClientData {
   profile: Record<string, any> | null;
@@ -86,12 +86,12 @@ const LawyerTemplatesPage = () => {
           const [{ data: prof }, { data: md }] = await Promise.all([
             supabase.from("profiles").select("*").eq("id", (lc as any).client_user_id).maybeSingle(),
             supabase.from("medical_documents_v2")
-              .select("id, title, document_date")
+              .select("id, title, document_date, meta, document_types(name), document_subtypes(name)")
               .eq("user_id", (lc as any).client_user_id)
               .order("document_date", { ascending: false }),
           ]);
           clientProfile = (prof as any) || null;
-          docs = (md as any[]) || [];
+          docs = mapMedicalDocs(md as any[]);
         }
       }
 

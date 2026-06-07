@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import TemplatesWorkspace, { type DocItem } from "@/components/TemplatesWorkspace";
+import TemplatesWorkspace, { mapMedicalDocs, type DocItem } from "@/components/TemplatesWorkspace";
 
 // Тонкая обёртка: грузит данные текущего пользователя и отдаёт их в общий
 // движок шаблонов (TemplatesWorkspace). Та же страница в кабинете юриста —
@@ -24,12 +24,12 @@ const UserTemplatesPage = () => {
         const [{ data: prof }, { data: md }] = await Promise.all([
           supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle(),
           supabase.from("medical_documents_v2")
-            .select("id, title, document_date")
+            .select("id, title, document_date, meta, document_types(name), document_subtypes(name)")
             .eq("user_id", session.user.id)
             .order("document_date", { ascending: false }),
         ]);
         setProfile((prof as any) || null);
-        setDocs((md as any[]) || []);
+        setDocs(mapMedicalDocs(md as any[]));
       }
       setLoading(false);
     })();
