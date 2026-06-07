@@ -140,6 +140,24 @@ function buildPassport(p: Record<string, unknown> | null | undefined): string {
   return parts.join(", ");
 }
 
+// Чистка «склейки» двух учреждений/адресов в одном поле. Старый московский
+// спец-кейс gov-функции объединял районный военкомат и единый пункт призыва
+// (и два адреса) через «\n\n» либо без разделителя — берём ОДНО значение.
+function dejamName(s: string): string {
+  if (!s) return "";
+  const parts = s.replace(/\\n/g, "\n").split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  return (parts[parts.length - 1] || s).trim();
+}
+function singleAddress(s: string): string {
+  if (!s) return "";
+  const byLine = s.replace(/\\n/g, "\n").split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  if (byLine.length > 1) return byLine[byLine.length - 1];
+  const v = s.replace(/\s+/g, " ").trim();
+  // два адреса склеены без разделителя: «…д. 15» сразу «г. Москва, …» → берём второй
+  const m = v.match(/^.*?(?:д\.|стр\.|корп\.)\s*\d+[а-яё]?\s*((?:г\.|город)\s.+)$/i);
+  return m ? m[1].trim() : v;
+}
+
 export function autofillValue(key: string, ctx: FillContext): string {
   const p = ctx.profile || {};
   const g = ctx.gov || {};
@@ -155,18 +173,18 @@ export function autofillValue(key: string, ctx: FillContext): string {
     case "passport": return buildPassport(p);
     case "registration_address": return (p.registration_address as string) || (p.actual_address as string) || "";
     case "region": return (p.region as string) || (p.city as string) || "";
-    case "military_commissariat": return pick("military_commissariat", "military_commissariat");
-    case "military_commissariat_address": return pick("military_commissariat_address", "military_commissariat_address");
-    case "superior_military_commissariat": return pick("superior_military_commissariat", "superior_military_commissariat");
+    case "military_commissariat": return dejamName(pick("military_commissariat", "military_commissariat"));
+    case "military_commissariat_address": return singleAddress(pick("military_commissariat_address", "military_commissariat_address"));
+    case "superior_military_commissariat": return dejamName(pick("superior_military_commissariat", "superior_military_commissariat"));
     case "court_name": return pick("court_by_military", "court_by_military") || pick("court_by_registration", "court_by_registration");
     case "prosecutor_office": return pick("prosecutor_office", "prosecutor_office");
     case "polyclinic": return (g.polyclinic as string) || "";
-    case "polyclinic_address": return (g.polyclinic_address as string) || "";
+    case "polyclinic_address": return singleAddress((g.polyclinic_address as string) || "");
     case "psychoneurological_dispensary": return (g.psychoneurological_dispensary as string) || "";
-    case "pnd_address": return (g.psychoneurological_dispensary_address as string) || "";
+    case "pnd_address": return singleAddress((g.psychoneurological_dispensary_address as string) || "");
     case "narcological_dispensary": return (g.narcological_dispensary as string) || "";
     case "kvd": return (g.kvd as string) || "";
-    case "kvd_address": return (g.kvd_address as string) || "";
+    case "kvd_address": return singleAddress((g.kvd_address as string) || "");
     case "work_study": {
       const wp = [(p.work_place as string), (p.work_position as string)].filter(Boolean).join(", ");
       const ed = [(p.education_institution as string), (p.education_specialty as string)].filter(Boolean).join(", ");
