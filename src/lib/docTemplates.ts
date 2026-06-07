@@ -192,6 +192,8 @@ export function autofillValue(key: string, ctx: FillContext): string {
     }
     case "study_org": return (p.education_institution as string) || "";
     case "study_level": return (p.education_specialty as string) || "";
+    case "diagnosis": return (p.diagnosis as string) || "";
+    case "category": return (p.expected_category as string) || "";
     case "today": return ctx.today || todayRu();
     default: return "";
   }

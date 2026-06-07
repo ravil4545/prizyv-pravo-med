@@ -34,9 +34,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import TemplatePickerDialog from "@/components/TemplatePickerDialog";
 import LawyerClientDocsUploader from "@/components/LawyerClientDocsUploader";
-import type { ClientPrefillSource } from "@/lib/lawyerTemplates";
 import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
@@ -130,15 +128,11 @@ const LawyerClientDetail = () => {
   const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // Адрес из profiles — для авто-заполнения шаблонов; подгружается когда
-  // клиент привязан и есть доступ к его данным
-  const [clientAddress, setClientAddress] = useState<string | null>(null);
   // Полный профиль привязанного клиента (всё, что он заполнил на /profile:
   // паспорт, адреса, военкомат, образование, работа). Только при активном
   // доступе — RLS «Lawyers can view linked client profiles» гейтит по
   // client_document_access.is_active. Read-only, для вкладки «Обзор».
   const [clientProfile, setClientProfile] = useState<Record<string, any> | null>(null);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "unlink" | "delete">(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -286,16 +280,12 @@ const LawyerClientDetail = () => {
         .maybeSingle();
       if (prof) {
         setClientProfile(prof as Record<string, any>);
-        setClientAddress(
-          (prof as any).registration_address || (prof as any).actual_address || null,
-        );
       } else {
         setClientProfile(null);
       }
     } else {
       // Доступ закрыт — профиль клиента показывать нельзя.
       setClientProfile(null);
-      setClientAddress(null);
     }
     setDocsLoading(false);
   };
@@ -549,7 +539,7 @@ const LawyerClientDetail = () => {
                 <Trophy className="h-4 w-4 mr-1" />ВБ получен
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/templates?client=${clientId}`)}>
               <FileSignature className="h-4 w-4 mr-1" />Из шаблона
             </Button>
             {client && (
@@ -910,7 +900,7 @@ const LawyerClientDetail = () => {
                 {aiLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Brain className="mr-1.5 h-4 w-4" />}
                 Полный анализ
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+              <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/templates?client=${clientId}`)}>
                 Документ по шаблону
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
@@ -1539,23 +1529,6 @@ const LawyerClientDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* ── Templates Picker: подставит данные клиента ─────────────────── */}
-      <TemplatePickerDialog
-        open={templatesOpen}
-        onOpenChange={setTemplatesOpen}
-        isPro={isPro}
-        prefillSource={client ? {
-          client_name: client.client_name,
-          client_phone: client.client_phone,
-          client_email: client.client_email,
-          client_birth_year: client.client_birth_year,
-          conscription_date: client.conscription_date,
-          diagnosis: client.diagnosis,
-          expected_category: client.expected_category,
-          client_address: clientAddress,
-        } as ClientPrefillSource : null}
-      />
 
       {/* ── Document Preview Dialog ─────────────────────────────────────── */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) { setPreviewDoc(null); setPreviewSignedUrl(null); } }}>

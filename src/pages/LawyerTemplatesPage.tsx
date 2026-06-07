@@ -1,27 +1,41 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- профиль/клиент из БД читаются динамически без сгенерированных типов */
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useLawyerProfile } from "@/hooks/useLawyerProfile";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, ArrowLeft, Crown } from "lucide-react";
-import TemplatePickerDialog from "@/components/TemplatePickerDialog";
-import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
-import { TEMPLATES, CATEGORIES, type Template } from "@/lib/lawyerTemplates";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ShieldCheck, ShieldOff, ExternalLink } from "lucide-react";
+import TemplatesWorkspace, { type DocItem } from "@/components/TemplatesWorkspace";
 
+interface ClientData {
+  profile: Record<string, any> | null;
+  docs: DocItem[];
+  email: string | null;
+  name: string;
+  hasAccess: boolean;
+}
+
+// Шаблоны в кабинете юриста: тот же движок, что у клиента (TemplatesWorkspace),
+// но поля заполняются данными ВЫБРАННОГО клиента. Открывается из карточки дела
+// (/lawyer/templates?client=<lawyer_client_id>) либо с выбором клиента здесь.
 const LawyerTemplatesPage = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { isLawyer, isPro, loading: profileLoading } = useLawyerProfile();
+  const { isLawyer, loading: profileLoading } = useLawyerProfile();
+  const [params, setParams] = useSearchParams();
+  const clientId = params.get("client");
 
-  const [activeCategory, setActiveCategory] = useState("Все");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [clients, setClients] = useState<{ id: string; client_name: string }[]>([]);
+  const [data, setData] = useState<ClientData | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
     if (profileLoading || authLoading) return;
@@ -29,18 +43,80 @@ const LawyerTemplatesPage = () => {
     if (!isLawyer) { navigate("/dashboard", { replace: true }); return; }
   }, [user, authLoading, profileLoading, isLawyer, navigate]);
 
-  const openTemplate = (tpl: Template) => {
-    if (tpl.isPro && !isPro) return;
-    setInitialTemplate(tpl);
-    setPickerOpen(true);
-  };
+  // Список клиентов для селектора.
+  useEffect(() => {
+    if (!user || !isLawyer) return;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("lawyer_clients")
+        .select("id, client_name")
+        .eq("lawyer_id", user.id)
+        .neq("link_state", "archived")
+        .order("updated_at", { ascending: false });
+      setClients((rows as any[]) || []);
+    })();
+  }, [user, isLawyer]);
 
-  const filtered = TEMPLATES.filter((t) => activeCategory === "Все" || t.category === activeCategory);
+  // Данные выбранного клиента.
+  useEffect(() => {
+    if (!user || !clientId) { setData(null); return; }
+    setLoadingData(true);
+    (async () => {
+      const { data: lc } = await supabase
+        .from("lawyer_clients")
+        .select("*")
+        .eq("id", clientId)
+        .eq("lawyer_id", user.id)
+        .maybeSingle();
+      if (!lc) { setData(null); setLoadingData(false); return; }
 
-  if (profileLoading || authLoading || !user || !isLawyer) {
+      let clientProfile: Record<string, any> | null = null;
+      let docs: DocItem[] = [];
+      let hasAccess = false;
+      if ((lc as any).client_user_id) {
+        const { data: access } = await supabase
+          .from("client_document_access")
+          .select("id")
+          .eq("client_user_id", (lc as any).client_user_id)
+          .eq("lawyer_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (access) {
+          hasAccess = true;
+          const [{ data: prof }, { data: md }] = await Promise.all([
+            supabase.from("profiles").select("*").eq("id", (lc as any).client_user_id).maybeSingle(),
+            supabase.from("medical_documents_v2")
+              .select("id, title, document_date")
+              .eq("user_id", (lc as any).client_user_id)
+              .order("document_date", { ascending: false }),
+          ]);
+          clientProfile = (prof as any) || null;
+          docs = (md as any[]) || [];
+        }
+      }
+
+      // Слияние: профиль клиента (если открыт доступ) + базовые поля из карточки CRM.
+      const merged: Record<string, any> = {
+        ...(clientProfile || {}),
+        full_name: clientProfile?.full_name || (lc as any).client_name || "",
+        phone: clientProfile?.phone || (lc as any).client_phone || "",
+        diagnosis: (lc as any).diagnosis || clientProfile?.diagnosis || "",
+        expected_category: (lc as any).expected_category || clientProfile?.expected_category || "",
+      };
+      setData({
+        profile: merged,
+        docs,
+        email: (lc as any).client_email || null,
+        name: (lc as any).client_name || "Клиент",
+        hasAccess,
+      });
+      setLoadingData(false);
+    })();
+  }, [user, clientId]);
+
+  if (authLoading || profileLoading || !user || !isLawyer) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
+      <div className="min-h-screen bg-background"><Header />
         <main className="container mx-auto px-4 py-8 space-y-4">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
         </main>
@@ -48,99 +124,57 @@ const LawyerTemplatesPage = () => {
     );
   }
 
+  // Селектор клиента + статус доступа — над каталогом шаблонов.
+  const selector = (
+    <Card className="mb-2 border-primary/20">
+      <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+        <Label className="text-sm text-muted-foreground">Клиент:</Label>
+        <Select value={clientId || ""} onValueChange={(v) => setParams(v ? { client: v } : {})}>
+          <SelectTrigger className="h-9 w-full max-w-[280px]"><SelectValue placeholder="Выберите клиента" /></SelectTrigger>
+          <SelectContent>
+            {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.client_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {loadingData && <span className="text-xs text-muted-foreground">загрузка…</span>}
+        {data && (
+          data.hasAccess ? (
+            <Badge variant="outline" className="gap-1 border-emerald-400 text-emerald-700 dark:text-emerald-300">
+              <ShieldCheck className="h-3 w-3" /> Данные клиента открыты
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1 text-muted-foreground">
+              <ShieldOff className="h-3 w-3" /> Базовые данные из CRM (доступ к досье не открыт)
+            </Badge>
+          )
+        )}
+        {clientId && (
+          <Button variant="ghost" size="sm" className="ml-auto h-8" asChild>
+            <Link to={`/lawyer/clients/${clientId}`}><ExternalLink className="mr-1.5 h-3.5 w-3.5" /> К карточке</Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/lawyer"><ArrowLeft className="h-4 w-4 mr-1" />Кабинет</Link>
-          </Button>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" />Шаблоны документов
-          </h1>
-        </div>
-
-        {!isPro && (
-          <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 flex items-center gap-3">
-            <Crown className="h-5 w-5 text-amber-500 flex-shrink-0" />
-            <p className="text-sm">
-              Pro-шаблоны доступны после перехода на тариф <strong>Pro</strong>. Базовые шаблоны бесплатны.
-            </p>
-            <Button size="sm" className="ml-auto bg-amber-500 hover:bg-amber-600 text-white flex-shrink-0"
-              onClick={() => setUpgradeOpen(true)}>
-              Upgrade
-            </Button>
-          </div>
-        )}
-
-        <div className="flex gap-2 flex-wrap mb-6">
-          {CATEGORIES.map((cat) => (
-            <Button
-              key={cat}
-              variant={activeCategory === cat ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveCategory(cat)}
-            >
-              {cat}
-            </Button>
-          ))}
-        </div>
-
-        <p className="text-xs text-muted-foreground mb-3">
-          Чтобы открыть шаблон сразу с данными конкретного клиента — открывайте из его карточки на вкладке «Шаблоны».
-        </p>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((tpl) => {
-            const locked = tpl.isPro && !isPro;
-            return (
-              <Card
-                key={tpl.key}
-                className={`relative ${locked ? "opacity-70" : "hover:shadow-md cursor-pointer"} transition-shadow`}
-                onClick={() => openTemplate(tpl)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <Badge variant="outline" className="text-xs">{tpl.category}</Badge>
-                    {tpl.isPro && (
-                      <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200">
-                        <Crown className="h-3 w-3 mr-1" />Pro
-                      </Badge>
-                    )}
-                  </div>
-                  <CardTitle className="text-base leading-snug mt-2">{tpl.title}</CardTitle>
-                  <CardDescription className="text-xs">{tpl.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button size="sm" disabled={locked} className="w-full">
-                    {locked ? "Требуется Pro" : "Открыть шаблон"}
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </main>
+      <TemplatesWorkspace
+        key={clientId || "none"}
+        profile={data?.profile || null}
+        docs={data?.docs || []}
+        email={data?.email || null}
+        storageKey="nepriziv_lawyer_templates_v1"
+        onBack={() => (clientId ? navigate(`/lawyer/clients/${clientId}`) : navigate("/lawyer"))}
+        heading="Шаблоны документов"
+        subtitle={
+          data
+            ? `Поля заполняются данными клиента «${data.name}». Гос-структуры найдём по его адресу. Проверьте и при необходимости поправьте.`
+            : "Выберите клиента — поля заполнятся его данными. Можно заполнять и вручную."
+        }
+        headerExtra={selector}
+      />
       <Footer />
-
-      <TemplatePickerDialog
-        open={pickerOpen}
-        onOpenChange={(open) => {
-          setPickerOpen(open);
-          if (!open) setInitialTemplate(null);
-        }}
-        isPro={isPro}
-      />
-      <LawyerUpgradeDialog
-        open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
-        currentTier={isPro ? "pro" : "basic"}
-      />
-      {/* Если хотим — можно прокидывать initialTemplate как «открыть сразу», но
-          сейчас TemplatePickerDialog показывает галерею; ключ initialTemplate
-          оставлен для будущей итерации */}
-      {initialTemplate && null}
     </div>
   );
 };
