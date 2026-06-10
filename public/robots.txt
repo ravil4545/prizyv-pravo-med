@@ -14,3 +14,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://nepriziv.ru/sitemap.xml
+Sitemap: https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/sitemap
