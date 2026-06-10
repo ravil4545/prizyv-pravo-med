@@ -13,7 +13,7 @@
  * Вебвизор сознательно ВЫКЛЮЧЕН: в кабинете медицинские данные (152-ФЗ),
  * запись экрана в сторонний сервис недопустима.
  */
-export const YM_COUNTER_ID = 0; // ← вставить номер счётчика Метрики, например 96123456
+export const YM_COUNTER_ID = 109765864; // счётчик Яндекс.Метрики nepriziv.ru
 export const SENTRY_DSN = ""; // ← вставить DSN Sentry, например "https://…@….ingest.sentry.io/…"
 
 type YmFn = ((...args: unknown[]) => void) & { a?: unknown[][]; l?: number };
