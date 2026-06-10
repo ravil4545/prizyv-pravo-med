@@ -79,6 +79,7 @@ const Credentials = () => {
                           src={d.src}
                           alt={`Диплом — ${d.title}, ${d.org}, ${d.year}`}
                           loading="lazy"
+                          decoding="async"
                           onError={() => setFailed((p) => ({ ...p, [d.src]: true }))}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                         />
@@ -93,6 +94,7 @@ const Credentials = () => {
                       <img
                         src={d.src}
                         alt={`Диплом — ${d.title}, ${d.org}, ${d.year}`}
+                        decoding="async"
                         className="h-auto w-full rounded"
                       />
                     )}
