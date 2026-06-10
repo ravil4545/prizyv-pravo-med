@@ -203,6 +203,10 @@ const AIChatDashboardPage = () => {
         p_summary: buildEscalationSummary(),
       });
       if (error) throw error;
+      // Письмо юристу об эскалации — fire-and-forget, UX не блокируем.
+      void supabase.functions
+        .invoke("notify-lawyer-escalation", { body: { lawyer_client_id: linkedCard.id } })
+        .catch(() => {});
       setLinkedCard({ ...linkedCard, escalation_requested: true });
       toast({
         title: "Запрос юристу отправлен",
