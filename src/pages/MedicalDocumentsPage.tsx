@@ -147,6 +147,40 @@ export default function MedicalDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  // «В анализе» — переживает уход со страницы и перезагрузку: edge-функция
+  // дописывает результат в БД сама, фронт хранит ожидание в localStorage и
+  // доводит поллингом до появления результата (или до TTL при сбое).
+  const PENDING_ANALYSIS_KEY = "nepriziv_pending_analysis";
+  const PENDING_ANALYSIS_TTL = 3 * 60 * 1000;
+  const [pendingAnalysis, setPendingAnalysis] = useState<Record<string, number>>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("nepriziv_pending_analysis") || "{}") as Record<string, number>;
+      const now = Date.now();
+      return Object.fromEntries(Object.entries(raw).filter(([, ts]) => now - ts < 3 * 60 * 1000));
+    } catch {
+      return {};
+    }
+  });
+  const updatePendingAnalysis = (fn: (prev: Record<string, number>) => Record<string, number>) => {
+    setPendingAnalysis((prev) => {
+      const next = fn(prev);
+      try {
+        localStorage.setItem(PENDING_ANALYSIS_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+  const markAnalysisPending = (id: string) => updatePendingAnalysis((p) => ({ ...p, [id]: Date.now() }));
+  const clearAnalysisPending = (id: string) =>
+    updatePendingAnalysis((p) => {
+      if (!(id in p)) return p;
+      const rest = { ...p };
+      delete rest[id];
+      return rest;
+    });
+  const isDocAnalyzing = (id: string) => analyzingId === id || id in pendingAnalysis;
   const [documentToDelete, setDocumentToDelete] = useState<MedicalDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -1136,6 +1170,7 @@ export default function MedicalDocumentsPage() {
 
   const analyzeDocument = async (documentId: string, imageBase64?: string, extraImages?: string[]) => {
     setAnalyzingId(documentId);
+    markAnalysisPending(documentId);
 
     try {
       // Get fresh user from live session — React state may lag behind after
@@ -1231,8 +1266,33 @@ export default function MedicalDocumentsPage() {
       });
     } finally {
       setAnalyzingId(null);
+      clearAnalysisPending(documentId);
     }
   };
+
+  // Доводим «висящие» анализы (после перезагрузки/возврата на страницу):
+  // перечитываем документы каждые 8с, пока есть ожидающие; результат в БД
+  // (is_classified) или истёкший TTL снимают ожидание.
+  useEffect(() => {
+    const ids = Object.keys(pendingAnalysis);
+    if (ids.length === 0) return;
+    const tick = () => {
+      const now = Date.now();
+      ids.forEach((id) => {
+        const doc = documents.find((d) => d.id === id);
+        if (doc?.is_classified || now - (pendingAnalysis[id] || 0) > PENDING_ANALYSIS_TTL) {
+          clearAnalysisPending(id);
+        }
+      });
+    };
+    tick();
+    const interval = setInterval(() => {
+      loadDocuments();
+      tick();
+    }, 8000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAnalysis, documents]);
 
   const confirmDeleteDocument = async () => {
     if (!documentToDelete) return;
@@ -2069,6 +2129,17 @@ export default function MedicalDocumentsPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {(analyzingId || Object.keys(pendingAnalysis).length > 0) && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+                  <Loader2 className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin" />
+                  <div>
+                    <p className="font-medium">ИИ анализирует документ — обычно 30–60 секунд.</p>
+                    <p className="text-xs opacity-80">
+                      Можно уходить со страницы: анализ выполняется на сервере, результат сам появится в строке документа.
+                    </p>
+                  </div>
+                </div>
+              )}
               {filteredDocuments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -2145,6 +2216,12 @@ export default function MedicalDocumentsPage() {
                                 Статья {doc.disease_articles_565.article_number}
                               </div>
                             )}
+                            {/* На мобиле колонка «Статус» скрыта — показываем анализ тут */}
+                            {isDocAnalyzing(doc.id) && (
+                              <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-300 md:hidden">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Анализ…
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell max-w-[150px]">
                             {doc.meta?.parts && doc.meta.parts.length > 1 ? (
@@ -2203,7 +2280,7 @@ export default function MedicalDocumentsPage() {
                             )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            {analyzingId === doc.id ? (
+                            {isDocAnalyzing(doc.id) ? (
                               <Badge variant="outline" className="animate-pulse">
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                 Анализ...
@@ -2498,9 +2575,9 @@ export default function MedicalDocumentsPage() {
                                           <Button
                                             className="flex-1"
                                             onClick={() => analyzeDocument(doc.id)}
-                                            disabled={analyzingId === doc.id}
+                                            disabled={isDocAnalyzing(doc.id)}
                                           >
-                                            {analyzingId === doc.id ? (
+                                            {isDocAnalyzing(doc.id) ? (
                                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                             ) : (
                                               <Brain className="h-4 w-4 mr-2" />
@@ -2532,7 +2609,7 @@ export default function MedicalDocumentsPage() {
                                   size="icon"
                                   className="h-9 w-9"
                                   onClick={() => analyzeDocument(doc.id)}
-                                  disabled={analyzingId === doc.id}
+                                  disabled={isDocAnalyzing(doc.id)}
                                   title="Повторить анализ"
                                 >
                                   <Brain className="h-5 w-5" />
