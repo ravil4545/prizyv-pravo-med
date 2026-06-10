@@ -35,20 +35,20 @@ interface Plan {
 const plans: Plan[] = [
   {
     cycle: "month",
-    price: 990,
-    priceLabel: "990 ₽",
+    price: 4990,
+    priceLabel: "4 990 ₽",
     unit: "в месяц",
-    cta: "Начать 7 дней бесплатно",
+    cta: "Начать 3 дня бесплатно",
   },
   {
     cycle: "year",
     badge: "Экономия 17%",
-    price: 9900,
-    priceLabel: "9 900 ₽",
+    price: 49900,
+    priceLabel: "49 900 ₽",
     unit: "в год",
-    perMonth: "≈ 825 ₽/мес",
-    saving: "Экономия 1 980 ₽",
-    cta: "Начать 7 дней бесплатно",
+    perMonth: "≈ 4 158 ₽/мес",
+    saving: "Экономия 9 980 ₽",
+    cta: "Начать 3 дня бесплатно",
   },
 ];
 
@@ -95,9 +95,9 @@ const comparison = [
   {
     param: "Цена в месяц",
     chatgpt: "бесплатно / 2000 ₽",
-    ours: "990 ₽",
+    ours: "4 990 ₽",
     lawyer: "9 000 ₽ за консультацию",
-    ourBest: true,
+    ourBest: false,
   },
   {
     param: "Юридическая ответственность",
@@ -138,7 +138,7 @@ const faq = [
 const SubscriptionPricing = () => {
   const navigate = useNavigate();
   const branding = useBranding();
-  // По умолчанию — месячный тариф (990 ₽), а не годовой.
+  // По умолчанию — месячный тариф (4 990 ₽), а не годовой.
   const [activeCycle, setActiveCycle] = useState<BillingCycle>("month");
 
   const startTrial = async () => {
@@ -288,8 +288,8 @@ const SubscriptionPricing = () => {
               </button>
 
               <p className="text-[11px] text-paper/55 mt-3 leading-relaxed">
-                7 дней — без списания. Отмена в один клик. После пробного периода
-                спишется {activePlan.priceLabel} {activePlan.unit}.
+                3 дня — без списания (9 документов и 9 вопросов к ИИ). Отмена в один клик.
+                После пробного периода спишется {activePlan.priceLabel} {activePlan.unit}.
               </p>
             </article>
           </div>
@@ -301,7 +301,7 @@ const SubscriptionPricing = () => {
                 — Сколько вы экономите
               </p>
               <h3 className="font-serif text-2xl sm:text-3xl text-paper leading-tight mb-5">
-                Подписка окупается со второй консультации.
+                Подписка окупается с шестой консультации.
               </h3>
               <dl className="space-y-4 text-sm">
                 <div className="flex items-baseline justify-between gap-3 pb-3 border-b border-paper/10">
@@ -310,10 +310,10 @@ const SubscriptionPricing = () => {
                 </div>
                 <div className="flex items-baseline justify-between gap-3 pb-3 border-b border-paper/10">
                   <dt className="text-paper/70">Подписка на год</dt>
-                  <dd className="font-serif text-lg text-paper">9 900 ₽</dd>
+                  <dd className="font-serif text-lg text-paper">49 900 ₽</dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-3 pt-1">
-                  <dt className="text-gold font-semibold">Со 2-й консультации в году</dt>
+                  <dt className="text-gold font-semibold">С 6-й консультации в году</dt>
                   <dd className="font-serif text-2xl text-gold">в плюсе</dd>
                 </div>
               </dl>
@@ -426,7 +426,7 @@ const SubscriptionPricing = () => {
               — Без обязательств
             </p>
             <p className="font-serif text-xl sm:text-2xl text-paper leading-tight">
-              Попробуйте 7 дней бесплатно — отмена в один клик.
+              Попробуйте 3 дня бесплатно — отмена в один клик.
             </p>
           </div>
           <button

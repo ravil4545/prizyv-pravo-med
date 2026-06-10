@@ -19,19 +19,20 @@ interface Plan {
   note?: string;
 }
 
+// Сумма зашита в счёте YooMoney — при смене цены нужно выставить новые счета и заменить url.
 const PLANS: Record<PlanId, Plan> = {
   month: {
     id: "month",
     url: "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215",
-    priceLabel: "990 ₽",
+    priceLabel: "4 990 ₽",
     unit: "в месяц",
   },
   year: {
     id: "year",
     url: "https://yoomoney.ru/bill/pay/1I54F0JNBCS.260602",
-    priceLabel: "9 900 ₽",
+    priceLabel: "49 900 ₽",
     unit: "в год",
-    note: "≈ 825 ₽/мес · экономия 1 980 ₽",
+    note: "≈ 4 158 ₽/мес · экономия 9 980 ₽",
   },
 };
 
@@ -49,7 +50,7 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
 
   const handleOpenPayment = async () => {
     setOpening(true);
-    trackEvent("pricing_plan_click", { ref: `subscription_${planId}`, value: planId === "year" ? 9900 : 990 });
+    trackEvent("pricing_plan_click", { ref: `subscription_${planId}`, value: planId === "year" ? 49900 : 4990 });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;

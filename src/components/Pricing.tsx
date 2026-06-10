@@ -98,7 +98,7 @@ const Pricing = () => {
           Начните с бесплатной вводной — финальная стоимость работ озвучивается после
           анализа документов. Никаких «допуслуг» по ходу.
           <span className="block mt-3 text-sm text-ink/55">
-            Хотите попробовать ИИ-помощника? Подписка <a href="#subscription" className="text-gold hover:underline">990 ₽/мес</a> —
+            Хотите попробовать ИИ-помощника? Подписка <a href="#subscription" className="text-gold hover:underline">4 990 ₽/мес</a> —
             отдельно от очной работы юриста.
           </span>
         </p>

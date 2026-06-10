@@ -53,7 +53,7 @@ export default function LimitReachedDialog({ open, onClose, type, isDemoMode = f
             <div className="space-y-3">
               <p className="text-sm text-ink-soft leading-relaxed">
                 Вы использовали бесплатный пробный {labelOne}.
-                Зарегистрируйтесь бесплатно — получите ещё <span className="font-semibold text-ink">3 {label}</span>.
+                Зарегистрируйтесь бесплатно — получите пробный период: <span className="font-semibold text-ink">9 {label}</span> на 3 дня.
                 Подписка снимает все лимиты.
               </p>
 
@@ -63,8 +63,8 @@ export default function LimitReachedDialog({ open, onClose, type, isDemoMode = f
                 </p>
                 {[
                   { tier: "Аноним", value: "1 + 1" },
-                  { tier: "Регистрация (бесплатно)", value: "3 + 3" },
-                  { tier: "Подписка от 9 000 ₽/мес", value: "Безлимит" },
+                  { tier: "Регистрация — триал 3 дня", value: "9 + 9" },
+                  { tier: "Подписка 4 990 ₽/мес", value: "Безлимит" },
                 ].map((t) => (
                   <div key={t.tier} className="flex items-center justify-between text-sm">
                     <span className="text-ink-soft">{t.tier}</span>

@@ -12,14 +12,15 @@ interface LimitsBadgeProps {
 /**
  * Tiny indicator showing remaining free quota.
  *
- * - Anonymous (1 + 1):       "Демо · ИИ 1 · Файлы 1"
+ * - Anonymous (demo):        "Демо · ИИ 1 · Файлы 1"
+ * - Trial (3 дня, 9 + 9):    "Триал · ИИ 9 · Файлы 9"
  * - Registered free (3 + 3): "Бесплатно · ИИ 3 · Файлы 3"
- * - Paid:                    "Подписка активна" (or null if hide)
+ * - Paid:                    "Безлимит" (только настоящая подписка)
  */
 const LimitsBadge = ({ variant = "pill", className }: LimitsBadgeProps) => {
   const demo = useDemoMode();
   const sub = useSubscription();
-  const isPaid = sub.isActive();
+  const isPaid = sub.isPaidActive();
 
   if (sub.loading && !demo.isDemoMode) return null;
 
@@ -55,9 +56,9 @@ const LimitsBadge = ({ variant = "pill", className }: LimitsBadgeProps) => {
   const isDemo = demo.isDemoMode;
   const ai = isDemo ? demo.remainingDemoAI : sub.remainingAIQuestions;
   const docs = isDemo ? demo.remainingDemoDocs : sub.remainingDocUploads;
-  const aiTotal = isDemo ? demo.demoAiLimit : sub.subscription?.free_ai_limit ?? 0;
-  const docsTotal = isDemo ? demo.demoDocLimit : sub.subscription?.free_document_limit ?? 0;
-  const tierLabel = isDemo ? "Демо" : "Бесплатно";
+  const aiTotal = isDemo ? demo.demoAiLimit : sub.currentAiLimit;
+  const docsTotal = isDemo ? demo.demoDocLimit : sub.currentDocLimit;
+  const tierLabel = isDemo ? "Демо" : sub.isTrialActive() ? "Триал" : "Бесплатно";
 
   if (aiTotal === 0 && docsTotal === 0) return null;
 

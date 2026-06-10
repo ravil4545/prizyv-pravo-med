@@ -148,7 +148,7 @@ const Hero = () => {
                   <span className="text-left leading-tight">
                     ИИ-кабинет
                     <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-80 mt-0.5">
-                      7 дней бесплатно
+                      3 дня бесплатно
                     </span>
                   </span>
                 </span>

@@ -23,6 +23,11 @@ const DEFAULT_SUBSCRIPTION: SubscriptionData = {
   trial_ends_at: null,
 };
 
+// Квота пробного периода (3 дня с регистрации, дефолт trial_ends_at в БД):
+// в течение триала действует расширенный лимит вместо безлимита.
+export const TRIAL_DOC_LIMIT = 9;
+export const TRIAL_AI_LIMIT = 9;
+
 export function useSubscription() {
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,33 +75,40 @@ export function useSubscription() {
     fetchSubscription();
   }, [fetchSubscription]);
 
-  // Активен ли 7-дневный пробный период (с момента регистрации).
+  // Активен ли 3-дневный пробный период (с момента регистрации).
   const isTrialActive = useCallback((): boolean => {
     if (!subscription?.trial_ends_at) return false;
     return new Date(subscription.trial_ends_at) > new Date();
   }, [subscription]);
 
-  const isActive = useCallback((): boolean => {
+  // Оплаченный доступ (или админ-переключатель) — настоящий безлимит.
+  const isPaidActive = useCallback((): boolean => {
     if (!subscription) return false;
     if (subscription.admin_override) return true;
-    // Пробный период даёт полный доступ.
-    if (subscription.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()) return true;
-    if (!subscription.is_paid) return false;
-    if (!subscription.paid_until) return false;
+    if (!subscription.is_paid || !subscription.paid_until) return false;
     return new Date(subscription.paid_until) > new Date();
   }, [subscription]);
 
+  // «Есть доступ к функциям кабинета» — подписка ИЛИ пробный период.
+  // Квоты считаются отдельно: в триале лимит TRIAL_*, безлимит только у платных.
+  const isActive = useCallback((): boolean => {
+    if (isPaidActive()) return true;
+    return isTrialActive();
+  }, [isPaidActive, isTrialActive]);
+
   const canUploadDocument = useCallback((): boolean => {
     if (!subscription) return false;
-    if (isActive()) return true;
+    if (isPaidActive()) return true;
+    if (isTrialActive()) return subscription.document_uploads_used < TRIAL_DOC_LIMIT;
     return subscription.document_uploads_used < subscription.free_document_limit;
-  }, [subscription, isActive]);
+  }, [subscription, isPaidActive, isTrialActive]);
 
   const canAskAI = useCallback((): boolean => {
     if (!subscription) return false;
-    if (isActive()) return true;
+    if (isPaidActive()) return true;
+    if (isTrialActive()) return subscription.ai_questions_used < TRIAL_AI_LIMIT;
     return subscription.ai_questions_used < subscription.free_ai_limit;
-  }, [subscription, isActive]);
+  }, [subscription, isPaidActive, isTrialActive]);
 
   const incrementDocumentUploads = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -124,18 +136,24 @@ export function useSubscription() {
     setSubscription(prev => prev ? { ...prev, ai_questions_used: newCount } : prev);
   }, [subscription]);
 
+  // Действующие лимиты: в триале — TRIAL_* (9/9), после — бесплатные (3/3).
+  const trialNow = isTrialActive();
+  const currentDocLimit = trialNow ? TRIAL_DOC_LIMIT : subscription?.free_document_limit ?? 3;
+  const currentAiLimit = trialNow ? TRIAL_AI_LIMIT : subscription?.free_ai_limit ?? 3;
+
   const remainingDocUploads = subscription
-    ? Math.max(0, subscription.free_document_limit - subscription.document_uploads_used)
+    ? Math.max(0, currentDocLimit - subscription.document_uploads_used)
     : 0;
 
   const remainingAIQuestions = subscription
-    ? Math.max(0, subscription.free_ai_limit - subscription.ai_questions_used)
+    ? Math.max(0, currentAiLimit - subscription.ai_questions_used)
     : 0;
 
   return {
     subscription,
     loading,
     isActive,
+    isPaidActive,
     isTrialActive,
     trialEndsAt: subscription?.trial_ends_at ?? null,
     canUploadDocument,
@@ -144,6 +162,8 @@ export function useSubscription() {
     incrementAIQuestions,
     remainingDocUploads,
     remainingAIQuestions,
+    currentDocLimit,
+    currentAiLimit,
     refresh: fetchSubscription,
   };
 }

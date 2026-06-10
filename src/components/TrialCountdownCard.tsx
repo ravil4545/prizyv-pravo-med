@@ -9,9 +9,10 @@ import PaymentInstructionsDialog from "@/components/PaymentInstructionsDialog";
 /**
  * Карточка пробного периода (Модуль 2 — удержание).
  *
- * Показывает живой обратный отсчёт 7-дневного бесплатного периода, который
- * стартует с момента регистрации (trial_ends_at в user_subscriptions). По
- * клику открывает диалог оплаты с выбором тарифа месяц/год.
+ * Показывает живой обратный отсчёт 3-дневного бесплатного периода, который
+ * стартует с момента регистрации (trial_ends_at в user_subscriptions).
+ * Квота триала — 9 документов и 9 вопросов к ИИ (useSubscription TRIAL_*).
+ * По клику открывает диалог оплаты с выбором тарифа месяц/год.
  *
  * Не рендерится, если: демо-режим, идёт загрузка, активна платная подписка,
  * или триал уже закончился (тогда работает обычная SubscriptionStatusCard).
@@ -97,8 +98,8 @@ export default function TrialCountdownCard() {
           </div>
 
           <p className="mt-4 text-sm text-ink-soft">
-            После окончания пробного периода доступ к безлимиту сохранится только с подпиской.
-            Оформите заранее, чтобы не прерывать работу над делом.
+            В пробный период доступно 9 документов и 9 вопросов к ИИ. Безлимит —
+            только с подпиской: оформите заранее, чтобы не прерывать работу над делом.
           </p>
 
           {/* Оба тарифа */}
@@ -108,14 +109,14 @@ export default function TrialCountdownCard() {
               className="flex-1 gap-2 bg-ink text-paper hover:bg-gold hover:text-ink"
             >
               <Crown className="h-4 w-4" />
-              Подписка на год — 9 900 ₽
+              Подписка на год — 49 900 ₽
             </Button>
             <Button
               variant="outline"
               onClick={() => setPaymentOpen(true)}
               className="flex-1 border-ink/20"
             >
-              Помесячно — 990 ₽
+              Помесячно — 4 990 ₽
             </Button>
           </div>
         </CardContent>

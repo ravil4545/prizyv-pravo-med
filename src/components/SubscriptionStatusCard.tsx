@@ -19,7 +19,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
   const [searchParams, setSearchParams] = useSearchParams();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const { subscription, loading: subLoading, isActive, remainingDocUploads, remainingAIQuestions } = useSubscription();
+  const { subscription, loading: subLoading, isPaidActive, isTrialActive, remainingDocUploads, remainingAIQuestions, currentDocLimit, currentAiLimit } = useSubscription();
   const { isDemoMode, remainingDemoDocs, remainingDemoAI, demoDocLimit, demoAiLimit } = useDemoMode();
 
   // Авто-открытие диалога оплаты по ?pay=1 — поддержка перехода с лендинга Pricing
@@ -35,15 +35,20 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
 
   if (subLoading && !isDemoMode) return null;
 
-  const active = isActive();
-
-  // Determine mode
-  const mode: "demo" | "free" | "paid" = isDemoMode ? "demo" : active ? "paid" : "free";
+  // «paid» = только настоящая подписка/админ; в пробный период показываем
+  // счётчики квоты триала (9/9), а не «безлимит».
+  const mode: "demo" | "trial" | "free" | "paid" = isDemoMode
+    ? "demo"
+    : isPaidActive()
+      ? "paid"
+      : isTrialActive()
+        ? "trial"
+        : "free";
 
   const docUsed = mode === "demo" ? (demoDocLimit - remainingDemoDocs) : (subscription?.document_uploads_used ?? 0);
-  const docLimit = mode === "demo" ? demoDocLimit : mode === "paid" ? Infinity : (subscription?.free_document_limit ?? 3);
+  const docLimit = mode === "demo" ? demoDocLimit : mode === "paid" ? Infinity : currentDocLimit;
   const aiUsed = mode === "demo" ? (demoAiLimit - remainingDemoAI) : (subscription?.ai_questions_used ?? 0);
-  const aiLimit = mode === "demo" ? demoAiLimit : mode === "paid" ? Infinity : (subscription?.free_ai_limit ?? 3);
+  const aiLimit = mode === "demo" ? demoAiLimit : mode === "paid" ? Infinity : currentAiLimit;
 
   const docRemaining = mode === "demo" ? remainingDemoDocs : mode === "paid" ? Infinity : remainingDocUploads;
   const aiRemaining = mode === "demo" ? remainingDemoAI : mode === "paid" ? Infinity : remainingAIQuestions;
@@ -120,7 +125,18 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
       actionLabel: "Зарегистрироваться бесплатно",
       actionIcon: UserPlus,
       onAction: () => navigate("/auth"),
-      upgradeNote: "Регистрация даёт 3 загрузки и 3 вопроса бесплатно",
+      upgradeNote: "Регистрация даёт пробный период: 3 дня, 9 документов и 9 вопросов к ИИ",
+    },
+    trial: {
+      title: "Пробный период",
+      subtitle: "3 дня",
+      icon: Sparkles,
+      borderClass: allExhausted ? "border-destructive/40" : "border-gold/40",
+      bgClass: allExhausted ? "bg-gradient-to-r from-destructive/5 to-destructive/3" : "bg-gradient-to-r from-gold/10 to-primary/5",
+      actionLabel: "Оформить подписку — 4 990 ₽/мес",
+      actionIcon: Crown,
+      onAction: handlePayment,
+      upgradeNote: "В триале доступно 9 документов и 9 вопросов к ИИ",
     },
     free: {
       title: "Бесплатный тариф",
@@ -128,7 +144,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
       icon: Zap,
       borderClass: allExhausted ? "border-destructive/40" : "border-accent/30",
       bgClass: allExhausted ? "bg-gradient-to-r from-destructive/5 to-destructive/3" : "bg-gradient-to-r from-accent/5 to-primary/5",
-      actionLabel: "Оформить подписку — 990 ₽/мес",
+      actionLabel: "Оформить подписку — 4 990 ₽/мес",
       actionIcon: Crown,
       onAction: handlePayment,
       upgradeNote: "Безлимитный доступ к документам и ИИ помощнику",
@@ -218,7 +234,7 @@ export default function SubscriptionStatusCard({ compact = false }: Subscription
           </Button>
 
           {/* Paid features preview */}
-          {!compact && mode === "free" && (
+          {!compact && (mode === "free" || mode === "trial") && (
             <div className="grid grid-cols-3 gap-2 pt-1">
               {["Безлимитные документы", "Безлимитный ИИ", "Приоритетная поддержка"].map((feature) => (
                 <div key={feature} className="flex items-center gap-1.5 text-xs text-muted-foreground">

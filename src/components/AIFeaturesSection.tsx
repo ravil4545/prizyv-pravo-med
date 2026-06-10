@@ -239,7 +239,7 @@ const AIFeaturesSection = () => {
             className="group inline-flex items-center gap-3 px-6 sm:px-7 py-4 bg-ink text-paper font-semibold whitespace-nowrap hover:bg-gold hover:text-ink transition-colors"
           >
             <Sparkles className="h-4 w-4" />
-            Попробовать 7 дней бесплатно
+            Попробовать 3 дня бесплатно
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </button>
         </div>
