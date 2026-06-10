@@ -2022,7 +2022,7 @@ export default function MedicalDocumentsPage() {
                 </div>
 
                 <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-[200px] h-9">
+                  <SelectTrigger className="w-full sm:w-[200px] h-9">
                     <SelectValue placeholder="Тип документа" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2077,7 +2077,7 @@ export default function MedicalDocumentsPage() {
                     : "Документы не найдены по заданным фильтрам"}
                 </div>
               ) : (
-                <div className="rounded-md border overflow-hidden">
+                <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">

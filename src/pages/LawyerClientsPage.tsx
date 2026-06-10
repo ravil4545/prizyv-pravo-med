@@ -520,7 +520,7 @@ const LawyerClientsPage = () => {
             <h1 className="text-2xl font-bold flex items-center gap-2"><Users className="h-6 w-6 text-primary" />CRM — Клиенты</h1>
             <p className="text-muted-foreground text-sm mt-1">{totalAll} клиентов</p>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <div className="inline-flex border rounded-md overflow-hidden">
               <Button
                 variant={viewMode === "list" ? "default" : "ghost"}

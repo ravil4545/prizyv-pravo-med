@@ -992,7 +992,7 @@ const LawyerChatPage = () => {
                                   )
                                 )}
                                 {m.message_type === "text" && m.content && (
-                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
                                 )}
                                 {m.message_type !== "text" && m.content && m.content !== m.file_name && (
                                   <p className="text-sm mt-1">{m.content}</p>

@@ -207,7 +207,7 @@ export function RagChat() {
             {messages.map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn(
-                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed",
+                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words",
                   m.role === "user"
                     ? "bg-primary text-white rounded-tr-sm"
                     : "bg-gray-100 text-gray-800 rounded-tl-sm",

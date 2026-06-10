@@ -215,7 +215,7 @@ const CaseRoadmap = () => {
             <li
               key={s.no}
               className={cn(
-                "relative grid grid-cols-[2.5rem_1fr_auto] gap-4 items-start py-3",
+                "relative grid grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-2 sm:gap-4 items-start py-3",
                 i < stages.length - 1 && "after:absolute after:left-[1.25rem] after:top-[3.5rem] after:bottom-[-0.75rem] after:w-px after:bg-ink/10",
               )}
             >

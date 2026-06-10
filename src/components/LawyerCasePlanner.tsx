@@ -262,7 +262,7 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         value={examDraft!.reason}
         onChange={(e) => setExamDraft((d) => (d ? { ...d, reason: e.target.value } : d))}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <CalendarClock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">Срок:</span>
         <Input
@@ -320,7 +320,7 @@ const LawyerCasePlanner = ({ lawyerClientId, isPro, onUpgrade }: Props) => {
         value={actionDraft!.description}
         onChange={(e) => setActionDraft((d) => (d ? { ...d, description: e.target.value } : d))}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <CalendarClock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">Срок:</span>
         <Input

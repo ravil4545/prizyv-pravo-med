@@ -578,16 +578,18 @@ const LawyerClientDetail = () => {
       <Header />
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/lawyer/clients")}><ArrowLeft className="h-5 w-5" /></Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold truncate">{client?.client_name}</h1>
-            <p className="text-sm text-muted-foreground">
-              {CRM_STAGES.find((s) => s.value === client?.crm_stage)?.label}
-              {client?.case_won && " · ВБ получен ✓"}
-            </p>
+        <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate("/lawyer/clients")}><ArrowLeft className="h-5 w-5" /></Button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold truncate">{client?.client_name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {CRM_STAGES.find((s) => s.value === client?.crm_stage)?.label}
+                {client?.case_won && " · ВБ получен ✓"}
+              </p>
+            </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-2 sm:flex-shrink-0 sm:ml-auto">
             {!client?.case_won && (
               <Button variant="outline" size="sm" className="text-green-600 border-green-300" onClick={handleMarkWon}>
                 <Trophy className="h-4 w-4 mr-1" />ВБ получен

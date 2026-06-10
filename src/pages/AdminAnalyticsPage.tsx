@@ -423,6 +423,7 @@ const AdminAnalyticsPage = () => {
                 <CardDescription>Просмотры и среднее время на странице</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -441,6 +442,7 @@ const AdminAnalyticsPage = () => {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
