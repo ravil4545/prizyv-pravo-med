@@ -22,7 +22,9 @@ import {
   Users,
   Search,
   User,
+  ChevronDown,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import TrialCountdownCard from "@/components/TrialCountdownCard";
@@ -392,12 +394,16 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {/* ── Инструменты ────────────────────────────────────────────── */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
+          {/* ── Инструменты — свёрнуты по умолчанию: разгружаем длинный
+                 скролл главной, всё то же есть в боковом меню/«Ещё» ───────── */}
+          <Collapsible className="mb-8">
+            <CollapsibleTrigger className="group/sec flex w-full items-center gap-2 mb-3">
               <span className="section-number">Инструменты</span>
+              <span className="text-[11px] text-muted-foreground">· {toolsCards.length}</span>
               <span className="flex-1 h-px bg-border/50" />
-            </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]/sec:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {toolsCards.map((card) => {
                 const Icon = card.icon;
@@ -424,14 +430,18 @@ const DashboardPage = () => {
                 );
               })}
             </div>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-          {/* ── Сообщество ─────────────────────────────────────────────── */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
+          {/* ── Сообщество — тоже свёрнуто по умолчанию ────────────────── */}
+          <Collapsible className="mb-8">
+            <CollapsibleTrigger className="group/sec flex w-full items-center gap-2 mb-3">
               <span className="section-number">Сообщество</span>
+              <span className="text-[11px] text-muted-foreground">· {communityCards.length}</span>
               <span className="flex-1 h-px bg-border/50" />
-            </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]/sec:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {communityCards.map((card) => {
                 const Icon = card.icon;
@@ -458,7 +468,8 @@ const DashboardPage = () => {
                 );
               })}
             </div>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* ── Семейный доступ — мини-CTA ─────────────────────────────── */}
           {!isDemoMode && (
