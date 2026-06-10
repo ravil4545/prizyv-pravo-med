@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { enhanceTypography } from "@/lib/typography";
 import RichTextEditor from "@/components/RichTextEditor";
 import { autoSlugFromTitle, autoExcerpt, calcReadingTimeMin, readingTimeLabel } from "@/lib/blogUtils";
+import { slugifyRu } from "@/lib/slug";
 
 interface BlogPost {
   id: string;
@@ -266,7 +267,12 @@ const AdminBlogPage = () => {
       }
     }
 
-    const finalSlug = formData.slug || autoSlugFromTitle(formData.title);
+    // Защита от «URL вместо слага» (ломало 4 поста: /blog/https://… = 404).
+    // Вставленный URL заменяем слагом из заголовка, ручной ввод нормализуем.
+    const rawSlug = formData.slug.trim();
+    const finalSlug = /^https?:\/\//i.test(rawSlug)
+      ? autoSlugFromTitle(formData.title)
+      : slugifyRu(rawSlug) || autoSlugFromTitle(formData.title);
     const finalExcerpt = formData.excerpt || autoExcerpt(formData.content);
     const isPublishing = formData.status === "published";
     const wasPublished = editingPost?.status === "published";
