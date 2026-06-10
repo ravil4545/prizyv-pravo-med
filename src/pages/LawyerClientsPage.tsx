@@ -70,6 +70,9 @@ const LawyerClientsPage = () => {
   // юрист видит активную работу. Тоггл «Показать архив» — без localStorage,
   // чтобы каждое посещение CRM по умолчанию открывало рабочий список.
   const [showArchived, setShowArchived] = useState(false);
+  // Фильтр «просят юриста» (эскалация из ИИ-чата). Открывается по клику на
+  // KPI-карточку дашборда (/lawyer/clients?escalated=1) или тогглом в фильтрах.
+  const [escalatedOnly, setEscalatedOnly] = useState(searchParams.get("escalated") === "1");
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">(() => {
@@ -109,7 +112,7 @@ const LawyerClientsPage = () => {
     if (!user || profileLoading || !isLawyer) return;
     loadClients(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, profileLoading, isLawyer, stageFilter, priorityFilter, showArchived, debouncedSearch, viewMode]);
+  }, [user?.id, profileLoading, isLawyer, stageFilter, priorityFilter, showArchived, escalatedOnly, debouncedSearch, viewMode]);
 
   // Realtime: клиент сам подключился из каталога / принял запрос / отвязался —
   // перезагружаем первую страницу текущей выборки без перезагрузки страницы.
@@ -197,6 +200,7 @@ const LawyerClientsPage = () => {
     }
     if (viewMode === "list" && stageFilter !== "all") query = query.eq("crm_stage", stageFilter) as T;
     if (priorityFilter !== "all") query = query.eq("priority", priorityFilter) as T;
+    if (escalatedOnly) query = query.eq("escalation_requested", true) as T;
     const term = debouncedSearch.trim();
     if (term) {
       // Экранируем символы, ломающие синтаксис or()/ilike.
@@ -480,18 +484,22 @@ const LawyerClientsPage = () => {
     return days >= 0 && days <= 14;
   };
 
-  // Серверная выборка уже отфильтрована (этап/приоритет/архив/поиск) — здесь
-  // только клиентская сортировка загруженного набора: горящие → срочные →
-  // непрочитанные → по дате обновления.
-  const filtered = [...clients].sort((a, b) => {
+  // Единый порядок карточек в СПИСКЕ и КАНБАНЕ: горящие → эскалации («просит
+  // юриста») → срочные → непрочитанные → по дате обновления. Серверная выборка
+  // уже отфильтрована (этап/приоритет/архив/поиск) — здесь только сортировка.
+  const compareClients = (a: LawyerClient, b: LawyerClient): number => {
     const ba = isBurning(a), bb = isBurning(b);
     if (ba !== bb) return ba ? -1 : 1;
+    const ea = !!a.escalation_requested, eb = !!b.escalation_requested;
+    if (ea !== eb) return ea ? -1 : 1;
     const ua = a.priority === "urgent", ub = b.priority === "urgent";
     if (ua !== ub) return ua ? -1 : 1;
     const um_a = (unreadByConv[a.id] || 0) > 0, um_b = (unreadByConv[b.id] || 0) > 0;
     if (um_a !== um_b) return um_a ? -1 : 1;
     return b.updated_at.localeCompare(a.updated_at);
-  });
+  };
+
+  const filtered = [...clients].sort(compareClients);
 
   const hasMore = (page + 1) * PAGE_SIZE < filteredTotal;
 
@@ -661,6 +669,20 @@ const LawyerClientsPage = () => {
               <SelectItem value="low">Низкий</SelectItem>
             </SelectContent>
           </Select>
+          {/* Только клиенты, передавшие дело юристу из ИИ-чата (эскалация). */}
+          <Button
+            variant={escalatedOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEscalatedOnly((v) => !v)}
+            className={`h-10 gap-1.5 whitespace-nowrap ${
+              escalatedOnly
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-300"
+            }`}
+            title="Показать только клиентов, которые передали дело юристу из ИИ-чата"
+          >
+            🔴 Просят юриста
+          </Button>
           {/* Тоггл «Показать архив» — по умолчанию архивные карточки
               (declined / unlinked_* / archived) скрыты, юрист видит активную
               работу. Подсчёт скрытых рядом — чтобы сразу понимать масштаб. */}
@@ -701,7 +723,7 @@ const LawyerClientsPage = () => {
             <div className="text-center py-16">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">
-                {search || stageFilter !== "all" || priorityFilter !== "all"
+                {search || stageFilter !== "all" || priorityFilter !== "all" || escalatedOnly
                   ? "Клиенты не найдены по текущим фильтрам"
                   : totalAll > 0
                     ? "Карточки есть, но сейчас скрыты архивом или фильтрами"
@@ -713,6 +735,7 @@ const LawyerClientsPage = () => {
                     setSearch("");
                     setStageFilter("all");
                     setPriorityFilter("all");
+                    setEscalatedOnly(false);
                     setShowArchived(true);
                   }}>
                     Показать все карточки
@@ -808,11 +831,15 @@ const LawyerClientsPage = () => {
                   {CRM_STAGES.map((stage, stageIdx) => {
                     // Клиент с неизвестным/пустым этапом не должен пропадать с доски —
                     // кладём его в первую колонку (страховка «клиент не отображается»).
-                    const stageClients = kanbanClients.filter(
-                      (c) =>
-                        c.crm_stage === stage.value ||
-                        (stageIdx === 0 && !knownStages.has(c.crm_stage || "")),
-                    );
+                    // Тот же приоритетный порядок, что и в списке (горящие/
+                    // эскалации/срочные/непрочитанные сверху колонки).
+                    const stageClients = kanbanClients
+                      .filter(
+                        (c) =>
+                          c.crm_stage === stage.value ||
+                          (stageIdx === 0 && !knownStages.has(c.crm_stage || "")),
+                      )
+                      .sort(compareClients);
                     const isDropTarget = dragOverStage === stage.value;
                     return (
                       <div

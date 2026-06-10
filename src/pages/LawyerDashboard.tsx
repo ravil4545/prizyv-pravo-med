@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, User, AlertTriangle, Trophy, TrendingUp,
   Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
-  LogOut, Settings, Palette, CalendarClock, Flag, ListChecks, Stethoscope,
+  LogOut, Settings, Palette, CalendarClock, Flag, ListChecks, Stethoscope, BellRing,
 } from "lucide-react";
 import { loadAgendaItems, type AgendaItem, type AgendaKind } from "@/lib/lawyerAgendaData";
 import { deadlineBucket, deadlineToneClass, formatDueLabel } from "@/lib/deadlines";
@@ -51,6 +51,7 @@ const LawyerDashboard = () => {
   const [totalClients, setTotalClients] = useState(0);
   const [urgentCount, setUrgentCount] = useState(0);
   const [wonCount, setWonCount] = useState(0);
+  const [escalationCount, setEscalationCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [deadlines, setDeadlines] = useState<AgendaItem[]>([]);
@@ -87,10 +88,11 @@ const LawyerDashboard = () => {
       return build ? build(q) : q;
     };
 
-    const [totalRes, urgentRes, wonRes, recentRes, ...stageRes] = await Promise.all([
+    const [totalRes, urgentRes, wonRes, escalRes, recentRes, ...stageRes] = await Promise.all([
       countClients(),
       countClients((q) => q.eq("priority", "urgent")),
       countClients((q) => q.eq("case_won", true)),
+      countClients((q) => q.eq("escalation_requested", true)),
       supabase
         .from("lawyer_clients")
         .select("id, client_name, client_phone, crm_stage, priority, updated_at")
@@ -103,6 +105,7 @@ const LawyerDashboard = () => {
     setTotalClients(totalRes.count ?? 0);
     setUrgentCount(urgentRes.count ?? 0);
     setWonCount(wonRes.count ?? 0);
+    setEscalationCount(escalRes.count ?? 0);
     setRecentClients((recentRes.data as RecentClient[]) || []);
 
     // Воронка и счётчик «активных этапов» — только этапы с count > 0.
@@ -208,15 +211,30 @@ const LawyerDashboard = () => {
           </Card>
         )}
 
-        {/* Stats */}
+        {/* Stats. «Ждут юриста» — эскалации из ИИ-чата клиентов: это очередь
+            горячих обращений, клик ведёт в CRM с готовым фильтром. */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[
+          {([
             { label: "Всего клиентов", value: totalClients, icon: Users, color: "text-blue-500" },
+            {
+              label: "Ждут юриста", value: escalationCount, icon: BellRing, color: "text-rose-500",
+              onClick: () => navigate("/lawyer/clients?escalated=1"),
+              highlight: !dataLoading && escalationCount > 0,
+            },
             { label: "Срочных дел", value: urgentCount, icon: AlertTriangle, color: "text-red-500" },
             { label: "Выигранных дел", value: wonCount, icon: Trophy, color: "text-green-500" },
-            { label: "Активных этапов", value: stageCounts.length, icon: TrendingUp, color: "text-purple-500" },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <Card key={label}>
+          ] as Array<{
+            label: string; value: number; icon: typeof Users; color: string;
+            onClick?: () => void; highlight?: boolean;
+          }>).map(({ label, value, icon: Icon, color, onClick, highlight }) => (
+            <Card
+              key={label}
+              className={cn(
+                onClick && "cursor-pointer hover:shadow-md transition-shadow",
+                highlight && "border-rose-300 bg-rose-50/60 dark:bg-rose-950/20",
+              )}
+              onClick={onClick}
+            >
               <CardContent className="p-4 flex items-center gap-3">
                 <div className={`p-2 rounded-lg bg-muted ${color}`}>
                   <Icon className="h-5 w-5" />
