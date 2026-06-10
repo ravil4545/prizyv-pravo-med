@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { lazy, Suspense, Component, ReactNode, useEffect } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
@@ -17,6 +17,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import LawyerLayout from "./components/LawyerLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth } from "./lib/analytics";
+import { captureError, ymHit } from "./lib/monitoring";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -27,6 +28,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     return { hasError: true };
   }
   componentDidCatch(error: Error) {
+    captureError(error);
     // Auto-reload once on chunk load failures (stale cache after deploy)
     if (error.message?.includes("Failed to fetch dynamically imported module") ||
         error.message?.includes("Loading chunk") ||
@@ -119,6 +121,7 @@ const PageLoader = () => (
 
 const AnalyticsTracker = () => {
   useAnalyticsTracking();
+  const location = useLocation();
 
   // First-touch UTM capture + scroll-depth tracking — раз на сессию.
   useEffect(() => {
@@ -126,6 +129,11 @@ const AnalyticsTracker = () => {
     const cleanup = initScrollDepth();
     return cleanup;
   }, []);
+
+  // SPA-hit Метрики на каждую смену маршрута (включая первую загрузку).
+  useEffect(() => {
+    ymHit(location.pathname + location.search);
+  }, [location.pathname, location.search]);
 
   return null;
 };

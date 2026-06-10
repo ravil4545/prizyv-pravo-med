@@ -1,6 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { initMonitoring } from "./lib/monitoring";
+
+// Sentry + Яндекс.Метрика (no-op, пока не заданы ID в lib/monitoring.ts)
+initMonitoring();
 
 if (import.meta.env.DEV && "serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations()

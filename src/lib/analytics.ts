@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { ymGoal } from "./monitoring";
 
 /**
  * Маркетинговая аналитика: захват UTM при первом визите + единая функция
@@ -120,6 +121,8 @@ export const trackEvent = (event: ConversionEvent, options: TrackOptions = {}) =
 
     // Не дожидаемся ответа — fire-and-forget.
     void supabase.from("analytics_events").insert(payload as never);
+    // Зеркалим в Яндекс.Метрику как JS-цель с тем же именем (no-op без счётчика).
+    ymGoal(event);
   } catch {
     // ignore
   }

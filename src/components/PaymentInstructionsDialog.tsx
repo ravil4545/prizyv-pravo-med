@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { CreditCard, MessageCircle, Loader2, Crown, Check, Copy } from "lucide-react";
 
 const LAWYER_TELEGRAM = "https://t.me/nepriziv2";
@@ -48,6 +49,7 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
 
   const handleOpenPayment = async () => {
     setOpening(true);
+    trackEvent("pricing_plan_click", { ref: `subscription_${planId}`, value: planId === "year" ? 9900 : 990 });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
