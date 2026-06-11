@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToastAction } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -82,7 +83,16 @@ const LawyerClientDetail = () => {
       return;
     }
     setClient((prev: any) => ({ ...prev, escalation_requested: false }));
-    toast({ title: "Взято в работу", description: "Запрос снят. Свяжитесь с клиентом в чате." });
+    // Следующий шаг очевиден — даём его одной кнопкой прямо в тосте.
+    toast({
+      title: "Взято в работу",
+      description: "Запрос снят. Свяжитесь с клиентом в чате.",
+      action: (
+        <ToastAction altText="Открыть чат" onClick={() => navigate(`/lawyer/chat/${clientId}`)}>
+          Открыть чат
+        </ToastAction>
+      ),
+    });
   };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -965,7 +975,8 @@ const LawyerClientDetail = () => {
         </Card>
 
         <Tabs defaultValue="overview">
-          <TabsList className="mb-4 w-full sm:w-auto">
+          {/* На мобиле 5 вкладок не влезают — горизонтальный скролл вместо сжатия */}
+          <TabsList className="mb-4 flex w-full justify-start overflow-x-auto scrollbar-hide sm:w-auto">
             <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Обзор</TabsTrigger>
             <TabsTrigger value="documents"><FileText className="h-4 w-4 mr-1.5" />Документы</TabsTrigger>
             <TabsTrigger value="analysis"><Brain className="h-4 w-4 mr-1.5" />ИИ-анализ</TabsTrigger>

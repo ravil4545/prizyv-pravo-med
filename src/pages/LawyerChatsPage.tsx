@@ -112,8 +112,8 @@ const LawyerChatsPage = () => {
                   <div className="flex items-center justify-between mt-0.5 gap-2">
                     <p className="text-xs text-muted-foreground truncate">
                       {e.lastMessage
-                        ? e.lastMessage.length > 55
-                          ? e.lastMessage.slice(0, 55) + "…"
+                        ? e.lastMessage.length > 90
+                          ? e.lastMessage.slice(0, 90) + "…"
                           : e.lastMessage
                         : <span className="italic">{CRM_STAGE_LABELS[e.crm_stage] || e.crm_stage}</span>}
                     </p>

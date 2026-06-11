@@ -50,14 +50,19 @@ export function formatDateRu(dateStr: string, now: Date = new Date()): string {
   return d.getFullYear() === now.getFullYear() ? base : `${base} ${d.getFullYear()}`;
 }
 
-/** Относительная подпись срока: «просрочено на 3 дн.», «сегодня», «через 5 дн.». */
+const WEEKDAYS_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+/** Относительная подпись срока: «просрочено на 3 дн.», «сегодня», «через 5 дней (пт)». */
 export function formatDueLabel(dateStr: string, now: Date = new Date()): string {
   const d = daysUntil(dateStr, now);
   if (d === null) return "";
   if (d < 0) return `просрочено на ${plural(-d, "день", "дня", "дней")}`;
   if (d === 0) return "сегодня";
   if (d === 1) return "завтра";
-  return `через ${plural(d, "день", "дня", "дней")}`;
+  // День недели помогает планировать без открытого календаря.
+  const target = parseDateOnly(dateStr);
+  const wd = target ? ` (${WEEKDAYS_SHORT[target.getDay()]})` : "";
+  return `через ${plural(d, "день", "дня", "дней")}${wd}`;
 }
 
 /** Классы цвета для подписи срока по корзине. */

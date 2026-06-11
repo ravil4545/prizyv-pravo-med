@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { ToastAction } from "@/components/ui/toast";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -278,6 +279,15 @@ const LawyerBrandingPage = () => {
       description: form.slug
         ? `Бренд активен по адресу /u/${form.slug}`
         : "Бренд обновлён",
+      // Сразу даём проверить результат глазами — без ручного набора адреса.
+      action: form.slug ? (
+        <ToastAction
+          altText="Открыть страницу"
+          onClick={() => window.open(`${SITE_ORIGIN}/u/${form.slug}`, "_blank", "noopener,noreferrer")}
+        >
+          Открыть
+        </ToastAction>
+      ) : undefined,
     });
     // Перечитываем чтобы превью отражало то что в БД и slug закрепился
     loadBranding();

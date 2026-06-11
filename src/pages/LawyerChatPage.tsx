@@ -286,7 +286,10 @@ const LawyerChatPage = () => {
     setMobileAiStripCollapsed(true);
   }, [suggestionHistory.length]);
 
-  // Auto-trigger AI suggestions when last text message is from client
+  // Auto-trigger AI suggestions when last text message is from client.
+  // Дебаунс 1.5с: серия коротких сообщений клиента подряд даёт ОДИН вызов ИИ
+  // (по последнему сообщению), а не отдельный запрос на каждое — экономит
+  // лимиты LLM и не мигает панелью подсказок.
   useEffect(() => {
     if (!messages.length || !user || !clientId) return;
     const lastText = [...messages].reverse().find(m => m.message_type === "text");
@@ -298,16 +301,24 @@ const LawyerChatPage = () => {
       autoSuggestRef.current = cacheKey;
       setSuggestionsError(null);
       upsertSuggestionSet(cached.set);
-    } else if (cached?.error) {
+      tryExtractDate(lastText.content || "", lastText.id);
+      return;
+    }
+    if (cached?.error) {
       autoSuggestRef.current = cacheKey;
       setSuggestionsError(cached.error);
-    } else {
+      tryExtractDate(lastText.content || "", lastText.id);
+      return;
+    }
+    const t = setTimeout(() => {
       autoSuggestRef.current = cacheKey;
       loadSuggestionsFor(messages);
-    }
-    // Параллельно — лёгкий парсер даты призыва. Если клиент упомянул дату повестки,
-    // юристу появится тост с предложением одним кликом заполнить conscription_date.
-    tryExtractDate(lastText.content || "", lastText.id);
+      // Лёгкий парсер даты призыва: если клиент упомянул дату повестки,
+      // юристу появится тост с предложением заполнить conscription_date.
+      tryExtractDate(lastText.content || "", lastText.id);
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, user?.id, clientId]);
 
   const extractedDateRef = useRef<string | null>(null);

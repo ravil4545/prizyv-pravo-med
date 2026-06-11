@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck, ShieldOff, ExternalLink } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ShieldCheck, ShieldOff, ExternalLink, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import TemplatesWorkspace, { mapMedicalDocs, type DocItem } from "@/components/TemplatesWorkspace";
 
 interface ClientData {
@@ -36,6 +38,7 @@ const LawyerTemplatesPage = () => {
   const [clients, setClients] = useState<{ id: string; client_name: string }[]>([]);
   const [data, setData] = useState<ClientData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (profileLoading || authLoading) return;
@@ -129,12 +132,45 @@ const LawyerTemplatesPage = () => {
     <Card className="mb-2 border-primary/20">
       <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
         <Label className="text-sm text-muted-foreground">Клиент:</Label>
-        <Select value={clientId || ""} onValueChange={(v) => setParams(v ? { client: v } : {})}>
-          <SelectTrigger className="h-9 w-full max-w-[280px]"><SelectValue placeholder="Выберите клиента" /></SelectTrigger>
-          <SelectContent>
-            {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.client_name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {/* Комбобокс с поиском: при десятках клиентов скроллить Select мучительно */}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={pickerOpen}
+              className="h-9 w-full max-w-[280px] justify-between font-normal"
+            >
+              <span className="truncate">
+                {clients.find((c) => c.id === clientId)?.client_name || "Выберите клиента"}
+              </span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[280px] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Поиск по имени…" />
+              <CommandList>
+                <CommandEmpty>Клиент не найден</CommandEmpty>
+                <CommandGroup>
+                  {clients.map((c) => (
+                    <CommandItem
+                      key={c.id}
+                      value={c.client_name}
+                      onSelect={() => {
+                        setParams({ client: c.id });
+                        setPickerOpen(false);
+                      }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", clientId === c.id ? "opacity-100" : "opacity-0")} />
+                      {c.client_name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
         {loadingData && <span className="text-xs text-muted-foreground">загрузка…</span>}
         {data && (
           data.hasAccess ? (
