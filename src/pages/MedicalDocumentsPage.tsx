@@ -52,6 +52,8 @@ import DossierExportButton from "@/components/DossierExportButton";
 import LimitReachedDialog from "@/components/LimitReachedDialog";
 import UploadProgress from "@/components/UploadProgress";
 import PrivacyBadge from "@/components/PrivacyBadge";
+import PrivacyExplainer from "@/components/PrivacyExplainer";
+import TermHint from "@/components/TermHint";
 import DocumentValidityBadge from "@/components/DocumentValidityBadge";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
@@ -1942,6 +1944,7 @@ export default function MedicalDocumentsPage() {
                 // всё склеится в один PDF и попадёт одной записью в БД.
                 <div className="py-2 space-y-4">
                   <PrivacyBadge className="mb-1" />
+                  <PrivacyExplainer />
                   <DocumentUploadWizard
                     onUpload={handleWizardUpload}
                     hint="Каждая иконка — один документ. На активной (выделенной) иконке выберите способ: PDF, фото из галереи или сфотографировать камерой. Все страницы одного документа собираются в один файл."
@@ -2179,8 +2182,12 @@ export default function MedicalDocumentsPage() {
                         >
                           <div className="flex items-center">Дата {getSortIcon("document_date")}</div>
                         </TableHead>
-                        <TableHead>Категория</TableHead>
-                        <TableHead className="hidden md:table-cell">Шанс В</TableHead>
+                        <TableHead>
+                          <span className="inline-flex items-center gap-1">Категория<TermHint term="category" /></span>
+                        </TableHead>
+                        <TableHead className="hidden md:table-cell">
+                          <span className="inline-flex items-center gap-1">Шанс В<TermHint term="chanceB" /></span>
+                        </TableHead>
                         <TableHead className="hidden md:table-cell">Статус</TableHead>
                         <TableHead className="text-right">Действия</TableHead>
                       </TableRow>

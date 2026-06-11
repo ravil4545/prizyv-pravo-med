@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TermHint from "@/components/TermHint";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -942,7 +943,9 @@ export default function MedicalHistoryPage() {
               </div>
               <span className="truncate">История болезни</span>
             </h1>
-            <p className="text-sm sm:text-base text-muted-foreground">Расписание болезней • {articles.length} статей</p>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              <TermHint term="rb">Расписание болезней</TermHint> • {articles.length} статей
+            </p>
           </div>
           <div className="flex gap-2 self-start sm:self-auto flex-shrink-0">
             <Button

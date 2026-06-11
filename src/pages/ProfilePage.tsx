@@ -16,6 +16,7 @@ import Footer from "@/components/Footer";
 import { Loader2 } from "lucide-react";
 import DeleteAccountDialog from "@/components/DeleteAccountDialog";
 import PrivacyBadge from "@/components/PrivacyBadge";
+import PrivacyExplainer from "@/components/PrivacyExplainer";
 
 const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
@@ -122,7 +123,8 @@ const ProfilePage = () => {
           </Button>
         </div>
 
-        <PrivacyBadge className="mb-6" subject="паспортные и персональные" />
+        <PrivacyBadge className="mb-2" subject="паспортные и персональные" />
+        <PrivacyExplainer className="mb-6" />
 
         <Tabs defaultValue="personal" className="w-full">
           {/* Mobile: scrollable horizontal tabs */}
