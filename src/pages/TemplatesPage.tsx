@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -108,6 +109,10 @@ Telegram: https://t.me/nepriziv2`;
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title="Образцы заявлений для военкомата: скачать шаблоны DOCX и PDF"
+        description="Готовые шаблоны документов призывника: заявление о выдаче копии решения, обжалование, запросы и ходатайства. Заполните онлайн и скачайте."
+      />
       <Header />
       
       {/* Hero Section */}

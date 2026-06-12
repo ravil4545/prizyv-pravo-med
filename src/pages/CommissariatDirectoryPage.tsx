@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +133,10 @@ export default function CommissariatDirectoryPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEOHead
+        title="Военкоматы России: адреса, контакты, отзывы — справочник"
+        description="Справочник военных комиссариатов: адреса, телефоны, отзывы и оценки призывников. Найдите свой военкомат и изучите опыт других."
+      />
       <Header />
       <main className="flex-1 container mx-auto px-4 py-10 pb-24 md:pb-12">
         <div className="max-w-4xl mx-auto">

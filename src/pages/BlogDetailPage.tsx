@@ -149,7 +149,16 @@ const BlogDetailPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead title={pageTitle} description={description} keywords={keywords} />
+      <SEOHead
+        title={pageTitle}
+        description={description}
+        keywords={keywords}
+        ogImage={post.image_url || undefined}
+        breadcrumbs={[
+          { name: "Блог", url: "https://nepriziv.ru/blog" },
+          { name: post.title, url: shareUrl },
+        ]}
+      />
       <Header />
 
       {/* Schema.org BlogPosting */}

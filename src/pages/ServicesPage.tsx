@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -109,6 +110,10 @@ const ServicesPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title="Услуги юриста по призыву: анализ документов, обжалование, сопровождение"
+        description="Четыре формата работы: консультация, юридический анализ медицинских документов по Расписанию болезней, обжалование решения призывной комиссии, сопровождение до итогового решения."
+      />
       <Header />
       
       {/* Hero Section */}

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -160,6 +161,10 @@ const TestimonialsPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEOHead
+        title="Отзывы клиентов о юристе по призыву — nepriziv.ru"
+        description="Отзывы призывников и родителей о юридическом сопровождении, анализе медицинских документов и ИИ-кабинете nepriziv.ru."
+      />
       <Header />
       
       <main className="flex-1 py-20 px-4">

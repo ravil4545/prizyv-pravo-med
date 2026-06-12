@@ -126,6 +126,10 @@ const DiagnosisDetailPage = () => {
         title={pageTitle}
         description={pageDescription}
         keywords={keywords}
+        breadcrumbs={[
+          { name: "Диагнозы", url: "https://nepriziv.ru/diagnoses" },
+          { name: diagnosis.title, url: `https://nepriziv.ru/diagnoses/${diagnosis.article_number}` },
+        ]}
       />
       <Header />
 

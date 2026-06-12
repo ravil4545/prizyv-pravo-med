@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,6 +99,10 @@ export default function SuccessCasesPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEOHead
+        title="Кейсы по призывным делам: примеры и результаты — nepriziv.ru"
+        description="Реальные примеры дел призывников: категории годности по статьям Расписания болезней, обжалования решений комиссий, судебная практика."
+      />
       <Header />
       <main className="flex-1 container mx-auto px-4 py-10 pb-24 md:pb-12">
         <div className="max-w-4xl mx-auto">
