@@ -89,7 +89,8 @@ export type ConversionEvent =
   | "scroll_100"
   | "faq_question_open"
   | "ai_chat_started"
-  | "ai_question_asked";
+  | "ai_question_asked"
+  | "auth_signup";
 
 interface TrackOptions {
   /** Уникальный id целевой сущности (тариф, статья, магнит). */

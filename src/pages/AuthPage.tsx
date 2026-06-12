@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { signUpSchema, signInSchema } from "@/lib/validations";
+import { Checkbox } from "@/components/ui/checkbox";
+import { trackEvent } from "@/lib/analytics";
 import { Chrome, Loader2, ArrowLeft } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
 import { autoAttachToBrand } from "@/lib/autoAttachToBrand";
@@ -28,6 +30,8 @@ const AuthPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  // 152-ФЗ: явное согласие на обработку ПДн при регистрации (и для модерации рекламы).
+  const [pdnConsent, setPdnConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -132,6 +136,8 @@ const AuthPage = () => {
           variant: "destructive",
         });
       } else {
+        // Главная цель рекламной воронки — зеркалится в Метрику как JS-цель.
+        trackEvent("auth_signup");
         toast({
           title: "Регистрация успешна!",
           description: "Проверьте почту для подтверждения аккаунта.",
@@ -453,7 +459,26 @@ const AuthPage = () => {
                     />
                     {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="pdn-consent"
+                      checked={pdnConsent}
+                      onCheckedChange={(v) => setPdnConsent(v === true)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="pdn-consent" className="text-xs font-normal leading-snug text-muted-foreground cursor-pointer">
+                      Соглашаюсь на обработку персональных данных в соответствии с{" "}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        политикой конфиденциальности
+                      </a>
+                    </Label>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading || !pdnConsent}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     Зарегистрироваться
                   </Button>

@@ -162,6 +162,13 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
           )}
         </button>
 
+        <p className={`text-[10px] leading-relaxed ${variant === "inline" ? "text-ink/50" : "text-paper/50"}`}>
+          Нажимая кнопку, вы соглашаетесь на обработку персональных данных —{" "}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+            политика конфиденциальности
+          </a>.
+        </p>
+
         {magnet.promoText && (
           <p className={`text-[11px] leading-relaxed ${variant === "inline" ? "text-ink/55" : "text-paper/55"}`}>
             {magnet.promoText}

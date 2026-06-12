@@ -294,7 +294,10 @@ const ExitIntentDialog = () => {
 
                 <p className="text-[10px] text-paper/55 leading-relaxed">
                   Без спама. Только материал и одно письмо с уточнением вашей ситуации.
-                  Согласие на обработку ПДн — нажатием кнопки.
+                  Нажимая кнопку, вы соглашаетесь на обработку персональных данных —{" "}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-paper">
+                    политика
+                  </a>.
                 </p>
               </form>
             </>

@@ -19,56 +19,6 @@ interface Testimonial {
   created_at: string | null;
 }
 
-const FALLBACK: Testimonial[] = [
-  {
-    id: "fallback-1",
-    author_name: "Дмитрий К.",
-    content:
-      "Получили категорию В за 4 месяца. Военкомат игнорировал диагноз — юрист подготовила независимую экспертизу и обжаловала решение в комиссии субъекта. Без её участия точно бы забрали.",
-    rating: 5,
-    age: 22,
-    city: "Москва",
-    category: "Юридическое сопровождение",
-    article_565: "ст. 66 «г»",
-    photo_url: null,
-    video_url: null,
-    featured: true,
-    display_order: 1,
-    created_at: null,
-  },
-  {
-    id: "fallback-2",
-    author_name: "Александр М.",
-    content:
-      "Думал, что ИИ-кабинет — маркетинг. Оказалось — реальный инструмент: загрузил справки, получил привязку к статьям 565 и план действий. С юристом потом обсудили только спорные моменты — это экономия 30 тысяч на консультациях.",
-    rating: 5,
-    age: 21,
-    city: "Санкт-Петербург",
-    category: "ИИ-кабинет",
-    article_565: "ст. 43",
-    photo_url: null,
-    video_url: null,
-    featured: true,
-    display_order: 2,
-    created_at: null,
-  },
-  {
-    id: "fallback-3",
-    author_name: "Максим В.",
-    content:
-      "Дело шло год. Сначала отсрочка, потом обжалование, потом независимая экспертиза. В итоге комиссия присвоила категорию «В». Каждый шаг был согласован, никаких сюрпризов.",
-    rating: 5,
-    age: 20,
-    city: "Екатеринбург",
-    category: "Полное сопровождение",
-    article_565: "ст. 71",
-    photo_url: null,
-    video_url: null,
-    featured: true,
-    display_order: 3,
-    created_at: null,
-  },
-];
 
 // YouTube / VK Video → embed-формат. Возвращает null, если URL не поддерживается.
 const buildEmbedUrl = (url: string): { embed: string; thumb: string | null } | null => {
@@ -195,15 +145,20 @@ const Testimonials = () => {
         .limit(6);
 
       if (error) {
-        // Если миграция ещё не накатилась — отдадим фолбэк, чтобы лендинг не сломался.
-        return FALLBACK;
+        // При ошибке секцию просто скрываем — выдуманных отзывов-заглушек
+        // на сайте быть не должно (ФЗ «О рекламе»: только реальные отзывы).
+        return [];
       }
-      return (data as unknown as Testimonial[]) ?? FALLBACK;
+      return (data as unknown as Testimonial[]) ?? [];
     },
     staleTime: 5 * 60 * 1000,
   });
 
-  const testimonials = data?.length ? data : FALLBACK;
+  const testimonials = data ?? [];
+
+  // Нет одобренных отзывов в БД — секции нет. Реальные добавляются в админке
+  // (/admin/testimonials, status=approved).
+  if (!testimonials.length) return null;
 
   return (
     <section
