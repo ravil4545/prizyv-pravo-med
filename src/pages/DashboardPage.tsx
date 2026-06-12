@@ -23,6 +23,7 @@ import {
   Search,
   User,
   ChevronDown,
+  LayoutDashboard,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +187,7 @@ const DashboardPage = () => {
   ];
 
   const adminCards: DashboardCard[] = [
+    { title: "Обзор", description: "Сводка и заявки", icon: LayoutDashboard, path: "/admin" },
     { title: "Аналитика", description: "Статистика", icon: BarChart3, path: "/admin/analytics" },
     { title: "Форум", description: "Модерация", icon: Settings, path: "/admin/forum" },
     { title: "Блог", description: "Статьи", icon: BookOpen, path: "/admin/blog" },
@@ -502,7 +504,7 @@ const DashboardPage = () => {
                 <Settings className="h-4 w-4 text-seal" />
                 <span className="section-number text-seal">Администрирование</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {adminCards.map((card) => {
                   const Icon = card.icon;
                   return (

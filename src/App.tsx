@@ -15,6 +15,7 @@ import RoleGuard from "./components/RoleGuard";
 import AdminGuard from "./components/AdminGuard";
 import DashboardLayout from "./components/DashboardLayout";
 import LawyerLayout from "./components/LawyerLayout";
+import AdminLayout from "./components/AdminLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth } from "./lib/analytics";
 import { captureError, ymHit } from "./lib/monitoring";
@@ -81,6 +82,7 @@ const AdminTestimonialsPage = lazy(() => import("./pages/AdminTestimonialsPage")
 const AdminAnalyticsPage = lazy(() => import("./pages/AdminAnalyticsPage"));
 const AdminArticlesPage = lazy(() => import("./pages/AdminArticlesPage"));
 const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const MedicalDocumentsPage = lazy(() => import("./pages/MedicalDocumentsPage"));
 const MedicalHistoryPage = lazy(() => import("./pages/MedicalHistoryPage"));
@@ -233,12 +235,17 @@ const App = () => (
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/offer" element={<OfferPage />} />
                 <Route path="/requisites" element={<RequisitesPage />} />
-                <Route path="/admin/forum" element={<AdminGuard><AdminForumPage /></AdminGuard>} />
-                <Route path="/admin/blog" element={<AdminGuard><AdminBlogPage /></AdminGuard>} />
-                <Route path="/admin/testimonials" element={<AdminGuard><AdminTestimonialsPage /></AdminGuard>} />
-                <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
-                <Route path="/admin/articles" element={<AdminGuard><AdminArticlesPage /></AdminGuard>} />
-                <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
+                {/* Админка — единый хром AdminLayout (шапка + разделы), сайтовый
+                    Header/Footer на /admin/* подавлены (isAdminPath). */}
+                <Route element={<AdminLayout />}>
+                  <Route path="/admin" element={<AdminGuard><AdminDashboardPage /></AdminGuard>} />
+                  <Route path="/admin/forum" element={<AdminGuard><AdminForumPage /></AdminGuard>} />
+                  <Route path="/admin/blog" element={<AdminGuard><AdminBlogPage /></AdminGuard>} />
+                  <Route path="/admin/testimonials" element={<AdminGuard><AdminTestimonialsPage /></AdminGuard>} />
+                  <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
+                  <Route path="/admin/articles" element={<AdminGuard><AdminArticlesPage /></AdminGuard>} />
+                  <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
+                </Route>
                 {/* /profile теперь внутри DashboardLayout (см. блок клиентского кабинета) */}
                 {/* Юристский кабинет — клиентов отсюда редиректит на /dashboard.
                     Обёрнут в LawyerLayout — единое боковое меню + нижние табы. */}

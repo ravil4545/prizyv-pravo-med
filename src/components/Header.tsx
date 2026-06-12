@@ -21,7 +21,7 @@ import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
 import CabinetChooserDialog from "@/components/CabinetChooserDialog";
-import { isCabinetPath } from "@/lib/cabinetNav";
+import { isCabinetPath, isAdminPath } from "@/lib/cabinetNav";
 import { isLawyerPath } from "@/lib/lawyerNav";
 
 const initials = (full: string): string => {
@@ -109,7 +109,7 @@ const Header = () => {
 
   // В кабинетах (клиент/юрист) «хром» даёт соответствующий Layout — маркетинговый
   // Header здесь не рендерим, иначе получается двойная навигация.
-  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname)) return null;
+  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname) || isAdminPath(location.pathname)) return null;
 
   return (
     <>

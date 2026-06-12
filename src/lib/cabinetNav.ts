@@ -87,3 +87,11 @@ export function isChatThread(pathname: string): boolean {
   const stripped = pathname.replace(/^\/u\/[^/]+/, "") || "/";
   return /^\/(lawyer|client)\/chat(\/|$)/.test(stripped) || /^\/dashboard\/ai-chat(\/|$)/.test(stripped);
 }
+
+/**
+ * Маршруты админки /admin/* — свой хром (AdminLayout): сайтовые
+ * Header/Footer/MobileBottomNav на них не рендерятся, как и в кабинетах.
+ */
+export function isAdminPath(pathname: string): boolean {
+  return /^\/admin(\/|$)/.test(pathname);
+}

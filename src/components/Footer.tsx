@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { useBranding } from "@/contexts/BrandingContext";
 import LawyerPartnerDialog from "@/components/LawyerPartnerDialog";
-import { isCabinetPath } from "@/lib/cabinetNav";
+import { isCabinetPath, isAdminPath } from "@/lib/cabinetNav";
 import { isLawyerPath } from "@/lib/lawyerNav";
 
 const Footer = () => {
@@ -44,7 +44,7 @@ const Footer = () => {
 
   // В кабинетах (клиент/юрист) хром даёт Layout — тяжёлый маркетинговый Footer
   // на рабочих страницах кабинета не рендерим.
-  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname)) return null;
+  if (isCabinetPath(location.pathname) || isLawyerPath(location.pathname) || isAdminPath(location.pathname)) return null;
 
   return (
     <footer className={`bg-ink text-paper py-16 sm:py-20 ${isMobile ? "pb-24" : ""}`}>

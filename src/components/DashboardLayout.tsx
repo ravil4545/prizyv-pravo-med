@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate, Link } from "react-router-dom";
-import { MoreHorizontal, LogOut, MessageSquare, ChevronRight, Briefcase } from "lucide-react";
+import { MoreHorizontal, LogOut, MessageSquare, ChevronRight, Briefcase, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { withBrandPath } from "@/lib/brandPath";
 import { PRIMARY_NAV, SECONDARY_NAV, isChatThread, type CabinetNavItem } from "@/lib/cabinetNav";
@@ -118,6 +118,44 @@ export default function DashboardLayout() {
       </aside>
 
       <div className={cn("flex min-w-0 flex-1 flex-col", chat && "min-h-0 overflow-hidden")}>
+        {/* ── Десктоп: верхняя панель — выход и возврат на сайт всегда на виду
+               (раньше «Выйти» был только внизу сайдбара). ─────────────────── */}
+        {!chat && (
+        <header className="sticky top-0 z-40 hidden h-12 items-center justify-between gap-3 border-b border-ink/10 bg-paper/95 px-4 backdrop-blur md:flex">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Globe className="h-4 w-4" />
+            На сайт
+          </Link>
+          <div className="flex min-w-0 items-center gap-2">
+            <LimitsBadge variant="pill" />
+            {isLawyer && (
+              <button
+                type="button"
+                onClick={() => setCabinetChooserOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Briefcase className="h-4 w-4" />
+                Сменить кабинет
+              </button>
+            )}
+            {user?.email && (
+              <span className="hidden max-w-[180px] truncate text-xs text-muted-foreground lg:inline">{user.email}</span>
+            )}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              Выйти
+            </button>
+          </div>
+        </header>
+        )}
+
         {/* ── Мобайл: компактная верхняя панель кабинета (на чат-тредах нет) ── */}
         {!chat && (
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-paper px-3 md:hidden">

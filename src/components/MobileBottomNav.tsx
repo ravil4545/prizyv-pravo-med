@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import { cn } from "@/lib/utils";
-import { isCabinetPath, isChatThread } from "@/lib/cabinetNav";
+import { isCabinetPath, isChatThread, isAdminPath } from "@/lib/cabinetNav";
 import { isLawyerPath } from "@/lib/lawyerNav";
 
 const MobileBottomNav = () => {
@@ -40,6 +40,7 @@ const MobileBottomNav = () => {
   if (
     isCabinetPath(location.pathname) ||
     isLawyerPath(location.pathname) ||
+    isAdminPath(location.pathname) ||
     isChatThread(location.pathname)
   )
     return null;
