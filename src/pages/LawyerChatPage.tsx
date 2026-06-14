@@ -826,7 +826,7 @@ const LawyerChatPage = () => {
           {/* ── Chat area ────────────────────────────────────────────────────── */}
           <div className="relative flex-1 min-w-0 flex flex-col">
             {/* Top bar */}
-            <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card px-3 py-2.5">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden flex-shrink-0"
                 onClick={() => navigate("/lawyer/clients")}>
                 <ArrowLeft className="h-4 w-4" />
@@ -1032,7 +1032,7 @@ const LawyerChatPage = () => {
                   size="sm"
                   variant="secondary"
                   onClick={() => scrollToBottom(true)}
-                  className="pointer-events-auto h-9 rounded-full border border-border/70 bg-background/95 px-3 shadow-md backdrop-blur"
+                  className="pointer-events-auto h-9 rounded-full border border-border bg-background px-3 shadow-md"
                 >
                   <ArrowDown className="mr-1.5 h-4 w-4" />
                   Вниз
@@ -1126,7 +1126,7 @@ const LawyerChatPage = () => {
             )}
 
             {/* Input bar */}
-            <div className="flex-shrink-0 border-t bg-card/95 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] backdrop-blur sm:pb-2.5">
+            <div className="flex-shrink-0 border-t bg-card px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:pb-2.5">
               <div className="mx-auto flex max-w-3xl items-end gap-1.5">
                 <input type="file" ref={imageRef} onChange={handleFile} className="hidden" accept="image/*" />
                 <input type="file" ref={fileRef} onChange={handleFile} className="hidden"

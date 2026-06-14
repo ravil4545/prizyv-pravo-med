@@ -933,7 +933,7 @@ const LawyerClientDetail = () => {
             </div>
 
             {lawyerNextActions.length > 0 && (
-              <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+              <div className="rounded-lg border border-border bg-background/70 p-3">
                 <div className="mb-2 flex items-center gap-2">
                   <ListChecks className="h-4 w-4 text-gold-deep" />
                   <p className="text-sm font-semibold">Короткий план</p>

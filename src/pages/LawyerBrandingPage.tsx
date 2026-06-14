@@ -572,7 +572,7 @@ const LawyerBrandingPage = () => {
                 <CardTitle className="text-base flex items-center gap-2"><Eye className="h-4 w-4" /> Превью карточки</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="border border-ink/15 bg-paper p-4">
+                <div className="border border-border bg-paper p-4 panel-tint">
                   <div className="flex items-start gap-3">
                     <BrandedAvatar
                       src={form.photo_url}

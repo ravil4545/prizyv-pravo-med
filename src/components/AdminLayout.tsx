@@ -29,8 +29,8 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-ink/10 bg-paper/95 backdrop-blur">
+    <div className="cabinet-shell cabinet-bg min-h-screen">
+      <header className="sticky top-0 z-40 border-b border-border bg-paper">
         <div className="flex h-12 items-center justify-between gap-3 px-4">
           <Link to="/admin" className="flex min-w-0 items-center gap-2 font-serif text-base text-ink">
             <span className="rounded bg-seal px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-paper">

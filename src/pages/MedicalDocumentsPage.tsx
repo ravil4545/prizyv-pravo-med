@@ -1999,7 +1999,7 @@ export default function MedicalDocumentsPage() {
                 </div>
 
                 <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                  <div className="rounded-lg border border-border bg-card p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-gold-deep" />
                       <p className="text-sm font-semibold text-foreground">Что уже видно</p>
@@ -2032,7 +2032,7 @@ export default function MedicalDocumentsPage() {
                     )}
                   </div>
 
-                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                  <div className="rounded-lg border border-border bg-card p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <ListChecks className="h-4 w-4 text-gold-deep" />
                       <p className="text-sm font-semibold text-foreground">Следующие действия</p>

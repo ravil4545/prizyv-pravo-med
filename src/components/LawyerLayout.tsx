@@ -61,12 +61,12 @@ export default function LawyerLayout() {
 
   return (
     <div
-      className={cn("flex bg-background", chat ? "min-h-0 overflow-hidden" : "min-h-screen")}
+      className={cn("cabinet-shell cabinet-bg flex", chat ? "min-h-0 overflow-hidden" : "min-h-screen")}
       style={chat && chatViewportHeight ? { height: chatViewportHeight } : undefined}
     >
       {/* ── Десктоп: левый сайдбар ─────────────────────────────────────── */}
-      <aside className="hidden md:flex sticky top-0 h-screen w-60 flex-shrink-0 flex-col border-r border-ink/10 bg-paper-deep/30">
-        <Link to="/lawyer" className="block border-b border-ink/10 px-5 py-5">
+      <aside className="hidden md:flex sticky top-0 h-screen w-60 flex-shrink-0 flex-col border-r border-border bg-paper-deep/50">
+        <Link to="/lawyer" className="block border-b border-border px-5 py-5">
           <p className="section-number">Кабинет юриста</p>
           <p className="mt-0.5 truncate font-serif text-lg text-foreground">{branding.displayName}</p>
         </Link>
@@ -74,12 +74,12 @@ export default function LawyerLayout() {
           {LAWYER_PRIMARY_NAV.map((item) => (
             <SidebarItem key={item.to} item={item} active={isItemActive(item)} unread={unreadCount} onClick={() => go(item)} />
           ))}
-          <div className="my-3 border-t border-ink/10" />
+          <div className="my-3 border-t border-border" />
           {LAWYER_SECONDARY_NAV.map((item) => (
             <SidebarItem key={item.to} item={item} active={isItemActive(item)} unread={unreadCount} onClick={() => go(item)} muted />
           ))}
         </nav>
-        <div className="space-y-2 border-t border-ink/10 p-3">
+        <div className="space-y-2 border-t border-border p-3">
           {user?.email && <p className="truncate px-1 text-xs text-muted-foreground">{user.email}</p>}
           <button
             type="button"
@@ -95,7 +95,7 @@ export default function LawyerLayout() {
       <div className={cn("flex min-w-0 flex-1 flex-col", chat && "min-h-0 overflow-hidden")}>
         {/* ── Десктоп: верхняя панель — выход и возврат на сайт всегда на виду ── */}
         {!chat && (
-        <header className="sticky top-0 z-40 hidden h-12 items-center justify-between gap-3 border-b border-ink/10 bg-paper/95 px-4 backdrop-blur md:flex">
+        <header className="sticky top-0 z-40 hidden h-12 items-center justify-between gap-3 border-b border-border bg-paper px-4 md:flex">
           <Link
             to="/"
             className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -121,7 +121,7 @@ export default function LawyerLayout() {
 
         {/* ── Мобайл: верхняя панель кабинета (на чат-тредах нет) ────────── */}
         {!chat && (
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-paper px-3 md:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-border bg-paper px-3 md:hidden">
           <Link to="/lawyer" className="flex min-w-0 items-center gap-2" aria-label="Кабинет юриста">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border border-ink/80 font-serif text-sm italic text-ink">
               {monogram(branding.displayName)}
@@ -154,7 +154,7 @@ export default function LawyerLayout() {
       {/* ── Мобайл: нижние табы (скрыты на полноэкранных чат-тредах) ────── */}
       {!chat && (
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.04)] md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.04)] md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Навигация кабинета юриста"
       >

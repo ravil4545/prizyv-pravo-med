@@ -242,7 +242,7 @@ const DashboardPage = () => {
                       "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
                       isFeatured
                         ? "border-gold/50 bg-gradient-to-br from-gold/10 via-paper to-paper-deep/30 hover:shadow-accent"
-                        : "border-border/60 bg-card hover:shadow-medium",
+                        : "border-border bg-card hover:shadow-medium",
                     )}
                   >
                     <CardContent className="p-5">
@@ -365,7 +365,7 @@ const DashboardPage = () => {
                   "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
                   unreadCount > 0
                     ? "border-seal/40 bg-seal/5"
-                    : "border-border/60 bg-muted/20 hover:bg-muted/40",
+                    : "border-border bg-muted/20 hover:bg-muted/40",
                 )}
               >
                 <div className={cn(
@@ -413,7 +413,7 @@ const DashboardPage = () => {
                   <Card
                     key={card.path}
                     onClick={() => navigate(cabinetPath(card.path))}
-                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border/50"
+                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border"
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">
@@ -451,7 +451,7 @@ const DashboardPage = () => {
                   <Card
                     key={card.path}
                     onClick={() => navigate(card.path)}
-                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border/50"
+                    className="group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-soft border-border"
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">
@@ -499,7 +499,7 @@ const DashboardPage = () => {
 
           {/* ── Админ-секция ───────────────────────────────────────────── */}
           {isAdmin && (
-            <div className="mt-8 pt-6 border-t border-border/50">
+            <div className="mt-8 pt-6 border-t border-border">
               <div className="flex items-center gap-2 mb-3">
                 <Settings className="h-4 w-4 text-seal" />
                 <span className="section-number text-seal">Администрирование</span>

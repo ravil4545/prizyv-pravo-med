@@ -180,7 +180,7 @@ export default function AdminDashboardPage() {
             recent.map((s) => {
               const badge = STATUS_BADGE[s.status || ""];
               return (
-                <div key={s.id} className="rounded-lg border border-border/60 p-3">
+                <div key={s.id} className="rounded-lg border border-border bg-card p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="font-medium text-sm">{s.name || "Без имени"}</span>
@@ -229,7 +229,7 @@ export default function AdminDashboardPage() {
           <Link
             key={q.to}
             to={q.to}
-            className="group flex items-center justify-between gap-2 rounded-lg border border-border/60 px-4 py-3 transition-colors hover:bg-muted"
+            className="group flex items-center justify-between gap-2 rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted"
           >
             <div className="min-w-0">
               <p className="text-sm font-medium">{q.label}</p>

@@ -262,7 +262,7 @@ const LawyersDirectoryPage = () => {
       <main className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-16 pb-24 md:pb-16">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <header className="border-b border-ink/15 pb-6 sm:pb-8 mb-8 sm:mb-10">
+          <header className="border-b border-border pb-6 sm:pb-8 mb-8 sm:mb-10">
             <div className="font-mono text-[10px] sm:text-xs tracking-[0.3em] uppercase text-gold mb-3">
               № 07 · Юристы
             </div>
@@ -360,7 +360,7 @@ const LawyersDirectoryPage = () => {
                     key={l.user_id}
                     onClick={() => setSelectedLawyer(l)}
                     className={`border bg-paper p-5 sm:p-6 transition-colors group cursor-pointer ${
-                      isPro ? "border-gold hover:bg-gold/[0.03]" : "border-ink/15 hover:border-gold/60 hover:bg-paper-deep/20"
+                      isPro ? "border-gold hover:bg-gold/[0.03]" : "border-border hover:border-gold/60 hover:bg-paper-deep/20"
                     }`}
                   >
                     {/* Top: avatar + name + tier */}
@@ -430,7 +430,7 @@ const LawyersDirectoryPage = () => {
           )}
 
           {/* Bottom CTA — стать юристом на платформе */}
-          <div className="mt-14 border-y border-ink/15 py-8 grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
+          <div className="mt-14 border-y border-border py-8 grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
             <div className="sm:col-span-2">
               <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-2">
                 Юристам
@@ -472,7 +472,7 @@ const LawyersDirectoryPage = () => {
                 </DialogHeader>
 
                 {/* Шапка-визитка */}
-                <div className="flex items-center gap-4 p-5 bg-gradient-to-br from-gold/10 to-paper-deep/30 border-b border-ink/10">
+                <div className="flex items-center gap-4 p-5 bg-gradient-to-br from-gold/10 to-paper-deep/30 border-b border-border">
                   <div className="h-16 w-16 rounded-full overflow-hidden border border-ink/20 flex items-center justify-center font-serif italic text-2xl text-ink bg-paper flex-shrink-0">
                     {l.photo_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -539,7 +539,7 @@ const LawyersDirectoryPage = () => {
                   )}
 
                   {/* Тумблер доступа — главный CTA */}
-                  <div className={`rounded-lg border p-3.5 ${granted ? "border-emerald-300 bg-emerald-50/60" : "border-ink/15 bg-paper-deep/30"}`}>
+                  <div className={`rounded-lg border p-3.5 ${granted ? "border-emerald-300 bg-emerald-50/60" : "border-border bg-paper-deep/30"}`}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink flex items-center gap-1.5">

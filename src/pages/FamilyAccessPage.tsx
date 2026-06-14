@@ -264,7 +264,7 @@ export default function FamilyAccessPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-border/60">
+            <Card className="border-border">
               <CardContent className="p-4">
                 <WalletCards className="mb-3 h-5 w-5 text-gold-deep" />
                 <p className="text-sm font-semibold">Плательщик понимает ценность</p>
@@ -273,7 +273,7 @@ export default function FamilyAccessPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-border/60">
+            <Card className="border-border">
               <CardContent className="p-4">
                 <ShieldCheck className="mb-3 h-5 w-5 text-gold-deep" />
                 <p className="text-sm font-semibold">Доступ под контролем</p>
@@ -284,7 +284,7 @@ export default function FamilyAccessPage() {
             </Card>
           </div>
 
-          <Card className="mb-6 border-border/60 bg-muted/20">
+          <Card className="mb-6 border-border bg-muted/20">
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/15">
@@ -307,7 +307,7 @@ export default function FamilyAccessPage() {
           </Card>
 
           {invites.length === 0 ? (
-            <Card className="text-center py-16 border-border/50">
+            <Card className="text-center py-16 border-border">
               <CardContent>
                 <Users className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
                 <p className="text-foreground font-medium">Приглашений ещё нет</p>
@@ -327,7 +327,7 @@ export default function FamilyAccessPage() {
           ) : (
             <div className="space-y-3">
               {invites.map((inv) => (
-                <Card key={inv.id} className="border-border/60 hover:shadow-soft transition-shadow">
+                <Card key={inv.id} className="border-border hover:shadow-soft transition-shadow">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div className="flex-1 min-w-0">

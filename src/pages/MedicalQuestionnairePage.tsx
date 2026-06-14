@@ -649,7 +649,7 @@ export default function MedicalQuestionnairePage() {
                     </p>
                   )}
                   {analysis.topics.map((t, i) => (
-                    <div key={i} className="rounded-lg border p-3 space-y-2">
+                    <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-sm">{t.topic}</span>
                         {(t.articles || []).map((a) => (
@@ -685,7 +685,7 @@ export default function MedicalQuestionnairePage() {
         )}
 
         {/* Submit buttons */}
-        <div className="sticky bottom-20 md:bottom-4 mt-6 bg-background border rounded-xl p-4 shadow-lg">
+        <div className="sticky bottom-20 md:bottom-4 mt-6 panel-tint border rounded-xl p-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs sm:text-sm text-muted-foreground">
               {editingDocId

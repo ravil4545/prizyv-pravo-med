@@ -850,7 +850,7 @@ const AIChatDashboardPage = () => {
 
         {/* Main Chat */}
         <div className="flex min-h-0 flex-1 flex-col min-w-0 overflow-hidden">
-          <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b bg-card/95 px-3 py-2.5 backdrop-blur md:mb-4 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-0">
+          <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b bg-card px-3 py-2.5 md:mb-4 md:border-0 md:bg-transparent md:px-0 md:py-0">
             {isMobile && !isDemoMode && (
               <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
                 <SheetTrigger asChild>
@@ -1019,7 +1019,7 @@ const AIChatDashboardPage = () => {
                           <button
                             key={q}
                             onClick={() => setInput(q)}
-                            className="text-left p-3 rounded-xl border border-border/60 hover:border-primary/40 hover:bg-primary/3 transition-all text-sm text-foreground/80 hover:text-foreground"
+                            className="text-left p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/3 transition-all text-sm text-foreground/80 hover:text-foreground"
                           >
                             {q}
                           </button>
@@ -1128,7 +1128,7 @@ const AIChatDashboardPage = () => {
                     size="sm"
                     variant="secondary"
                     onClick={() => scrollToBottom(true)}
-                    className="pointer-events-auto h-9 rounded-full border border-border/70 bg-background/95 px-3 shadow-md backdrop-blur"
+                    className="pointer-events-auto h-9 rounded-full border border-border bg-background px-3 shadow-md"
                   >
                     <ArrowDown className="mr-1.5 h-4 w-4" />
                     Вниз
@@ -1141,7 +1141,7 @@ const AIChatDashboardPage = () => {
               {!sending &&
                 messages.length > 0 &&
                 messages[messages.length - 1].role === "assistant" && (
-                  <div className="mb-2 mt-2 shrink-0 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-sm">
+                  <div className="mb-2 mt-2 shrink-0 overflow-hidden rounded-xl border border-border panel-tint shadow-sm">
                     {quickRepliesCollapsed ? (
                       <button
                         type="button"
@@ -1181,7 +1181,7 @@ const AIChatDashboardPage = () => {
                                 setQuickRepliesCollapsed(true);
                                 sendMessage(q);
                               }}
-                              className="min-h-[36px] flex-none rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                              className="min-h-[36px] flex-none rounded-full border border-border bg-background px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
                             >
                               {q}
                             </button>
@@ -1192,7 +1192,7 @@ const AIChatDashboardPage = () => {
                   </div>
                 )}
 
-              <div className="shrink-0 border-t border-border/60 bg-background/95 pt-2">
+              <div className="shrink-0 border-t border-border bg-background pt-2">
                 <div className="flex items-end gap-2">
                   <Textarea
                     ref={inputRef}

@@ -56,6 +56,28 @@
     background-position: 0 0, 12px 16px;
   }
 
+  /* ── Кабинет: тонированный фон страниц + чёткие «поля», без backdrop-blur.
+     backdrop-filter мерцал/«глючил» при скролле на слабых Android — заменён
+     сплошными фонами и сплошными градиентами (альфа-заливка дёшева, в отличие
+     от backdrop-filter, который пересэмплит весь кадр). ───────────────────── */
+  .cabinet-bg {
+    background-color: hsl(var(--paper));
+    background-image: linear-gradient(180deg, hsl(var(--paper)) 0%, hsl(var(--paper-deep)) 100%);
+  }
+
+  /* Тонированная подложка для блоков/«полей» внутри кабинета — мягкий сплошной
+     градиент; чёткую границу даёт токен --border (см. border-border / border). */
+  .panel-tint {
+    background-image: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--secondary)) 100%);
+  }
+  .panel-tint-deep {
+    background-image: linear-gradient(180deg, hsl(var(--secondary)) 0%, hsl(var(--paper-deep)) 100%);
+  }
+  /* Акцентная (золотая) подложка для выделенных блоков — альфа, не backdrop. */
+  .panel-tint-gold {
+    background-image: linear-gradient(180deg, hsl(var(--gold) / 0.12) 0%, hsl(var(--gold) / 0.04) 100%);
+  }
+
   /* Diagonal hatching for "stamps" */
   .bg-hatched {
     background-image: repeating-linear-gradient(
@@ -137,14 +159,14 @@
     --destructive:       0 60% 36%;
     --destructive-foreground: 38 42% 97%;
 
-    --border:            38 25% 78%;
-    --input:             38 30% 90%;
+    --border:            38 24% 71%;
+    --input:             38 26% 80%;
     --ring:              42 65% 45%;
 
     /* Editorial gradients */
     --gradient-primary:  linear-gradient(135deg, hsl(218, 50%, 12%) 0%, hsl(218, 60%, 8%) 100%);
     --gradient-hero:     linear-gradient(135deg, hsl(218, 55%, 10%) 0%, hsl(218, 60%, 6%) 50%, hsl(0, 30%, 12%) 100%);
-    --gradient-card:     linear-gradient(180deg, hsl(38, 42%, 97%) 0%, hsl(38, 38%, 94%) 100%);
+    --gradient-card:     linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--secondary)) 100%);
     --gradient-accent:   linear-gradient(135deg, hsl(42, 65%, 45%) 0%, hsl(38, 55%, 32%) 100%);
     --gradient-soft:     linear-gradient(180deg, hsl(38, 38%, 95%) 0%, hsl(38, 30%, 90%) 100%);
 
@@ -166,7 +188,7 @@
     --sidebar-primary-foreground: 38 42% 97%;
     --sidebar-accent:            38 30% 90%;
     --sidebar-accent-foreground: 218 50% 12%;
-    --sidebar-border:            38 25% 82%;
+    --sidebar-border:            38 24% 73%;
     --sidebar-ring:              42 65% 45%;
   }
 
@@ -209,8 +231,8 @@
     --destructive:       0 60% 55%;
     --destructive-foreground: 38 38% 95%;
 
-    --border:            218 40% 18%;
-    --input:             218 40% 14%;
+    --border:            218 33% 26%;
+    --input:             218 34% 22%;
     --ring:              42 75% 60%;
 
     --sidebar-background:        218 55% 9%;
@@ -219,7 +241,7 @@
     --sidebar-primary-foreground: 218 55% 8%;
     --sidebar-accent:            218 40% 14%;
     --sidebar-accent-foreground: 38 38% 95%;
-    --sidebar-border:            218 40% 16%;
+    --sidebar-border:            218 33% 24%;
     --sidebar-ring:              42 75% 60%;
   }
 }
@@ -227,6 +249,17 @@
 @layer base {
   * {
     @apply border-border;
+  }
+
+  /* Мобильная стабильность: внутри кабинета (.cabinet-shell) полностью гасим
+     backdrop-filter — на слабых устройствах «эффект стекла» вызывал мерцание и
+     «глюки» при скролле. Почти-непрозрачные фоны (95%) остаются как есть —
+     без эффекта стекла, но без лагов. Это сетевой страховочный слой поверх
+     точечной чистки backdrop-blur в самих компонентах. */
+  .cabinet-shell [class*="backdrop-blur"],
+  .cabinet-shell [class*="backdrop-filter"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 
   html, body {

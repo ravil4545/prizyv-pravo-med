@@ -222,8 +222,8 @@ export default function CalendarPage() {
     const days = eachDayOfInterval({ start, end });
 
     return (
-      <div className="overflow-hidden rounded-xl border border-ink/10 bg-card">
-        <div className="grid grid-cols-7 border-b border-ink/10 bg-muted/30">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-7 border-b border-border bg-muted/30">
           {WEEKDAYS.map((w, i) => (
             <div
               key={w}
@@ -248,7 +248,7 @@ export default function CalendarPage() {
                 key={day.toISOString()}
                 onClick={() => openAdd(day)}
                 className={cn(
-                  "group relative flex min-h-[88px] flex-col gap-1 border-b border-r border-ink/5 p-1.5 text-left transition-colors hover:bg-gold/5",
+                  "group relative flex min-h-[88px] flex-col gap-1 border-b border-r border-border p-1.5 text-left transition-colors hover:bg-gold/5",
                   !inMonth && "bg-muted/20 text-muted-foreground/50",
                   info.kind === "weekend" && inMonth && "bg-muted/30",
                   info.kind === "holiday" && "bg-rose-500/5",
@@ -314,13 +314,13 @@ export default function CalendarPage() {
           return (
             <div
               key={day.toISOString()}
-              className={cn("flex min-h-[140px] flex-col rounded-lg border border-ink/10 bg-card", info.isDayOff && "bg-muted/20")}
+              className={cn("flex min-h-[140px] flex-col rounded-lg border border-border bg-card", info.isDayOff && "bg-muted/20")}
             >
               <button
                 type="button"
                 onClick={() => openAdd(day)}
                 className={cn(
-                  "flex items-center justify-between rounded-t-lg border-b border-ink/5 px-2 py-1.5 text-left hover:bg-gold/5",
+                  "flex items-center justify-between rounded-t-lg border-b border-border px-2 py-1.5 text-left hover:bg-gold/5",
                   today && "bg-gold/10",
                 )}
               >
@@ -343,7 +343,7 @@ export default function CalendarPage() {
                         key={ev.id}
                         type="button"
                         onClick={() => openEdit(ev)}
-                        className="flex items-start gap-1.5 rounded-md border border-ink/5 bg-background p-1.5 text-left hover:border-gold/30"
+                        className="flex items-start gap-1.5 rounded-md border border-border bg-background p-1.5 text-left hover:border-gold/30"
                       >
                         <span className={cn("mt-1 h-2 w-2 flex-shrink-0 rounded-full", meta.dot)} />
                         <span className="min-w-0">
@@ -369,7 +369,7 @@ export default function CalendarPage() {
       <div className="space-y-4">
         <div
           className={cn(
-            "flex items-center justify-between rounded-xl border border-ink/10 p-4",
+            "flex items-center justify-between rounded-xl border border-border p-4",
             info.isDayOff ? "bg-muted/30" : "bg-card",
           )}
         >
@@ -559,7 +559,7 @@ export default function CalendarPage() {
               </Button>
               <span className="ml-2 text-sm font-medium capitalize">{periodLabel}</span>
             </div>
-            <div className="inline-flex rounded-lg border border-ink/10 bg-muted/30 p-0.5">
+            <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5">
               {(
                 [
                   ["agenda", "Список"],
@@ -590,7 +590,7 @@ export default function CalendarPage() {
 
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded border border-ink/10 bg-muted/60" /> выходной
+              <span className="h-3 w-3 rounded border border-border bg-muted/60" /> выходной
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-3 w-3 rounded border border-rose-200 bg-rose-500/10" /> праздник РФ
@@ -682,7 +682,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Push-напоминание по этому событию (Модуль 4 Фаза 3b) */}
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-ink/10 bg-muted/20 p-3">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-muted/20 p-3">
               <Checkbox
                 checked={form.notify_client_push}
                 onCheckedChange={(c) => setForm((f) => ({ ...f, notify_client_push: c === true }))}
