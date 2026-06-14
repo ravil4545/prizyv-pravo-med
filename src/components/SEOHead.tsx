@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useBranding } from '@/contexts/BrandingContext';
+import { DEFAULT_TITLE, DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS } from '@/lib/seoMeta';
 
 interface BreadcrumbItem {
   name: string;
@@ -19,12 +20,7 @@ interface SEOHeadProps {
   noindex?: boolean;
 }
 
-const DEFAULT_TITLE =
-  "Юрист по призыву · анализ медицинских документов и защита прав — nepriziv.ru";
-const DEFAULT_DESCRIPTION =
-  "Юрист Важанина А.Е. — юридический анализ медицинских документов, сопоставление с Расписанием болезней (Пост. №565), сопровождение на призывной комиссии и в суде. Бесплатный разбор за 15 минут.";
-const DEFAULT_KEYWORDS =
-  "юрист по призыву, анализ медицинских документов, расписание болезней постановление 565, обжалование решения призывной комиссии, отсрочка от армии, освобождение от призыва по здоровью, независимая военно-врачебная экспертиза, призывная комиссия суд КАС РФ";
+// Дефолты вынесены в src/lib/seoMeta.ts (общий источник правды с prerender).
 
 const buildStructuredData = (
   url: string,

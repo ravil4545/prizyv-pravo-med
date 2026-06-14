@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LeadMagnetBox, { LEAD_MAGNETS } from "@/components/LeadMagnetBox";
 import SEOHead from "@/components/SEOHead";
+import { diagnosisSeo } from "@/lib/seoMeta";
 import { ArrowRight, Phone, Loader2, Bot, FileSearch } from "lucide-react";
 
 interface Diagnosis {
@@ -116,9 +117,12 @@ const DiagnosisDetailPage = () => {
     );
   }
 
-  const pageTitle = `${diagnosis.title} — статья ${diagnosis.article_number} Расписания болезней | Юрист Важанина`;
-  const pageDescription = `${diagnosis.title}: основания для освобождения от призыва по статье ${diagnosis.article_number}. ${diagnosis.description.slice(0, 140)}…`;
-  const keywords = `${diagnosis.title}, статья ${diagnosis.article_number}, расписание болезней, освобождение от армии, призывник, ${diagnosis.category ?? ""}`;
+  // Мета — из общего билдера (тот же, что в prerender, чтобы исходный HTML и
+  // <head> после загрузки JS совпадали байт-в-байт). См. src/lib/seoMeta.ts.
+  const seo = diagnosisSeo(diagnosis);
+  const pageTitle = seo.title;
+  const pageDescription = seo.description;
+  const keywords = seo.keywords;
 
   return (
     <div className="min-h-screen bg-background">

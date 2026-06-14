@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import { commissariatSeo } from "@/lib/seoMeta";
 import { Star, ArrowRight, Phone, Loader2, MapPin, ArrowLeft } from "lucide-react";
 import { makeCommissariatSlug } from "@/lib/slug";
 
@@ -117,9 +118,11 @@ const CommissariatDetailPage = () => {
   const reviewsWithComment = ratings.filter((r) => r.comment && r.comment.trim().length > 0);
   const locationLabel = region ? `${city}, ${region}` : city;
 
-  const pageTitle = `${name} (${city}) — отзывы и рейтинг | Юрист по призыву`;
-  const pageDescription = `${name} в ${locationLabel}: ${ratings.length} отзывов призывников, средняя оценка ${avgRating.toFixed(1)}/5. Юридическая помощь по призыву — бесплатная вводная.`;
-  const keywords = `${name}, военкомат ${city}, отзывы военкомат, рейтинг военкомата, призывник ${city}, юрист по призыву ${city}`;
+  // Мета — из общего билдера (тот же, что в prerender). См. src/lib/seoMeta.ts.
+  const seo = commissariatSeo({ name, city, region, ratings });
+  const pageTitle = seo.title;
+  const pageDescription = seo.description;
+  const keywords = seo.keywords;
 
   return (
     <div className="min-h-screen bg-background">

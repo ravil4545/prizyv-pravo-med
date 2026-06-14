@@ -11,7 +11,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { enhanceTypography, textToMarkdown } from "@/lib/typography";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { calcReadingTimeMin, readingTimeLabel, autoExcerpt } from "@/lib/blogUtils";
+import { calcReadingTimeMin, readingTimeLabel } from "@/lib/blogUtils";
+import { blogSeo } from "@/lib/seoMeta";
 import { ArrowLeft, ArrowRight, Loader2, Calendar, Clock, Send, Copy, Check, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -138,9 +139,11 @@ const BlogDetailPage = () => {
   const dateLabel = post.published_at
     ? format(new Date(post.published_at), "d MMMM yyyy", { locale: ru })
     : null;
-  const description = post.excerpt?.trim() || autoExcerpt(post.content);
-  const pageTitle = `${post.title} | Блог · Александра Важанина`;
-  const keywords = `${post.title}, ${post.category || "блог"}, призыв, военкомат, юрист, ${dateLabel || ""}`;
+  // Мета — из общего билдера (тот же, что в prerender). См. src/lib/seoMeta.ts.
+  const seo = blogSeo(post);
+  const description = seo.description;
+  const pageTitle = seo.title;
+  const keywords = seo.keywords;
 
   const tgShare = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(post.title)}`;
   const waShare = `https://api.whatsapp.com/send?text=${encodeURIComponent(`${post.title} — ${shareUrl}`)}`;
