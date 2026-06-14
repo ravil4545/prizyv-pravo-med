@@ -124,8 +124,7 @@ const DashboardPage = () => {
     );
   }
 
-  // Основные рабочие сценарии — 3 ключевые точки входа.
-  // ИИ-консультант объединяет чат + анализ документов + историю болезней.
+  // Основные рабочие сценарии — 4 ключевые точки входа.
   const primaryCards: DashboardCard[] = [
     {
       title: "ИИ-консультант",
@@ -140,6 +139,13 @@ const DashboardPage = () => {
       description: "Документы, опросник, диагнозы — всё, что видит ИИ и юрист",
       icon: FileHeart,
       path: "/dashboard/medical-documents",
+    },
+    {
+      title: "ИИ-История болезни",
+      description: "Статьи Расписания, категории годности и подсказки по диагнозам",
+      icon: BookOpen,
+      path: "/medical-history",
+      tag: "565",
     },
     {
       title: "Дело",
@@ -230,7 +236,7 @@ const DashboardPage = () => {
               <span className="section-number">Что делать</span>
               <span className="flex-1 h-px bg-border/50" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {primaryCards.map((card) => {
                 const Icon = card.icon;
                 const isFeatured = card.featured;
@@ -239,13 +245,13 @@ const DashboardPage = () => {
                     key={card.path}
                     onClick={() => navigate(cabinetPath(card.path))}
                     className={cn(
-                      "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative",
+                      "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative h-full",
                       isFeatured
                         ? "border-gold/50 bg-gradient-to-br from-gold/10 via-paper to-paper-deep/30 hover:shadow-accent"
                         : "border-border bg-card hover:shadow-medium",
                     )}
                   >
-                    <CardContent className="p-5">
+                    <CardContent className="p-5 h-full flex flex-col">
                       <div className="flex items-start justify-between mb-3">
                         <div
                           className={cn(
@@ -266,7 +272,7 @@ const DashboardPage = () => {
                       <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
                         {card.title}
                       </h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
                         {card.description}
                       </p>
                     </CardContent>
