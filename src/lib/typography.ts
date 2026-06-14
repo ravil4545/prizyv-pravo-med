@@ -6,28 +6,26 @@ export function enhanceTypography(text: string): string {
 
   return text
     // Кавычки
-    .replace(/"/g, '«')
-    .replace(/"/g, '»')
     .replace(/"([^"]+)"/g, '«$1»')
     
     // Тире и дефисы
-    .replace(/(\s)--(\s)/g, '$1—$2') // двойной дефис в тире
-    .replace(/(\s)-(\s)/g, '$1—$2') // одиночный дефис между словами в тире
+    .replace(/([ \t])--([ \t])/g, '$1—$2') // двойной дефис в тире
+    .replace(/([ \t])-([ \t])/g, '$1—$2') // одиночный дефис между словами в тире
     .replace(/(\d+)-(\d+)/g, '$1–$2') // дефис между числами в короткое тире
     
     // Многоточие
     .replace(/\.\.\./g, '…')
     
-    // Неразрывные пробелы
-    .replace(/(\d+)\s+(год|года|лет|руб|₽|%)/g, '$1\u00A0$2')
-    .replace(/([а-яА-Я]{1,2})\s+/g, '$1\u00A0')
+    // Неразрывные пробелы. Не трогаем \n: Markdown-разметка статей держится на переносах строк.
+    .replace(/(\d+)[ \t]+(год|года|лет|руб|₽|%)/g, '$1\u00A0$2')
+    .replace(/\b([а-яА-ЯёЁ]{1,2})[ \t]+(?=[а-яА-ЯёЁ])/g, '$1\u00A0')
     
     // Номера и параграфы
-    .replace(/№\s*(\d+)/g, '№\u00A0$1')
-    .replace(/§\s*(\d+)/g, '§\u00A0$1')
+    .replace(/№[ \t]*(\d+)/g, '№\u00A0$1')
+    .replace(/§[ \t]*(\d+)/g, '§\u00A0$1')
     
-    // Множественные пробелы
-    .replace(/\s{2,}/g, ' ');
+    // Множественные пробелы внутри строк
+    .replace(/[ \t]{2,}/g, ' ');
 }
 
 /**
@@ -59,18 +57,62 @@ export function textToMarkdown(text: string): string {
   let lines = text.split('\n');
   let result: string[] = [];
   let inList = false;
+  let inImplicitList = false;
+
+  const shouldStopImplicitList = (line: string): boolean =>
+    /^\d+\.\s+/.test(line) ||
+    /^(Важно|Внимание|Примечание|Вывод|Итог):/i.test(line) ||
+    line.length > 280;
+
+  const looksLikeImplicitListItem = (line: string): boolean => {
+    if (!line || shouldStopImplicitList(line)) return false;
+    if (line.endsWith(':')) return false;
+    if (/^[•\-\*\–\—]\s+/.test(line) || /^\d+[\.)]\s+/.test(line)) return false;
+    return line.length <= 280;
+  };
+
+  const countImplicitListItems = (startIndex: number): number => {
+    let count = 0;
+    for (let j = startIndex; j < lines.length; j++) {
+      const candidate = lines[j].trim();
+      if (!candidate) continue;
+      if (!looksLikeImplicitListItem(candidate)) break;
+      count++;
+      if (count >= 2) return count;
+    }
+    return count;
+  };
   
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
     
     // Пустая строка - добавляем разрыв абзаца
     if (!line) {
+      if (inImplicitList) {
+        continue;
+      }
       if (inList) {
         inList = false;
       }
       result.push('');
       continue;
     }
+
+    if (inImplicitList) {
+      if (shouldStopImplicitList(line)) {
+        inImplicitList = false;
+        inList = false;
+        if (result.length > 0 && result[result.length - 1] !== '') {
+          result.push('');
+        }
+      } else {
+        result.push(`- ${line}`);
+        inList = true;
+        continue;
+      }
+    }
+
+    const opensImplicitList = line.endsWith(':') && countImplicitListItems(i + 1) >= 2;
     
     // H2: Основные заголовки (начинаются с цифры и точки, например "1. Заголовок")
     if (line.match(/^\d+\.\s+[А-ЯЁA-Z]/)) {
@@ -126,7 +168,7 @@ export function textToMarkdown(text: string): string {
     
     // Жирный текст для важных терминов и фраз
     // 1. Фразы с двоеточием (Важно: текст)
-    if (line.match(/^[А-ЯЁA-Z][а-яёa-zA-Z\s]+:/)) {
+    if (line.match(/^[А-ЯЁA-Z][а-яёА-ЯЁa-zA-Z\s]+:/)) {
       line = line.replace(/^([^:]+):/, '**$1:**');
     }
     
@@ -144,6 +186,11 @@ export function textToMarkdown(text: string): string {
         result.push('');
       }
       result.push(line);
+    }
+
+    if (opensImplicitList) {
+      inImplicitList = true;
+      inList = true;
     }
   }
   

@@ -11,8 +11,9 @@
 // Модуль ДОЛЖЕН оставаться «чистым» (никаких браузерных/Node-API на верхнем
 // уровне), т.к. его статически импортит и Vite-конфиг при сборке.
 
-import { autoExcerpt } from "./blogUtils";
+import { blogExcerpt, normalizeBlogCategory, normalizeBlogTitle } from "./blogPresentation";
 import { makeCommissariatSlug } from "./slug";
+import type { DiagnosisGuide, GuideFaq } from "../content/diagnosisGuides";
 
 export const BASE_URL = "https://nepriziv.ru";
 export const DEFAULT_OG_IMAGE = "https://nepriziv.ru/og-image.png";
@@ -49,26 +50,50 @@ export interface DiagnosisLike {
   category?: string | null;
 }
 
-export function diagnosisSeo(d: DiagnosisLike): PageSeo {
+/** FAQPage schema из FAQ гайда (rich-результаты Google/Яндекс). */
+export function faqJsonLd(faq: GuideFaq[]): unknown {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
+}
+
+export function diagnosisSeo(d: DiagnosisLike, guide?: DiagnosisGuide): PageSeo {
   const path = `/diagnoses/${d.article_number}`;
+  const medicalCondition = {
+    "@context": "https://schema.org",
+    "@type": "MedicalCondition",
+    name: d.title,
+    description: d.description,
+    code: {
+      "@type": "MedicalCode",
+      codingSystem: "Расписание болезней (Постановление №565)",
+      codeValue: d.article_number,
+    },
+  };
+
+  // С гайдом: богаче meta-description, текст для crawler-подложки и FAQPage schema.
+  const description = guide
+    ? `Берут ли в армию с ${guide.conditionInstrumental} в 2026 году. ${guide.intro ?? ""} Категория годности по статье ${d.article_number}, нужные документы, ошибки на медкомиссии, FAQ.`
+        .replace(/\s+/g, " ")
+        .trim()
+    : `${d.title}: основания для освобождения от призыва по статье ${d.article_number}. ${d.description.slice(0, 140)}…`;
+
   return {
     path,
     title: `${d.title} — статья ${d.article_number} Расписания болезней | Юрист Важанина`,
-    description: `${d.title}: основания для освобождения от призыва по статье ${d.article_number}. ${d.description.slice(0, 140)}…`,
+    description,
     keywords: `${d.title}, статья ${d.article_number}, расписание болезней, освобождение от армии, призывник, ${d.category ?? ""}`,
     h1: d.title,
-    bodyText: d.description,
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "MedicalCondition",
-      name: d.title,
-      description: d.description,
-      code: {
-        "@type": "MedicalCode",
-        codingSystem: "Расписание болезней (Постановление №565)",
-        codeValue: d.article_number,
-      },
-    },
+    bodyText: guide
+      ? [guide.intro, guide.armyVerdict, guide.categories].filter(Boolean).join("\n\n")
+      : d.description,
+    jsonLd: guide ? [medicalCondition, faqJsonLd(guide.faq)] : medicalCondition,
   };
 }
 
@@ -86,22 +111,24 @@ export interface BlogPostLike {
 
 export function blogSeo(p: BlogPostLike): PageSeo {
   const path = `/blog/${p.slug}`;
-  const description = (p.excerpt && p.excerpt.trim()) || autoExcerpt(p.content);
+  const title = normalizeBlogTitle(p.title);
+  const category = normalizeBlogCategory(p.category);
+  const description = blogExcerpt(p);
   const dateIso = p.published_at || p.created_at;
   return {
     path,
-    title: `${p.title} | Блог · Александра Важанина`,
+    title: `${title} | Блог · Александра Важанина`,
     description,
-    keywords: `${p.title}, ${p.category || "блог"}, призыв, военкомат, юрист`,
+    keywords: `${title}, ${category || "блог"}, призыв, военкомат, юрист`,
     ogImage: p.image_url || undefined,
-    h1: p.title,
+    h1: title,
     bodyText: description,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "BlogPosting",
-      headline: p.title,
+      headline: title,
       description,
-      articleSection: p.category || undefined,
+      articleSection: category || undefined,
       datePublished: dateIso,
       dateModified: dateIso,
       image: p.image_url || undefined,

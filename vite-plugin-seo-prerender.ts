@@ -13,6 +13,7 @@ import {
   type PageSeo,
 } from "./src/lib/seoMeta";
 import { makeCommissariatSlug } from "./src/lib/slug";
+import { getDiagnosisGuide } from "./src/content/diagnosisGuides";
 
 // Публичные ключи (anon) — те же, что в src/integrations/supabase/client.ts.
 // Используются только на чтение публичных таблиц во время СБОРКИ.
@@ -69,9 +70,11 @@ function injectSeo(template: string, seo: PageSeo): string {
     `<link rel="canonical" href="${escapeAttr(canonical)}" />`,
   );
 
-  // Schema.org для страницы — перед </head>.
+  // Schema.org для страницы — перед </head> (может быть массив: MedicalCondition + FAQPage).
   if (seo.jsonLd) {
-    html = html.replace("</head>", `    ${jsonLdScript(seo.jsonLd)}\n  </head>`);
+    const blocks = Array.isArray(seo.jsonLd) ? seo.jsonLd : [seo.jsonLd];
+    const scripts = blocks.map((b) => jsonLdScript(b)).join("\n    ");
+    html = html.replace("</head>", `    ${scripts}\n  </head>`);
   }
 
   // Crawler-подложка: настоящий H1 + текст в исходном HTML (Яндекс/соцсети JS не
@@ -105,7 +108,7 @@ async function fetchDynamicRoutes(): Promise<PageSeo[]> {
     .from("diagnoses")
     .select("title,description,article_number,category");
   for (const d of dx || []) {
-    if (d?.article_number) routes.push(diagnosisSeo(d as any));
+    if (d?.article_number) routes.push(diagnosisSeo(d as any, getDiagnosisGuide(d.article_number)));
   }
 
   // Блог (только опубликованные)

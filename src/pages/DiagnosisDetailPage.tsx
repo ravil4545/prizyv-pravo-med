@@ -6,6 +6,8 @@ import Footer from "@/components/Footer";
 import LeadMagnetBox, { LEAD_MAGNETS } from "@/components/LeadMagnetBox";
 import SEOHead from "@/components/SEOHead";
 import { diagnosisSeo } from "@/lib/seoMeta";
+import { getDiagnosisGuide } from "@/content/diagnosisGuides";
+import DiagnosisGuideView from "@/components/DiagnosisGuideView";
 import { ArrowRight, Phone, Loader2, Bot, FileSearch } from "lucide-react";
 
 interface Diagnosis {
@@ -119,7 +121,8 @@ const DiagnosisDetailPage = () => {
 
   // Мета — из общего билдера (тот же, что в prerender, чтобы исходный HTML и
   // <head> после загрузки JS совпадали байт-в-байт). См. src/lib/seoMeta.ts.
-  const seo = diagnosisSeo(diagnosis);
+  const guide = getDiagnosisGuide(diagnosis.article_number);
+  const seo = diagnosisSeo(diagnosis, guide);
   const pageTitle = seo.title;
   const pageDescription = seo.description;
   const keywords = seo.keywords;
@@ -192,6 +195,9 @@ const DiagnosisDetailPage = () => {
               {diagnosis.description}
             </p>
           </article>
+
+          {/* Расширенные SEO-блоки для топовых статей (если есть гайд) */}
+          {guide && <DiagnosisGuideView guide={guide} />}
 
           {/* Lead magnet — матрица «диагноз → статья 565», максимально по теме страницы */}
           <section className="mb-10">

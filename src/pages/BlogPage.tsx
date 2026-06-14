@@ -10,7 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Calendar, Clock, ArrowRight, X } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { autoExcerpt, calcReadingTimeMin, readingTimeLabel } from "@/lib/blogUtils";
+import { calcReadingTimeMin, readingTimeLabel } from "@/lib/blogUtils";
+import { blogExcerpt, blogPlainText, normalizeBlogCategory, normalizeBlogTitle } from "@/lib/blogPresentation";
 
 interface BlogPost {
   id: string;
@@ -23,6 +24,24 @@ interface BlogPost {
   created_at: string;
   image_url: string | null;
 }
+
+const BLOG_VISUALS = [
+  {
+    src: "/blog-visuals/document-check.svg",
+    title: "Документы",
+    text: "Проверяем повестку, сроки, реквизиты и доказательства вручения.",
+  },
+  {
+    src: "/blog-visuals/medical-evidence.svg",
+    title: "Медицина",
+    text: "Собираем справки, выписки и обследования в понятную позицию.",
+  },
+  {
+    src: "/blog-visuals/deadline-route.svg",
+    title: "Сроки",
+    text: "Фиксируем даты, уважительные причины и письменные обращения.",
+  },
+];
 
 const BlogPage = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -55,19 +74,23 @@ const BlogPage = () => {
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    posts.forEach((p) => p.category && set.add(p.category));
+    posts.forEach((p) => {
+      const category = normalizeBlogCategory(p.category);
+      if (category) set.add(category);
+    });
     return Array.from(set).sort();
   }, [posts]);
 
   const filtered = useMemo(() => {
     return posts.filter((p) => {
-      if (activeCategory !== "all" && p.category !== activeCategory) return false;
+      const category = normalizeBlogCategory(p.category);
+      if (activeCategory !== "all" && category !== activeCategory) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return (
-        p.title.toLowerCase().includes(q) ||
-        (p.excerpt || "").toLowerCase().includes(q) ||
-        p.content.toLowerCase().includes(q)
+        normalizeBlogTitle(p.title).toLowerCase().includes(q) ||
+        blogPlainText(p.excerpt).toLowerCase().includes(q) ||
+        blogPlainText(p.content).toLowerCase().includes(q)
       );
     });
   }, [posts, activeCategory, search]);
@@ -89,7 +112,7 @@ const BlogPage = () => {
         keywords="блог призыв, юрист призыв, военкомат блог, отсрочка от армии, военный билет, расписание болезней"
       />
       <Header />
-      <main className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-16 pb-24 md:pb-16">
+      <main className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 py-10 sm:py-16 pb-24 md:pb-16">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <header className="border-b border-ink/15 pb-6 sm:pb-8 mb-8 sm:mb-10">
@@ -104,6 +127,24 @@ const BlogPage = () => {
               юриста с десятилетним стажем.
             </p>
           </header>
+
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8 sm:mb-10" aria-label="Темы юридического блога">
+            {BLOG_VISUALS.map((item) => (
+              <div key={item.title} className="grid grid-cols-[88px_1fr] sm:grid-cols-[104px_1fr] items-center gap-4 border border-ink/15 bg-paper/70 p-3 sm:p-4">
+                <img
+                  src={item.src}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-16 sm:h-20 w-full object-cover border border-ink/10 bg-paper"
+                  loading="lazy"
+                />
+                <div className="min-w-0">
+                  <p className="font-serif text-lg leading-tight text-ink">{item.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">{item.text}</p>
+                </div>
+              </div>
+            ))}
+          </section>
 
           {/* Search + categories */}
           <div className="mb-8 sm:mb-10 space-y-4">
@@ -190,10 +231,10 @@ const BlogPage = () => {
               className="group block mb-10 border border-ink/15 hover:border-gold transition-colors"
             >
               <div className="grid grid-cols-1 md:grid-cols-2">
-                <BlogPostImage
-                  src={feature.image_url}
-                  alt={feature.title}
-                  category={feature.category}
+                  <BlogPostImage
+                    src={feature.image_url}
+                  alt={normalizeBlogTitle(feature.title)}
+                  category={normalizeBlogCategory(feature.category)}
                   aspect="video"
                   className="md:aspect-auto md:h-full"
                 />
@@ -202,13 +243,13 @@ const BlogPage = () => {
                     Передовица
                   </div>
                   <h2 className="font-serif text-2xl sm:text-3xl text-ink leading-tight mb-3 group-hover:text-gold-deep transition-colors">
-                    {feature.title}
+                    {normalizeBlogTitle(feature.title)}
                   </h2>
                   <p className="text-ink-soft leading-relaxed mb-5 line-clamp-3">
-                    {feature.excerpt || autoExcerpt(feature.content)}
+                    {blogExcerpt(feature)}
                   </p>
                   <div className="flex items-center gap-3 font-mono text-[10px] tracking-[0.15em] uppercase text-ink/60 flex-wrap">
-                    {feature.category && <span className="text-gold-deep">{feature.category}</span>}
+                    {normalizeBlogCategory(feature.category) && <span className="text-gold-deep">{normalizeBlogCategory(feature.category)}</span>}
                     {feature.published_at && (
                       <>
                         <span className="text-ink/20">·</span>
@@ -237,6 +278,8 @@ const BlogPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
               {rest.map((p) => {
                 const min = calcReadingTimeMin(p.content);
+                const title = normalizeBlogTitle(p.title);
+                const category = normalizeBlogCategory(p.category);
                 return (
                   <Link
                     key={p.id}
@@ -245,15 +288,15 @@ const BlogPage = () => {
                   >
                     <BlogPostImage
                       src={p.image_url}
-                      alt={p.title}
-                      category={p.category}
+                      alt={title}
+                      category={category}
                       aspect="video"
                     />
                     <div className="p-5 flex flex-col flex-1">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {p.category && (
+                        {category && (
                           <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold-deep">
-                            {p.category}
+                            {category}
                           </span>
                         )}
                         {p.published_at && (
@@ -269,10 +312,10 @@ const BlogPage = () => {
                         )}
                       </div>
                       <h3 className="font-serif text-lg sm:text-xl text-ink leading-tight mb-2 group-hover:text-gold-deep transition-colors line-clamp-3">
-                        {p.title}
+                        {title}
                       </h3>
                       <p className="text-sm text-ink-soft leading-relaxed line-clamp-3 mb-3 flex-1">
-                        {p.excerpt || autoExcerpt(p.content, 140)}
+                        {blogExcerpt(p, 140)}
                       </p>
                       <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.15em] uppercase text-ink/50 pt-3 border-t border-ink/10">
                         <span className="inline-flex items-center gap-1">

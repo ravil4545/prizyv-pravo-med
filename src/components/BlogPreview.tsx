@@ -7,8 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
-import { enhanceTypography } from "@/lib/typography";
 import BlogPostImage from "@/components/BlogPostImage";
+import { blogExcerpt, normalizeBlogCategory, normalizeBlogTitle } from "@/lib/blogPresentation";
 
 interface BlogPost {
   id: string;
@@ -83,20 +83,23 @@ const BlogPreview = () => {
                   </Card>
                 </div>
               ))
-            : posts.map((post) => (
+            : posts.map((post) => {
+                const title = normalizeBlogTitle(post.title);
+                const category = normalizeBlogCategory(post.category);
+                return (
                 <article key={post.id} role="listitem">
                   <Link to={`/blog/${post.slug}`}>
                     <Card className="h-full cursor-pointer hover:shadow-lg transition-all overflow-hidden group">
                       <BlogPostImage
                         src={post.image_url}
-                        alt={`Изображение к статье: ${post.title}`}
-                        category={post.category}
+                        alt={`Изображение к статье: ${title}`}
+                        category={category}
                         aspect="video"
                       />
                       <CardHeader>
                         <div className="flex items-center justify-between mb-2">
-                          {post.category && (
-                            <Badge variant="secondary">{post.category}</Badge>
+                          {category && (
+                            <Badge variant="secondary">{category}</Badge>
                           )}
                           {post.published_at && (
                             <time
@@ -108,17 +111,18 @@ const BlogPreview = () => {
                             </time>
                           )}
                         </div>
-                        <CardTitle className="text-xl line-clamp-2">{post.title}</CardTitle>
+                        <CardTitle className="text-xl line-clamp-2">{title}</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <p className="text-muted-foreground line-clamp-3">
-                          {enhanceTypography(post.excerpt || post.content.substring(0, 120) + "...")}
+                          {blogExcerpt(post, 140)}
                         </p>
                       </CardContent>
                     </Card>
                   </Link>
                 </article>
-              ))}
+                );
+              })}
         </div>
 
         {!loading && (
