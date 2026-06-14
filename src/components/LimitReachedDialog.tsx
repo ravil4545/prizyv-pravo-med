@@ -4,7 +4,7 @@ import { Crown, UserPlus, Sparkles, FileText, MessageSquare, ArrowRight } from "
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215";
+const YOOMONEY_PAYMENT_URL = "https://yoomoney.ru/bill/pay/1ID022ESTS9.260614";
 
 interface LimitReachedDialogProps {
   open: boolean;

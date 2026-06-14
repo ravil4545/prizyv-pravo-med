@@ -4,32 +4,35 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
-import { CreditCard, MessageCircle, Loader2, Crown, Check, Copy } from "lucide-react";
+import { CreditCard, MessageCircle, Loader2, Crown, Check, Copy, Send, Mail } from "lucide-react";
 
 const LAWYER_TELEGRAM = "https://t.me/nepriziv2";
 const LAWYER_PHONE = "+7 925 350-05-33";
+const LAWYER_WHATSAPP = "79253500533";
+const LAWYER_EMAIL = "dompc9@gmail.com";
 
 type PlanId = "month" | "year";
 
 interface Plan {
   id: PlanId;
-  url: string;
+  /** Прямая ссылка YooMoney — только у тарифов с самостоятельной онлайн-оплатой. */
+  url?: string;
   priceLabel: string;
   unit: string;
   note?: string;
 }
 
 // Сумма зашита в счёте YooMoney — при смене цены нужно выставить новые счета и заменить url.
+// Год оформляется через юриста (выставление счёта/рассрочка) — без прямой ссылки.
 const PLANS: Record<PlanId, Plan> = {
   month: {
     id: "month",
-    url: "https://yoomoney.ru/bill/pay/1FUPNGI39FP.260215",
+    url: "https://yoomoney.ru/bill/pay/1ID022ESTS9.260614",
     priceLabel: "4 990 ₽",
     unit: "в месяц",
   },
   year: {
     id: "year",
-    url: "https://yoomoney.ru/bill/pay/1I54F0JNBCS.260602",
     priceLabel: "49 900 ₽",
     unit: "в год",
     note: "≈ 4 158 ₽/мес · экономия 9 980 ₽",
@@ -49,14 +52,15 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
   const [planId, setPlanId] = useState<PlanId>("year");
 
   const handleOpenPayment = async () => {
+    const base = PLANS.month.url;
+    if (!base) return;
     setOpening(true);
-    trackEvent("pricing_plan_click", { ref: `subscription_${planId}`, value: planId === "year" ? 49900 : 4990 });
+    trackEvent("pricing_plan_click", { ref: "subscription_month", value: 4990 });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
 
       // Передаём user_id в YooMoney через label — пригодится для будущего webhook
-      const base = PLANS[planId].url;
       const url = userId
         ? `${base}?label=${encodeURIComponent(`uid:${userId}`)}`
         : base;
@@ -77,6 +81,20 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
     } finally {
       setOpening(false);
     }
+  };
+
+  // Годовой тариф оформляется через юриста (счёт/рассрочка) — не прямой оплатой.
+  // Кнопки ведут на удобный канал связи с преднабранным текстом.
+  const YEAR_MSG = "Здравствуйте! Хочу оформить годовую подписку на ИИ-кабинет nepriziv.ru (49 900 ₽).";
+  const openYearContact = (channel: "whatsapp" | "telegram" | "email") => {
+    trackEvent("pricing_plan_click", { ref: "subscription_year", value: 49900 });
+    const text = encodeURIComponent(YEAR_MSG);
+    const urls: Record<typeof channel, string> = {
+      whatsapp: `https://wa.me/${LAWYER_WHATSAPP}?text=${text}`,
+      telegram: LAWYER_TELEGRAM,
+      email: `mailto:${LAWYER_EMAIL}?subject=${encodeURIComponent("Годовая подписка ИИ-кабинет")}&body=${text}`,
+    };
+    window.open(urls[channel], channel === "email" ? "_self" : "_blank", "noopener,noreferrer");
   };
 
   const copyUserId = async () => {
@@ -147,7 +165,8 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
             </ul>
           </div>
 
-          {/* Шаги */}
+          {/* Месяц — самостоятельная онлайн-оплата YooMoney */}
+          {planId === "month" && (
           <div>
             <h3 className="font-serif text-base text-ink mb-3">Как оплатить:</h3>
             <ol className="space-y-3 text-sm">
@@ -179,6 +198,50 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
               </li>
             </ol>
           </div>
+          )}
+
+          {/* Год — оформление через юриста (счёт/рассрочка), удобный канал связи */}
+          {planId === "year" && (
+          <div>
+            <h3 className="font-serif text-base text-ink mb-1">Как оформить годовую подписку:</h3>
+            <p className="text-sm text-ink-soft mb-3">
+              Годовой тариф оформляет юрист — выставит счёт и активирует доступ. Напишите удобным
+              способом, в ответ пришлём реквизиты для оплаты.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => openYearContact("whatsapp")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-emerald-950/30"
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => openYearContact("telegram")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/40 bg-sky-50 px-3 py-2.5 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:bg-sky-950/30"
+              >
+                <Send className="h-4 w-4" />
+                Telegram
+              </button>
+              <button
+                type="button"
+                onClick={() => openYearContact("email")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-ink/20 bg-paper px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep/60"
+              >
+                <Mail className="h-4 w-4" />
+                Почта
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-ink/60">
+              Или позвоните по{" "}
+              <a href={`tel:${LAWYER_PHONE.replace(/\s/g, "")}`} className="text-gold-deep underline">
+                {LAWYER_PHONE}
+              </a>. Нужна разовая оплата картой? Выберите тариф «в месяц».
+            </p>
+          </div>
+          )}
 
           {/* После клика — показываем ID */}
           {opened && userIdShort && (
@@ -205,28 +268,38 @@ export default function PaymentInstructionsDialog({ open, onOpenChange }: Paymen
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               Закрыть
             </Button>
-            <Button
-              onClick={handleOpenPayment}
-              disabled={opening}
-              className="flex-1 bg-gradient-to-r from-gold to-gold-deep hover:opacity-90 text-ink font-semibold"
-            >
-              {opening ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Открываем...
-                </>
-              ) : opened ? (
-                <>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Открыть оплату ещё раз
-                </>
-              ) : (
-                <>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Оплатить {PLANS[planId].priceLabel} / {planId === "year" ? "год" : "мес"}
-                </>
-              )}
-            </Button>
+            {planId === "month" ? (
+              <Button
+                onClick={handleOpenPayment}
+                disabled={opening}
+                className="flex-1 bg-gradient-to-r from-gold to-gold-deep hover:opacity-90 text-ink font-semibold"
+              >
+                {opening ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Открываем...
+                  </>
+                ) : opened ? (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Открыть оплату ещё раз
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Оплатить 4 990 ₽ / мес
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => openYearContact("whatsapp")}
+                className="flex-1 bg-gradient-to-r from-gold to-gold-deep hover:opacity-90 text-ink font-semibold"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Написать для оформления
+              </Button>
+            )}
           </div>
 
           {/* Альтернатива */}
