@@ -74,6 +74,11 @@ JINA_KEY = os.getenv("JINA_API_KEY", "")
 # Путь к волту «второго мозга». Переопределяется переменной окружения.
 RAG_BASE = Path(os.getenv("SECONDBRAIN_PATH", r"D:\Obsidian\SecondBrain"))
 
+# Прецеденты Hermes-KB (обезличенные кейсы агента Hermes, плейсхолдеры
+# [ПЕРСОНА_NNN]) — отдельный корень, кладём в rag_chunks как категорию
+# "precedent". «Полное объединение информации»: сайт получает реальные кейсы.
+HERMESKB_PATH = Path(os.getenv("HERMESKB_PATH", r"D:\Obsidian\Main\Hermes-KB"))
+
 # 5 фундаментальных блоков → rag_system_context (включаются в КАЖДЫЙ промпт ИИ).
 # Пути относительно RAG_BASE (прямые слэши).
 FOUNDATIONAL: dict[str, str] = {
@@ -354,9 +359,62 @@ def ingest_file(path: Path, rel: str) -> int:
     return chunks
 
 
+def ingest_precedents() -> tuple[int, int]:
+    """Прецеденты Hermes-KB (cases/) → rag_chunks, категория 'precedent'.
+    Обезличенные кейсы агента Hermes ([ПЕРСОНА_NNN]). Отдельный id-namespace
+    'hermeskb/cases/…', чтобы не пересекаться с заметками волта."""
+    base = HERMESKB_PATH / "cases"
+    if not base.exists():
+        print(f"  ⚠️  Hermes-KB cases не найдены: {base}")
+        return 0, 0
+    total, ingested = 0, 0
+    for path in sorted(base.rglob("*.md")):
+        if path.name.startswith(SKIP_NAME_PREFIXES):
+            continue
+        post = frontmatter.load(str(path))
+        meta = dict(post.metadata)
+        content = clean_wikilinks(post.content)
+        if not content.strip():
+            continue
+        rel = f"hermeskb/cases/{path.name}"
+        warn_pii(rel, content)
+        n = 0
+        for i, (section_title, section_content) in enumerate(split_by_headings(content)):
+            if not section_content.strip():
+                continue
+            chunk_id = rel if (i == 0 and section_title is None) else f"{rel}#s{i}"
+            embedding = get_embedding(section_content, task="retrieval.passage")
+            db_upsert("rag_chunks", {
+                "id":                chunk_id,
+                "content":           section_content.strip(),
+                "embedding":         embedding,
+                "category":          "precedent",
+                "tags":              norm(meta.get("tags")),
+                "schedule_articles": norm(meta.get("schedule_articles")),
+                "target_category":   meta.get("target_category"),
+                "priority":          meta.get("priority"),
+                "type":              meta.get("type"),
+                "is_foundational":   False,
+                "section_title":     section_title,
+                "last_refined":      str(meta.get("дата", meta.get("last_refined", ""))),
+            })
+            n += 1
+        total += n
+        if n:
+            ingested += 1
+    return total, ingested
+
+
 def main() -> None:
     fresh = "--fresh" in sys.argv
+    only_prec = "--only-precedents" in sys.argv
     validate_config()
+
+    if only_prec:
+        print(f"=== Только прецеденты Hermes-KB ({HERMESKB_PATH}) ===")
+        pc, pf = ingest_precedents()
+        print(f"\n✅ Прецеденты: {pc} чанков из {pf} кейсов.")
+        return
 
     if fresh:
         wipe_chunks()
@@ -382,8 +440,12 @@ def main() -> None:
         else:
             skipped += 1
 
-    print(f"\n✅ Готово: {total_chunks} чанков из {ingested} файлов (пропущено {skipped}).")
-    print("Для обновления после правок в Obsidian — запустите скрипт снова.")
+    print(f"\n✅ База знаний: {total_chunks} чанков из {ingested} файлов (пропущено {skipped}).")
+
+    print(f"\n=== Прецеденты Hermes-KB ({HERMESKB_PATH}) ===")
+    pc, pf = ingest_precedents()
+    print(f"✅ Прецеденты: {pc} чанков из {pf} кейсов.")
+    print("Для обновления после правок — запустите скрипт снова.")
 
 
 if __name__ == "__main__":

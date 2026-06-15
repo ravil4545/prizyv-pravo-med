@@ -107,7 +107,7 @@ The repo has bidirectional sync with the Lovable platform. Push changes here →
 Экспертная база знаний юриста живёт в Obsidian-волте **`D:\Obsidian\SecondBrain`** (заболевания, юр.процедуры, документооборот, FAQ, расписание болезней + реальная практика: кейсы, вопросы врачу, консультации, стратегии). Она загружается в Supabase для семантического поиска.
 
 **Конвейер:** [`scripts/ingest_rag.py`](scripts/ingest_rag.py) читает волт → эмбеддинги Jina v3 (1024 dims) → таблицы:
-- `rag_chunks` — чанки знаний с метаданными. **`category` задаётся СТРОГО ПО ПАПКЕ волта** (источник истины — `FOLDER_CATEGORY` в ingest; ручной frontmatter `category` НЕ главнее — он рассинхронивался). 13 канонических категорий: `medical_condition`, `legal_procedure`, `document_guide`, `faq`, `schedule_rb` (разбор глав РБ), `rb_official` (дословный текст РБ-565), `reference`, `strategy`, `web_source`, `case`, `doctor_qa`, `consultation`, `transcript`.
+- `rag_chunks` — чанки знаний с метаданными. **`category` задаётся СТРОГО ПО ПАПКЕ волта** (источник истины — `FOLDER_CATEGORY` в ingest; ручной frontmatter `category` НЕ главнее — он рассинхронивался). 14 канонических категорий: `medical_condition`, `legal_procedure`, `document_guide`, `faq`, `schedule_rb` (разбор глав РБ), `rb_official` (дословный текст РБ-565), `reference`, `strategy`, `web_source`, `case`, `doctor_qa`, `consultation`, `transcript`, `precedent` (обезличенные кейсы Hermes-KB из `D:\Obsidian\Main\Hermes-KB\cases`; ingest `--only-precedents`).
 - `rag_system_context` — 5 фундаментальных блоков (рамка консультации, мед./процедурные тонкости, диагностический анализ, правила улучшения), включаются в каждый промпт.
 - `rag_index` (VIEW) — оглавление: файл → категория, статьи РБ, размер. Для роутинга и генерации `00_Home/Оглавление.md`.
 - Навигационные файлы (`_MOC_*`, `Home`, `README`, `00_Index`, `00_Start_Here`, папка `00_Home`) НЕ индексируются (см. `SKIP_*` в ingest).
@@ -129,6 +129,6 @@ The repo has bidirectional sync with the Lovable platform. Push changes here →
 После правок волта — перезапустить `ingest_rag.py` (полная пересборка: `--fresh`), затем `build_index.py` (обновляет `00_Home/Оглавление.md` — карту разделов + индекс по статьям РБ). NB: категория = РАСПОЛОЖЕНИЕ файла (папка), не frontmatter.
 
 **Точечный поиск (чтобы не раздувать промпт)** — пресеты и хелперы в `ragSearch.ts`:
-- `KNOWLEDGE_CATEGORIES` / `PRACTICE_CATEGORIES` — срезы базы. Публичный `chat-rag` и клиентский `chat` ищут ТОЛЬКО по `KNOWLEDGE_CATEGORIES` (сырая практика с возможными ПДн в ответы не подмешивается).
+- `KNOWLEDGE_CATEGORIES` / `PRACTICE_CATEGORIES` — срезы базы. Публичный `chat-rag` и клиентский `chat` ищут ТОЛЬКО по `KNOWLEDGE_CATEGORIES`. Сырая практика (консультации/транскрипты с возможными ПДн) НЕ подмешивается. Обезличенные прецеденты `precedent` (Hermes-KB, плейсхолдеры [ПЕРСОНА_NNN], прошли аудит анонимизации) ВХОДЯТ в `KNOWLEDGE_CATEGORIES` — публичный чат цитирует реальные кейсы.
 - `extractArticleNumbers(text)` — вытащить статьи РБ из запроса (для фильтра `filter_articles`).
 - `searchByArticles` — точная выборка по статьям РБ без эмбеддинга (используется в `analyze-medical-document`).

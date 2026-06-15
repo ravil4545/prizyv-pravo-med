@@ -36,10 +36,12 @@ const JINA_KEY = Deno.env.get("JINA_API_KEY");
 //  ответов.
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Выверенная экспертиза: теория + методички. Безопасно для любых ответов. */
+/** Выверенная экспертиза: теория + методички + обезличенные прецеденты
+ *  Hermes-KB (category "precedent", плейсхолдеры [ПЕРСОНА_NNN], прошли аудит
+ *  анонимизации). Безопасно для любых ответов, включая публичный чат. */
 export const KNOWLEDGE_CATEGORIES = [
   "medical_condition", "legal_procedure", "document_guide", "faq",
-  "schedule_rb", "rb_official", "reference", "strategy",
+  "schedule_rb", "rb_official", "reference", "strategy", "precedent",
 ] as const;
 
 /** Сырая практика (консультации/транскрипты/Q&A/кейсы) — может содержать

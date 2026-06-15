@@ -1,0 +1,5 @@
+# Зависимости Python-скриптов инжеста RAG (ingest_rag.py, add_note.py).
+# Установка:  py -3.14 -m pip install -r scripts/requirements.txt
+python-frontmatter
+requests
+pyyaml
