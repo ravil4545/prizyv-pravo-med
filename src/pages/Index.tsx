@@ -14,14 +14,21 @@ import FAQ from "@/components/FAQ";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { useRef } from "react";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const Index = () => {
+  const mainRef = useRef<HTMLElement>(null);
+  // Плавное появление секций при скролле; Hero пропускаем (он над сгибом).
+  useScrollReveal(mainRef, 1);
+
   return (
     <>
       <SEOHead />
       <div className="min-h-screen bg-background pb-16 md:pb-0 overflow-x-hidden">
         <Header />
-        <main>
+        <main ref={mainRef}>
           <Hero />
           <AboutLawyer />
           <Credentials />
@@ -37,6 +44,7 @@ const Index = () => {
           <ContactForm />
         </main>
         <Footer />
+        <ScrollToTopButton />
       </div>
     </>
   );

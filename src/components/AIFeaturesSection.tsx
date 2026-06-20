@@ -188,7 +188,7 @@ const AIFeaturesSection = () => {
             return (
               <article
                 key={f.no}
-                className="group relative flex flex-col border border-ink/15 bg-paper hover:border-gold transition-colors"
+                className="group relative flex flex-col border border-ink/15 bg-paper hover:border-gold transition-colors hover-lift"
               >
                 {/* Mock window */}
                 <div className="relative h-56 sm:h-64 border-b border-ink/15 bg-paper-deep overflow-hidden">
