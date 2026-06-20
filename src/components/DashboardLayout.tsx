@@ -85,11 +85,11 @@ export default function DashboardLayout() {
 
   return (
     <div
-      className={cn("cabinet-shell cabinet-bg flex", chat ? "min-h-0 overflow-hidden" : "min-h-screen")}
+      className={cn("cabinet-shell cabinet-bg flex", chat ? "min-h-0 overflow-hidden" : "min-h-screen md:h-screen md:overflow-hidden")}
       style={chat && chatViewportHeight ? { height: chatViewportHeight } : undefined}
     >
       {/* ── Десктоп: левый сайдбар ─────────────────────────────────────── */}
-      <aside className="hidden md:flex sticky top-0 h-screen w-60 flex-shrink-0 flex-col border-r border-border bg-paper-deep/50">
+      <aside className="hidden md:flex h-screen w-60 flex-shrink-0 flex-col border-r border-border bg-paper-deep/50">
         <Link to={resolve({ to: "/dashboard" })} className="block border-b border-border px-5 py-5">
           <p className="section-number">Личный кабинет</p>
           <p className="mt-0.5 truncate font-serif text-lg text-foreground">{branding.displayName}</p>
@@ -117,7 +117,7 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      <div className={cn("flex min-w-0 flex-1 flex-col", chat && "min-h-0 overflow-hidden")}>
+      <div className={cn("flex min-w-0 flex-1 flex-col", chat ? "min-h-0 overflow-hidden" : "md:h-screen md:min-h-0 md:overflow-hidden")}>
         {/* ── Десктоп: верхняя панель — выход и возврат на сайт всегда на виду
                (раньше «Выйти» был только внизу сайдбара). ─────────────────── */}
         {!chat && (
@@ -184,7 +184,7 @@ export default function DashboardLayout() {
         </header>
         )}
 
-        <div className={cn("flex-1", chat && "min-h-0 overflow-hidden")}>
+        <div className={cn("flex-1", chat ? "min-h-0 overflow-hidden" : "md:min-h-0 md:overflow-y-auto")}>
           <Outlet />
         </div>
 
