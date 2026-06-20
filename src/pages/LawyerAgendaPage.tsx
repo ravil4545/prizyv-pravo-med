@@ -150,6 +150,10 @@ const LawyerAgendaPage = () => {
                 Поставьте дату призыва в карточке дела или срок у задачи в плане действий —
                 и дедлайн появится здесь.
               </p>
+              <p className="mt-2 max-w-sm text-xs text-muted-foreground/80">
+                «Срочные дела» на дашборде — это пометка приоритета, а не дата. Сюда они
+                попадут, только когда у них появится конкретный срок.
+              </p>
               <Button className="mt-4" variant="outline" asChild>
                 <Link to="/lawyer/clients">К списку клиентов</Link>
               </Button>

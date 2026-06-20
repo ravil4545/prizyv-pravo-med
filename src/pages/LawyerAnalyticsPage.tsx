@@ -38,19 +38,11 @@ const LawyerAnalyticsPage = () => {
     loadAnalytics();
   }, [user, profileLoading, isLawyer]);
 
-  // Аналитика считается агрегирующими count-запросами (head: true — строки не
-  // тянем) вместо вытягивания всей таблицы lawyer_clients. O(1) по объёму
-  // данных: при росте базы у Pro-юриста (лимит клиентов снят) страница раньше
-  // деградировала, теперь нагрузка не зависит от числа клиентов.
+  // Один GET всех клиентов юриста → агрегаты считаем на клиенте. Раньше тут был
+  // «веер» из ~25 count-запросов (head:true) по этапам/приоритетам/месяцам; на
+  // проде он упирался в лимит пулера Supabase и отдавал 503. Для числа клиентов
+  // одного юриста выборка нужных колонок дешёвая и считается мгновенно.
   const loadAnalytics = async () => {
-    const countClients = (build?: (q: any) => any) => {
-      const q = supabase
-        .from("lawyer_clients")
-        .select("*", { count: "exact", head: true })
-        .eq("lawyer_id", user!.id);
-      return build ? build(q) : q;
-    };
-
     // Последние 6 месяцев — границы [начало месяца, начало следующего).
     const now = new Date();
     const monthRanges = Array.from({ length: 6 }, (_, idx) => {
@@ -59,38 +51,42 @@ const LawyerAnalyticsPage = () => {
       const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
       return {
         key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`,
-        start: start.toISOString(),
-        end: end.toISOString(),
+        start: start.getTime(),
+        end: end.getTime(),
       };
     });
 
-    const [wonRes, stageRes, priorityRes, monthlyRes] = await Promise.all([
-      countClients((q) => q.eq("case_won", true)),
-      Promise.all(CRM_STAGES.map((s) => countClients((q) => q.eq("crm_stage", s.value)))),
-      Promise.all(PRIORITIES.map((p) => countClients((q) => q.eq("priority", p.value)))),
-      Promise.all(
-        monthRanges.map((m) => countClients((q) => q.gte("created_at", m.start).lt("created_at", m.end))),
-      ),
-    ]);
+    const { data } = await supabase
+      .from("lawyer_clients")
+      .select("crm_stage, priority, case_won, created_at")
+      .eq("lawyer_id", user!.id);
+    const rows = data ?? [];
 
     const stageMap: Record<string, number> = {};
-    let total = 0;
-    CRM_STAGES.forEach((s, i) => {
-      const c = stageRes[i].count ?? 0;
-      stageMap[s.value] = c;
-      total += c;
-    });
-
+    CRM_STAGES.forEach((s) => { stageMap[s.value] = 0; });
     const priorityMap: Record<string, number> = {};
-    PRIORITIES.forEach((p, i) => { priorityMap[p.value] = priorityRes[i].count ?? 0; });
+    PRIORITIES.forEach((p) => { priorityMap[p.value] = 0; });
+    const monthly = monthRanges.map((m) => ({ key: m.key, count: 0 }));
+    let won = 0;
+
+    for (const r of rows) {
+      if (r.crm_stage && r.crm_stage in stageMap) stageMap[r.crm_stage]++;
+      if (r.priority && r.priority in priorityMap) priorityMap[r.priority]++;
+      if (r.case_won === true) won++;
+      if (r.created_at) {
+        const t = new Date(r.created_at).getTime();
+        const mi = monthRanges.findIndex((m) => t >= m.start && t < m.end);
+        if (mi >= 0) monthly[mi].count++;
+      }
+    }
 
     setData({
-      total,
-      won: wonRes.count ?? 0,
+      total: rows.length,
+      won,
       urgent: priorityMap["urgent"] ?? 0,
       stageMap,
       priorityMap,
-      monthly: monthRanges.map((m, i) => ({ key: m.key, count: monthlyRes[i].count ?? 0 })),
+      monthly,
     });
     setLoading(false);
   };

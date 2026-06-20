@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -19,34 +19,30 @@ export interface LawyerProfile {
 
 export const useLawyerProfile = () => {
   const { user, loading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<LawyerProfile | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (authLoading) return;
-    // Сбрасываем профиль предыдущего аккаунта: иначе после смены пользователя
-    // (logout → login другим) isLawyer оставался от старого аккаунта и
-    // RoleGuard мог увести нового клиента в /lawyer.
-    if (!user) { setProfile(null); setLoading(false); return; }
+  // React Query шарит результат между ВСЕМИ вызовами хука по одному ключу
+  // ["lawyer_profile", user.id]. Раньше каждый компонент (Layout, Dashboard,
+  // Analytics, бейджи…) фетчил lawyer_profiles независимо — на загрузку
+  // страницы летело 3–6 одинаковых запросов. Ключ включает user.id, поэтому
+  // после смены аккаунта профиль не «залипает» от прежнего пользователя.
+  const { data, isPending, isFetching } = useQuery({
+    queryKey: ["lawyer_profile", user?.id],
+    enabled: !authLoading && !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("lawyer_profiles")
+        .select("*")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return (data as unknown as LawyerProfile | null) ?? null;
+    },
+  });
 
-    let cancelled = false;
-    supabase
-      .from("lawyer_profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return;
-        setProfile(data as unknown as LawyerProfile | null);
-        setLoading(false);
-      }, () => {
-        // Ошибка запроса (например, сбой сети) не должна оставлять кабинет
-        // навсегда на скелетоне — снимаем loading, профиль остаётся прежним/пустым.
-        if (cancelled) return;
-        setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [user?.id, authLoading]);
+  const profile = user ? (data ?? null) : null;
+  // loading истинно, только пока реально идёт первичная загрузка профиля юриста
+  // (фоновый refetch по истечении staleTime не дёргает скелетоны/RoleGuard).
+  const loading = authLoading || (!!user && isPending && isFetching);
 
   // Роль юриста активна, только если запись существует И is_active = true.
   // Раньше было `!!profile` — из-за этого «снять с роли юриста» в админке

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabaseConfig';
 import { useAuth } from '@/contexts/AuthContext';
 
 const getSessionId = (): string => {
@@ -96,17 +97,22 @@ export const useAnalyticsTracking = () => {
     const handleBeforeUnload = () => {
       if (!previousPathRef.current) return;
       const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      const payload = JSON.stringify({
+        session_id: getSessionId(),
+        event_type: 'page_view',
+        page_url: previousPathRef.current,
+        page_title: document.title,
+        duration_seconds: duration,
+        device_type: getDeviceType(),
+        ...getBrowserInfo(),
+      });
+      // sendBeacon не умеет ставить заголовки, поэтому раньше запрос уходил БЕЗ
+      // apikey → PostgREST отвечал 401 и событие выгрузки терялось. apikey
+      // передаём query-параметром (anon-ключ публичный), Content-Type —
+      // через тип Blob (без него PostgREST не примет JSON-тело).
       navigator.sendBeacon(
-        `https://kqbetheonxiclwgyatnm.supabase.co/rest/v1/analytics_events`,
-        JSON.stringify({
-          session_id: getSessionId(),
-          event_type: 'page_view',
-          page_url: previousPathRef.current,
-          page_title: document.title,
-          duration_seconds: duration,
-          device_type: getDeviceType(),
-          ...getBrowserInfo(),
-        }),
+        `${SUPABASE_URL}/rest/v1/analytics_events?apikey=${SUPABASE_ANON_KEY}`,
+        new Blob([payload], { type: 'application/json' }),
       );
     };
 

@@ -74,44 +74,38 @@ const LawyerDashboard = () => {
     setDeadlines(items.slice(0, 5));
   };
 
-  // Считаем агрегаты count-запросами (head: true — строки не тянем), а не
-  // вытягиванием всей таблицы. При росте базы у Pro-юриста (лимит клиентов
-  // снят) полный select деградировал; теперь нагрузка O(1) по объёму данных.
+  // Один GET всех клиентов юриста → агрегаты считаем на клиенте. Раньше тут
+  // было ~16 параллельных count-запросов (head:true) на каждый этап/метрику;
+  // на проде этот «веер» упирался в лимит пулера Supabase и стабильно отдавал
+  // 503 (нужные цифры всё равно приходили из соседнего полного GET для лент и
+  // сроков — count-запросы были и избыточны, и падали). Для реального числа
+  // клиентов одного юриста выборка дешёвая.
   const loadStats = async () => {
-    // База: count по строкам юриста; build добавляет фильтр конкретной метрики.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- цепочка query-builder без сгенерированного типа
-    const countClients = (build?: (q: any) => any) => {
-      const q = supabase
-        .from("lawyer_clients")
-        .select("*", { count: "exact", head: true })
-        .eq("lawyer_id", user!.id);
-      return build ? build(q) : q;
-    };
+    const { data } = await supabase
+      .from("lawyer_clients")
+      .select("id, client_name, client_phone, crm_stage, priority, case_won, escalation_requested, updated_at")
+      .eq("lawyer_id", user!.id);
+    const rows = data ?? [];
 
-    const [totalRes, urgentRes, wonRes, escalRes, recentRes, ...stageRes] = await Promise.all([
-      countClients(),
-      countClients((q) => q.eq("priority", "urgent")),
-      countClients((q) => q.eq("case_won", true)),
-      countClients((q) => q.eq("escalation_requested", true)),
-      supabase
-        .from("lawyer_clients")
-        .select("id, client_name, client_phone, crm_stage, priority, updated_at")
-        .eq("lawyer_id", user!.id)
-        .order("updated_at", { ascending: false })
-        .limit(6),
-      ...CRM_STAGE_ORDER.map((stage) => countClients((q) => q.eq("crm_stage", stage))),
-    ]);
+    setTotalClients(rows.length);
+    setUrgentCount(rows.filter((r) => r.priority === "urgent").length);
+    setWonCount(rows.filter((r) => r.case_won === true).length);
+    setEscalationCount(rows.filter((r) => r.escalation_requested === true).length);
 
-    setTotalClients(totalRes.count ?? 0);
-    setUrgentCount(urgentRes.count ?? 0);
-    setWonCount(wonRes.count ?? 0);
-    setEscalationCount(escalRes.count ?? 0);
-    setRecentClients((recentRes.data as RecentClient[]) || []);
+    // «Последняя активность» — топ-6 по updated_at (сортируем на клиенте).
+    const recent = [...rows]
+      .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))
+      .slice(0, 6);
+    setRecentClients(recent as RecentClient[]);
 
     // Воронка и счётчик «активных этапов» — только этапы с count > 0.
+    const stageCountMap = new Map<string, number>();
+    for (const r of rows) {
+      stageCountMap.set(r.crm_stage, (stageCountMap.get(r.crm_stage) || 0) + 1);
+    }
     const counts: StageCount[] = [];
-    CRM_STAGE_ORDER.forEach((stage, i) => {
-      const c = stageRes[i].count ?? 0;
+    CRM_STAGE_ORDER.forEach((stage) => {
+      const c = stageCountMap.get(stage) || 0;
       if (c > 0) counts.push({ stage, count: c });
     });
     setStageCounts(counts);

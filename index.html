@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
+
+    <!-- Прогреваем соединение со шрифтовыми CDN заранее: сами шрифты
+         подключаются через @import в bundled CSS и обнаруживаются поздно —
+         preconnect снимает задержку на DNS/TLS-рукопожатие. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <!-- Primary Meta Tags -->
     <title>Юрист по призыву · анализ медицинских документов и защита прав — nepriziv.ru</title>
     <meta name="title" content="Юрист по призыву · анализ медицинских документов и защита прав — nepriziv.ru" />

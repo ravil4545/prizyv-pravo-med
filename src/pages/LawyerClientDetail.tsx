@@ -635,10 +635,10 @@ const LawyerClientDetail = () => {
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         {/* Header */}
         <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 sm:flex-1">
             <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate("/lawyer/clients")}><ArrowLeft className="h-5 w-5" /></Button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold truncate">{client?.client_name}</h1>
+              <h1 className="text-xl font-bold truncate sm:whitespace-normal sm:break-words" title={client?.client_name}>{client?.client_name}</h1>
               <p className="text-sm text-muted-foreground">
                 {CRM_STAGES.find((s) => s.value === client?.crm_stage)?.label}
                 {client?.case_won && " · ВБ получен ✓"}
