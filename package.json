@@ -9,7 +9,14 @@
     "build:dev": "vite build --mode development",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "telegram:preview": "node scripts/telegram_channel_branding.mjs",
+    "telegram:apply": "node scripts/telegram_channel_branding.mjs --apply",
+    "telegram:send": "node scripts/telegram_send_post.mjs",
+    "telegram:queue": "node scripts/telegram_queue_runner.mjs",
+    "vk:send": "node scripts/vk_send_plan_post.mjs",
+    "vk:branding": "node scripts/vk_branding.mjs",
+    "vk:repost-profile": "node scripts/vk_repost_to_profile.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

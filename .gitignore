@@ -37,3 +37,5 @@ scripts/ingest.secrets.env
 # Python bytecode (скрипты инжеста)
 __pycache__/
 *.pyc
+scripts/telegram-posts/state.json
+.env.vk.local.env
