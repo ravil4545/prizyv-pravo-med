@@ -120,8 +120,8 @@ const AIChatDashboardPage = () => {
   useEffect(() => {
     if (!user || isDemoMode) { setLinkedCard(null); return; }
     let cancelled = false;
-    (async () => {
-      // Клиент видит свою карточку у юриста (RLS «Client views own lawyer entry»).
+    // Клиент видит свою карточку у юриста (RLS «Client views own lawyer entry»).
+    const loadCard = async () => {
       const { data } = await (supabase as any)
         .from("lawyer_clients")
         .select("id, escalation_requested, link_state")
@@ -133,8 +133,21 @@ const AIChatDashboardPage = () => {
       if (!cancelled) {
         setLinkedCard(data ? { id: data.id, escalation_requested: !!data.escalation_requested } : null);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    loadCard();
+
+    // Realtime: если юрист «взял в работу» (lawyer_clear_escalation сбросил
+    // escalation_requested), кнопка в чате обновляется без перезагрузки.
+    const channel = supabase
+      .channel(`aichat-linked-card:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `client_user_id=eq.${user.id}` },
+        () => { loadCard(); },
+      )
+      .subscribe();
+
+    return () => { cancelled = true; supabase.removeChannel(channel); };
   }, [user, isDemoMode]);
 
   // ── Проактивный триггер по дедлайну (Модуль 3) ──────────────────────────
@@ -219,6 +232,24 @@ const AIChatDashboardPage = () => {
         description: e?.message || "Попробуйте позже",
         variant: "destructive",
       });
+    } finally {
+      setEscalating(false);
+    }
+  };
+
+  // Отмена запроса к юристу (если клиент передумал до ответа).
+  const handleCancelEscalation = async () => {
+    if (!linkedCard) return;
+    setEscalating(true);
+    try {
+      const { error } = await (supabase as any).rpc("client_cancel_escalation", {
+        p_lawyer_client_id: linkedCard.id,
+      });
+      if (error) throw error;
+      setLinkedCard({ ...linkedCard, escalation_requested: false });
+      toast({ title: "Запрос отменён", description: "Вы можете передать дело юристу позже." });
+    } catch (e: any) {
+      toast({ title: "Не удалось отменить", description: e?.message || "Попробуйте позже", variant: "destructive" });
     } finally {
       setEscalating(false);
     }
@@ -876,26 +907,39 @@ const AIChatDashboardPage = () => {
               <span className="sm:hidden">Назад</span>
             </Button>
             {!isDemoMode && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleEscalate}
-                disabled={escalating || !!linkedCard?.escalation_requested}
-                className="ml-auto text-xs sm:text-sm"
-                title="Платная услуга: консультация и сопровождение юриста — от 9 000 ₽"
-              >
-                {escalating ? (
-                  <Loader2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-                ) : (
-                  <UserPlus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <div className="ml-auto flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEscalate}
+                  disabled={escalating || !!linkedCard?.escalation_requested}
+                  className="text-xs sm:text-sm"
+                  title="Платная услуга: консультация и сопровождение юриста — от 9 000 ₽"
+                >
+                  {escalating ? (
+                    <Loader2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {linkedCard?.escalation_requested ? "Юрист уведомлён · ответ за ~4–24 ч" : "Юрист — от 9 000 ₽"}
+                  </span>
+                  <span className="sm:hidden">
+                    {linkedCard?.escalation_requested ? "Передано" : "Юрист ₽"}
+                  </span>
+                </Button>
+                {linkedCard?.escalation_requested && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelEscalation}
+                    disabled={escalating}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Отменить
+                  </Button>
                 )}
-                <span className="hidden sm:inline">
-                  {linkedCard?.escalation_requested ? "Юрист уведомлён" : "Юрист — от 9 000 ₽"}
-                </span>
-                <span className="sm:hidden">
-                  {linkedCard?.escalation_requested ? "Передано" : "Юрист ₽"}
-                </span>
-              </Button>
+              </div>
             )}
             {isMobile && isDemoMode && (
               <Button

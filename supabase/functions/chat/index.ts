@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { llmChat, MODEL_MAIN, isLlmConfigured, humanizeLlmError } from "../_shared/llmGateway.ts";
 import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 
 // CORS configuration - allow production and preview origins
@@ -316,14 +316,10 @@ ${renderChunks(chunks, 1100)}`;
 
     if (!content) {
       console.error("[Chat] Failed. Last:", lastStatus, lastErrorText);
-      const errorMsg =
-        lastStatus === 429
-          ? "Превышен лимит запросов к ИИ. Попробуйте через 1–2 минуты."
-          : lastStatus === 401 || lastStatus === 403
-            ? "Сервис ИИ требует обновить API-ключ. Сообщите администратору."
-            : lastStatus === 402
-              ? "Требуется пополнение баланса AI Gateway. Сообщите администратору."
-              : `Сервис ИИ временно недоступен (ошибка: ${lastStatus || lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
+      // Единая формулировка из шлюза (lastStatus=0 → таймаут/сеть).
+      const errorMsg = lastStatus
+        ? humanizeLlmError(lastStatus)
+        : `Сервис ИИ временно недоступен (${lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: lastStatus === 429 ? 429 : 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

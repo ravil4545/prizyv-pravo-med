@@ -3,8 +3,8 @@ import {
   Home,
   CalendarClock,
   MessageSquare,
+  MessagesSquare,
   FileHeart,
-  Briefcase,
   User,
   Calendar,
   ClipboardList,
@@ -45,7 +45,7 @@ export const PRIMARY_NAV: CabinetNavItem[] = [
 
 /** Вторичные: доступны, но не доминируют — в сайдбаре ниже разделителя и в «Ещё». */
 export const SECONDARY_NAV: CabinetNavItem[] = [
-  { label: "Чат с юристом", to: "/client/messages", icon: Briefcase, messagesBadge: true },
+  { label: "Чат с юристом", to: "/client/messages", icon: MessagesSquare, messagesBadge: true },
   { label: "Профиль и подписка", to: "/profile", icon: User },
   { label: "Мой календарь", to: "/dashboard/calendar", icon: Calendar },
   { label: "Опросник для ИИ", to: "/medical-questionnaire", icon: ClipboardList },

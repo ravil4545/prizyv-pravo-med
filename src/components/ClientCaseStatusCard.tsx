@@ -3,8 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { getStageDef, getStageIndex, CRM_STAGE_ORDER } from "@/lib/crmStages";
 import { Scale, AlertCircle } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
 
 /**
  * Статус дела ГЛАЗАМИ КЛИЕНТА (Этап 2 / A2).
@@ -18,16 +22,34 @@ import { Scale, AlertCircle } from "lucide-react";
  */
 const ClientCaseStatusCard = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [row, setRow] = useState<any | null>(null);
   const [lawyerName, setLawyerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancelEscalation = async () => {
+    if (!row?.id) return;
+    setCancelling(true);
+    const { error } = await (supabase as any).rpc("client_cancel_escalation", {
+      p_lawyer_client_id: row.id,
+    });
+    setCancelling(false);
+    if (error) {
+      toast({ title: "Не удалось отменить", description: error.message, variant: "destructive" });
+      return;
+    }
+    setRow({ ...row, escalation_requested: false });
+    toast({ title: "Запрос отменён" });
+  };
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
     let cancelled = false;
-    (async () => {
-      // select("*") — устойчиво к порядку деплоя: если миграция с
-      // escalation_requested ещё не применена, поле просто будет undefined.
+
+    // select("*") — устойчиво к порядку деплоя: если миграция с
+    // escalation_requested ещё не применена, поле просто будет undefined.
+    const loadData = async () => {
       const { data } = await (supabase as any)
         .from("lawyer_clients")
         .select("*")
@@ -47,8 +69,22 @@ const ClientCaseStatusCard = () => {
         if (!cancelled) setLawyerName(lp?.full_name || null);
       }
       if (!cancelled) setLoading(false);
-    })();
-    return () => { cancelled = true; };
+    };
+
+    loadData();
+
+    // Realtime: клиент видит смену этапа (crm_stage) и принятие эскалации
+    // юристом без перезагрузки. lawyer_clients уже в supabase_realtime.
+    const channel = supabase
+      .channel(`client-case-status:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lawyer_clients", filter: `client_user_id=eq.${user.id}` },
+        () => { loadData(); },
+      )
+      .subscribe();
+
+    return () => { cancelled = true; supabase.removeChannel(channel); };
   }, [user]);
 
   if (loading || !row) return null;
@@ -98,11 +134,28 @@ const ClientCaseStatusCard = () => {
         )}
 
         {row.escalation_requested && (
-          <div className="flex items-start gap-2 text-sm rounded-md bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 p-2">
-            <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
-            <span className="text-rose-700 dark:text-rose-300">
-              Вы запросили подключение живого юриста — ожидайте, он свяжется с вами в чате.
-            </span>
+          <div className="space-y-2 text-sm rounded-md bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 p-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div className="text-rose-700 dark:text-rose-300">
+                <p>
+                  Запрос юристу отправлен
+                  {row.escalated_at ? ` ${formatDistanceToNow(new Date(row.escalated_at), { addSuffix: true, locale: ru })}` : ""}.
+                </p>
+                <p className="text-xs mt-0.5 opacity-90">
+                  Юрист ответит в течение рабочего дня (≈ 4–24 часа) — ответ придёт в чате.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/40"
+              disabled={cancelling}
+              onClick={handleCancelEscalation}
+            >
+              {cancelling ? "Отмена…" : "Отменить запрос"}
+            </Button>
           </div>
         )}
       </CardContent>

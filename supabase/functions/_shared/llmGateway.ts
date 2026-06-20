@@ -25,6 +25,31 @@ export const MODEL_FAST = Deno.env.get("OPENAI_MODEL_FAST") || "gpt-4.1-nano";
 
 export const isLlmConfigured = (): boolean => !!OPENAI_API_KEY;
 
+/**
+ * Понятное пользователю сообщение об ошибке LLM по HTTP-статусу.
+ * Единая формулировка для всех функций — чтобы вместо «non-2xx status code»
+ * клиент видел причину (лимит/недоступность/конфигурация).
+ *
+ * Использование в edge-функции при non-ok ответе:
+ *   return new Response(JSON.stringify({ error: humanizeLlmError(res.status) }),
+ *     { status: res.status === 429 ? 429 : 503, headers: { ...cors, ... } });
+ */
+export function humanizeLlmError(status: number): string {
+  if (status === 429) {
+    return "Сейчас слишком много запросов к ИИ — лимит на минуту исчерпан. Подождите 1–2 минуты и попробуйте снова.";
+  }
+  if (status === 401 || status === 403) {
+    return "Доступ к ИИ-сервису не настроен. Сообщите администратору.";
+  }
+  if (status === 402) {
+    return "Исчерпан баланс ИИ-сервиса. Сообщите администратору.";
+  }
+  if (status >= 500) {
+    return "ИИ-сервис временно недоступен. Попробуйте через 1–2 минуты.";
+  }
+  return `Ошибка ИИ-сервиса (${status}). Попробуйте позже.`;
+}
+
 // reasoning-модели (gpt-5*, o1/o3/o4…) не принимают кастомную temperature.
 const isReasoningModel = (model: string): boolean => /^(gpt-5|o\d)/i.test(model);
 

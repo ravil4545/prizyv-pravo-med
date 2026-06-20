@@ -282,122 +282,98 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* ── Инбокс уведомлений — сперва то, что требует внимания ───── */}
-          {!isDemoMode && (
-            <div className="mb-5">
-              <NotificationsInbox />
+          {/* ════ ЗОНА 1: МОЁ ДЕЛО — статус, план, события (ядро, всегда видно) ═══ */}
+          <div className="mb-8 space-y-5">
+            <div className="flex items-center gap-2">
+              <span className="section-number">Моё дело</span>
+              <span className="flex-1 h-px bg-border/50" />
             </div>
-          )}
 
-          {/* ── План дела — «что делать дальше» ────────────────────────── */}
-          <div className="mb-5">
+            {!isDemoMode && <NotificationsInbox />}
             <CasePlanCard />
+            {!isDemoMode && !isLawyer && <ClientCaseStatusCard />}
+            {!isDemoMode && <AICaseSummary />}
+            {!isDemoMode && <CaseRoadmap />}
           </div>
 
-          {/* ── Пробный период — таймер обратного отсчёта ──────────────── */}
-          {!isDemoMode && (
-            <div className="mb-5">
-              <TrialCountdownCard />
-            </div>
-          )}
+          {/* ════ ЗОНА 2: ПОДПИСКА И ДОСТУП ════════════════════════════════════ */}
+          <Collapsible defaultOpen className="mb-8">
+            <CollapsibleTrigger className="group/sec flex w-full items-center gap-2 mb-3">
+              <span className="section-number">Подписка и доступ</span>
+              <span className="flex-1 h-px bg-border/50" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]/sec:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-5">
+              <SubscriptionStatusCard />
+              {!isDemoMode && <TrialCountdownCard />}
+            </CollapsibleContent>
+          </Collapsible>
 
-          {/* ── AI-сводка по делу — главный блок ───────────────────────── */}
-          {!isDemoMode && (
-            <div className="mb-5">
-              <AICaseSummary />
-            </div>
-          )}
-
-          {/* ── Роадмап (компактнее, после сводки) ─────────────────────── */}
-          {!isDemoMode && (
-            <div className="mb-6">
-              <CaseRoadmap />
-            </div>
-          )}
-
-          {/* ── Статус дела у юриста глазами клиента (этап + эскалация) ──── */}
+          {/* ════ ЗОНА 3: ЮРИСТЫ — запросы, доступ к данным, чат, каталог ═══════
+              Единый блок вместо трёх разрозненных мест. Дочерние компоненты сами
+              рендерят null, когда у клиента нет запросов/подключённых юристов. */}
           {!isDemoMode && !isLawyer && (
-            <div className="mb-6">
-              <ClientCaseStatusCard />
-            </div>
-          )}
-
-          {/* ── Подписка (рядом со статусом дела) ──────────────────────── */}
-          <div className="mb-6">
-            <SubscriptionStatusCard />
-          </div>
-
-          {/* ── Запросы от юристов (одна кнопка «Принять») ──────────────── */}
-          {!isDemoMode && !isLawyer && (
-            <div className="mb-6">
-              <ClientLawyerRequests />
-            </div>
-          )}
-
-          {/* Подключение к юристу — client-initiated: клиент находит юриста в
-              каталоге /lawyers (или по ссылке юриста) и включает доступ тумблером.
-              Кодов/индивидуальных номеров больше нет. */}
-
-          {/* ── Мои юристы: тумблер доступа к данным + визитка ──────────────
-              Показывается только если у клиента уже есть юристы (иначе компонент
-              рендерит null). Подключение к новому юристу — в каталоге /lawyers. */}
-          {!isDemoMode && !isLawyer && (
-            <ShareWithLawyer />
-          )}
-
-          {/* ── Юристы (без дубля «Кабинет юриста» из футера) ──────────── */}
-          {!isDemoMode && !isLawyer && (
-            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div
-                onClick={() => navigate("/lawyers")}
-                className="cursor-pointer rounded-xl border border-gold/40 bg-gradient-to-br from-gold/5 to-paper-deep/20 px-4 py-3.5 flex items-center gap-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-gold group"
-              >
-                <div className="flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center bg-gold/15 text-gold-deep group-hover:bg-gold/25 transition-colors">
-                  <Search className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-foreground">Найти юриста</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    Каталог · защищённый чат до договора
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/50 group-hover:text-gold-deep transition-colors" />
+            <div className="mb-8 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="section-number">Юристы</span>
+                <span className="flex-1 h-px bg-border/50" />
               </div>
 
-              <div
-                onClick={() => navigate(cabinetPath("/client/messages"))}
-                className={cn(
-                  "cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
-                  "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
-                  unreadCount > 0
-                    ? "border-seal/40 bg-seal/5"
-                    : "border-border bg-muted/20 hover:bg-muted/40",
-                )}
-              >
-                <div className={cn(
-                  "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
-                  unreadCount > 0
-                    ? "bg-seal text-paper shadow-sm"
-                    : "bg-muted text-muted-foreground group-hover:bg-gold/15 group-hover:text-gold-deep transition-colors",
-                )}>
-                  <Briefcase className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 bg-seal text-paper text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-pulse">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
+              <ClientLawyerRequests />
+              <ShareWithLawyer />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div
+                  onClick={() => navigate("/lawyers")}
+                  className="cursor-pointer rounded-xl border border-gold/40 bg-gradient-to-br from-gold/5 to-paper-deep/20 px-4 py-3.5 flex items-center gap-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-gold group"
+                >
+                  <div className="flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center bg-gold/15 text-gold-deep group-hover:bg-gold/25 transition-colors">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-foreground">Найти юриста</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      Каталог · защищённый чат до договора
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/50 group-hover:text-gold-deep transition-colors" />
+                </div>
+
+                <div
+                  onClick={() => navigate(cabinetPath("/client/messages"))}
+                  className={cn(
+                    "cursor-pointer rounded-xl border px-4 py-3.5 flex items-center gap-3.5",
+                    "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group",
+                    unreadCount > 0
+                      ? "border-seal/40 bg-seal/5"
+                      : "border-border bg-muted/20 hover:bg-muted/40",
                   )}
+                >
+                  <div className={cn(
+                    "relative flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center",
+                    unreadCount > 0
+                      ? "bg-seal text-paper shadow-sm"
+                      : "bg-muted text-muted-foreground group-hover:bg-gold/15 group-hover:text-gold-deep transition-colors",
+                  )}>
+                    <MessageSquare className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 bg-seal text-paper text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-pulse">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-seal" : "text-foreground")}>
+                      Мои чаты с юристами
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {unreadCount > 0
+                        ? "Юрист написал — нажмите, чтобы ответить"
+                        : "История переписки"}
+                    </p>
+                  </div>
+                  <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-seal" : "text-muted-foreground/50 group-hover:text-gold-deep")} />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className={cn("font-semibold text-sm", unreadCount > 0 ? "text-seal" : "text-foreground")}>
-                    Мои чаты с юристами
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {unreadCount > 0
-                      ? "Юрист написал — нажмите, чтобы ответить"
-                      : "История переписки"}
-                  </p>
-                </div>
-                <ChevronRight className={cn("h-4 w-4 flex-shrink-0 transition-colors", unreadCount > 0 ? "text-seal" : "text-muted-foreground/50 group-hover:text-gold-deep")} />
               </div>
             </div>
           )}

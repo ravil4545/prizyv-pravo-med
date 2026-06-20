@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCircle2, Sparkles } from "lucide-react";
+import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCircle2, Sparkles, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { registerCyrillicFont } from "@/lib/cyrillicPdfFont";
@@ -198,6 +198,9 @@ export default function MedicalQuestionnairePage() {
   // подгружаем при входе. Если задан — сохранение ОБНОВЛЯЕТ запись, а не плодит новую.
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  // Автосейв черновика в localStorage: ответы не теряются при закрытии вкладки.
+  const [draftRestored, setDraftRestored] = useState(false);
+  const draftKey = (userId: string) => `questionnaire_draft_${userId}`;
 
   useEffect(() => {
     checkUser();
@@ -211,8 +214,30 @@ export default function MedicalQuestionnairePage() {
       return;
     }
     setUser(session.user);
-    await loadExistingQuestionnaire(session.user.id);
+    const hadDoc = await loadExistingQuestionnaire(session.user.id);
+    restoreDraft(session.user.id, hadDoc);
     setLoading(false);
+  };
+
+  // Восстановление локального черновика: заполняем ТОЛЬКО пустые поля, чтобы не
+  // затирать ответы, подтянутые из сохранённого опросника (БД — главнее).
+  const restoreDraft = (userId: string, hadDbDoc: boolean) => {
+    try {
+      const raw = localStorage.getItem(draftKey(userId));
+      if (!raw) return;
+      const draft = (JSON.parse(raw) as { answers?: Record<string, string> })?.answers;
+      if (!draft || typeof draft !== "object") return;
+      const entries = Object.entries(draft).filter(([, v]) => typeof v === "string" && v.trim());
+      if (!entries.length) return;
+      setAnswers((prev) => {
+        const next = { ...prev };
+        for (const [k, v] of entries) if (!next[k]?.trim()) next[k] = v;
+        return next;
+      });
+      if (!hadDbDoc) setDraftRestored(true);
+    } catch {
+      /* localStorage недоступен/переполнен — молча игнорируем */
+    }
   };
 
   // Парсер ответов из raw_text (для старых опросников без meta.answers).
@@ -258,7 +283,7 @@ export default function MedicalQuestionnairePage() {
     const q = (data || []).find(
       (d: any) => (d.meta as Record<string, unknown> | null)?.is_questionnaire === true,
     );
-    if (!q) return;
+    if (!q) return false;
     let loaded: Record<string, string> = {};
     const metaAnswers = (q.meta as Record<string, any> | null)?.answers;
     if (metaAnswers && typeof metaAnswers === "object") {
@@ -277,10 +302,22 @@ export default function MedicalQuestionnairePage() {
       });
       if (filledSections.size > 0) setExpandedSections(filledSections);
     }
+    return Object.keys(loaded).length > 0;
   };
 
   const setAnswer = (questionId: string, value: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+    setAnswers((prev) => {
+      const updated = { ...prev, [questionId]: value };
+      // Автосейв: пишем черновик в localStorage на каждое изменение.
+      if (user) {
+        try {
+          localStorage.setItem(draftKey(user.id), JSON.stringify({ answers: updated, ts: Date.now() }));
+        } catch {
+          /* переполнение/недоступность localStorage — не критично */
+        }
+      }
+      return updated;
+    });
   };
 
   const toggleSection = (sectionId: string) => {
@@ -448,6 +485,12 @@ export default function MedicalQuestionnairePage() {
         setEditingDocId(docId);
       }
 
+      // Опросник сохранён в БД — локальный черновик больше не нужен.
+      if (user) {
+        try { localStorage.removeItem(draftKey(user.id)); } catch { /* noop */ }
+      }
+      setDraftRestored(false);
+
       // 4. Скачиваем для пользователя ОБА файла: PDF (локально из jsPDF —
       //    он уже с кириллицей) и DOCX (с бэка, Word-шрифт кириллицу держит).
       try {
@@ -552,6 +595,13 @@ export default function MedicalQuestionnairePage() {
                 Редактируется ранее заполненный опросник{editingDate ? ` от ${editingDate}` : ""} — изменения обновят его, а не создадут новый.
               </p>
             )}
+            {draftRestored && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                Восстановлен черновик из памяти браузера.
+              </p>
+            )}
+            <p className="text-[11px] text-muted-foreground mt-1">Черновик сохраняется автоматически в этом браузере.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")}>

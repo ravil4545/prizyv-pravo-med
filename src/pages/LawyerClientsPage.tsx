@@ -15,10 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Users, Plus, Search, MessageSquare, ChevronRight,
   Phone, Calendar, AlertTriangle, Crown, Filter,
   LayoutList, KanbanSquare, BookOpen, Ticket, ShieldCheck, ShieldOff, Share2,
+  Hourglass, XCircle,
 } from "lucide-react";
 import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { CRM_STAGES, CRM_STAGE_BADGE_CLASS } from "@/lib/crmStages";
@@ -325,7 +327,15 @@ const LawyerClientsPage = () => {
       return;
     }
     const newLabel = CRM_STAGES.find((s) => s.value === newStage)?.label || newStage;
-    toast({ title: `${client.client_name} → ${newLabel}` });
+    const oldStage = client.crm_stage;
+    toast({
+      title: `${client.client_name} → ${newLabel}`,
+      action: (
+        <ToastAction altText="Отменить перемещение" onClick={() => moveClientToStage(clientId, oldStage)}>
+          Отменить
+        </ToastAction>
+      ),
+    });
   };
 
   const handleDragStart = (e: React.DragEvent, clientId: string) => {
@@ -411,69 +421,49 @@ const LawyerClientsPage = () => {
   // легко добавить новые состояния (если в БД появится ещё одно значение
   // link_state, достаточно поправить эту функцию).
   // Возвращает null, если бейдж не нужен (linked_active по умолчанию).
+  // Свёрнуто до 3 визуальных вёдер: Активен (бейдж не нужен) / Ждёт клиента /
+  // Закрыт. Точный из 8 link_state — в tooltip, чтобы не плодить разноцветные
+  // бейджи на карточке.
   const renderLinkBadge = (c: LawyerClient, compact = false) => {
     const cls = compact ? "text-[10px] px-1 py-0 gap-0.5" : "text-[10px] gap-1";
+    const iconCls = compact ? "h-2.5 w-2.5" : "h-3 w-3";
     // Fallback на client_user_id, если link_state ещё не заполнен (старые записи)
     const state = c.link_state || (c.client_user_id ? "linked_active" : "code_sent");
-    switch (state) {
-      case "pending_client_approval":
-        return (
-          <Badge variant="outline" className={`${cls} border-blue-400 text-blue-700 dark:text-blue-300`}
-            title="Запрос отправлен — ждём подтверждения от клиента в его кабинете">
-            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
-            {compact ? "Ждём" : "Ожидает подтверждения"}
-          </Badge>
-        );
-      case "code_sent":
-        return (
-          <Badge variant="outline" className={`${cls} border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50`}
-            onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
-            title="Клиент ещё не ввёл код приглашения — кликните, чтобы открыть код">
-            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
-            {compact ? "Код" : "Код не использован"}
-          </Badge>
-        );
-      case "unlinked":
-        return (
-          <Badge variant="outline" className={`${cls} border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50`}
-            onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
-            title="Карточка есть в CRM, но кабинет клиента ещё не привязан. Откройте карточку и отправьте код приглашения.">
-            <Ticket className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
-            {compact ? "Без связи" : "Кабинет не привязан"}
-          </Badge>
-        );
-      case "declined":
-        return (
-          <Badge variant="outline" className={`${cls} border-rose-400 text-rose-700 dark:text-rose-300`}
-            title="Клиент отклонил запрос на подключение">
-            {compact ? "✕" : "Отклонил запрос"}
-          </Badge>
-        );
-      case "unlinked_by_client":
-        return (
-          <Badge variant="outline" className={`${cls} text-muted-foreground`}
-            title="Клиент сам отвязался — историю дела вы видите, новые документы — нет">
-            Клиент ушёл
-          </Badge>
-        );
-      case "unlinked_by_lawyer":
-        return (
-          <Badge variant="outline" className={`${cls} text-muted-foreground`}
-            title="Вы отвязали клиента — можно пригласить снова через новый код">
-            Отвязан
-          </Badge>
-        );
-      case "archived":
-        return (
-          <Badge variant="outline" className={`${cls} text-muted-foreground/60`}
-            title="Карточка в архиве — не отображается в активных делах">
-            Архив
-          </Badge>
-        );
-      case "linked_active":
-      default:
-        return null;
+
+    if (state === "linked_active") return null; // активен — норма, бейдж не нужен
+
+    const detail: Record<string, string> = {
+      pending_client_approval: "Запрос отправлен — ждём подтверждения клиента в его кабинете.",
+      code_sent: "Клиент ещё не ввёл код приглашения — откройте карточку, чтобы показать код.",
+      unlinked: "Карточка есть в CRM, но кабинет клиента ещё не привязан — отправьте ссылку подключения.",
+      declined: "Клиент отклонил запрос на подключение.",
+      unlinked_by_client: "Клиент сам отвязался — историю дела вы видите, новые документы — нет.",
+      unlinked_by_lawyer: "Вы отвязали клиента — можно пригласить снова.",
+      archived: "Карточка в архиве — не отображается в активных делах.",
+    };
+
+    const awaiting = state === "pending_client_approval" || state === "code_sent" || state === "unlinked";
+    if (awaiting) {
+      return (
+        <Badge
+          variant="outline"
+          className={`${cls} border-amber-400 text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50`}
+          onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/clients/${c.id}`); }}
+          title={detail[state] || "Ждёт действия клиента"}
+        >
+          <Hourglass className={iconCls} />
+          {compact ? "Ждёт" : "Ждёт клиента"}
+        </Badge>
+      );
     }
+
+    // closed: declined / unlinked_by_client / unlinked_by_lawyer / archived
+    return (
+      <Badge variant="outline" className={`${cls} text-muted-foreground`} title={detail[state] || "Связь закрыта"}>
+        <XCircle className={iconCls} />
+        Закрыт
+      </Badge>
+    );
   };
 
   // Дело «горит», если до даты призыва осталось ≤ 14 дней и дело ещё не выиграно.
@@ -756,14 +746,13 @@ const LawyerClientsPage = () => {
                           {c.escalation_requested && (
                             <Badge className="text-xs bg-rose-600 text-white border-rose-700">🔴 Просит юриста</Badge>
                           )}
-                          {isBurning(c) && (
+                          {isBurning(c) ? (
                             <Badge className="text-xs bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 border-red-300">
                               🔥 Горит
                             </Badge>
-                          )}
-                          {c.priority === "urgent" && <Badge variant="destructive" className="text-xs">Срочно</Badge>}
-                          {c.priority === "high" && <Badge variant="secondary" className="text-xs">Высокий</Badge>}
-                          {c.case_won && <Badge className="text-xs bg-green-100 text-green-700">✓ ВБ получен</Badge>}
+                          ) : c.priority === "urgent" ? (
+                            <Badge variant="destructive" className="text-xs">Срочно</Badge>
+                          ) : null}
                           {renderLinkBadge(c)}
                           {c.client_user_id && (
                             docAccessByClient[c.client_user_id] ? (
@@ -774,10 +763,23 @@ const LawyerClientsPage = () => {
                             ) : (
                               <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                 <ShieldOff className="h-3 w-3" />
-                                Нет доступа к досье
+                                Нет досье
                               </Badge>
                             )
                           )}
+                          {(() => {
+                            const extras: string[] = [];
+                            if (c.priority === "high") extras.push("Высокий приоритет");
+                            if (c.case_won) extras.push("Военный билет получен");
+                            return extras.length ? (
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
+                                title={extras.join(" · ")}
+                              >
+                                +{extras.length}
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
                           {c.client_phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.client_phone}</span>}
@@ -847,7 +849,7 @@ const LawyerClientsPage = () => {
                         onDragOver={(e) => handleStageDragOver(e, stage.value)}
                         onDragLeave={() => setDragOverStage((s) => (s === stage.value ? null : s))}
                         onDrop={(e) => handleStageDrop(e, stage.value)}
-                        className={`flex-shrink-0 w-[80vw] sm:w-64 snap-start rounded-lg border transition-colors ${
+                        className={`flex-shrink-0 w-[88vw] sm:w-72 snap-start rounded-lg border transition-colors ${
                           isDropTarget ? "border-primary bg-primary/5" : "border-border bg-muted/30"
                         }`}
                       >
@@ -886,8 +888,14 @@ const LawyerClientsPage = () => {
                                   <div className="flex flex-wrap gap-1">
                                     {c.escalation_requested && <Badge className="text-[10px] px-1 py-0 bg-rose-600 text-white border-rose-700">🔴 Юрист</Badge>}
                                     {c.priority === "urgent" && <Badge variant="destructive" className="text-[10px] px-1 py-0">Срочно</Badge>}
-                                    {c.priority === "high" && <Badge variant="secondary" className="text-[10px] px-1 py-0">Высокий</Badge>}
-                                    {c.case_won && <Badge className="text-[10px] px-1 py-0 bg-green-100 text-green-700">ВБ</Badge>}
+                                    {(() => {
+                                      const extras: string[] = [];
+                                      if (c.priority === "high") extras.push("Высокий приоритет");
+                                      if (c.case_won) extras.push("Военный билет получен");
+                                      return extras.length ? (
+                                        <span className="text-[10px] px-1 py-0 rounded-full bg-muted text-muted-foreground" title={extras.join(" · ")}>+{extras.length}</span>
+                                      ) : null;
+                                    })()}
                                     {renderLinkBadge(c, true)}
                                     {c.client_user_id && (
                                       <Badge variant="outline" className={`text-[10px] px-1 py-0 gap-0.5 ${

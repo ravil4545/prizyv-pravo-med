@@ -18,6 +18,9 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import SummonsUploadDialog from "@/components/SummonsUploadDialog";
 import AppealGeneratorDialog from "@/components/AppealGeneratorDialog";
+import CaseTimeline from "@/components/CaseTimeline";
+import { eventTypeMeta } from "@/lib/caseEvents";
+import { getStageDef, getStageIndex, CRM_STAGE_ORDER } from "@/lib/crmStages";
 
 interface CaseEvent {
   id: string;
@@ -67,6 +70,7 @@ export default function CaseTrackingPage() {
   const [saving, setSaving] = useState(false);
   const [summonsDialogOpen, setSummonsDialogOpen] = useState(false);
   const [appealForEvent, setAppealForEvent] = useState<CaseEvent | null>(null);
+  const [stageInfo, setStageInfo] = useState<{ label: string; pct: number; icon: any } | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -90,6 +94,25 @@ export default function CaseTrackingPage() {
     }
     setUser(session.user);
     loadEvents(session.user.id);
+    loadStage(session.user.id);
+  };
+
+  // Текущая стадия дела глазами клиента — мост между событиями и CRM-этапом
+  // юриста (crm_stage). Клиент читает свою строку lawyer_clients по RLS.
+  const loadStage = async (userId: string) => {
+    const { data } = await (supabase as any)
+      .from("lawyer_clients")
+      .select("crm_stage, link_state")
+      .eq("client_user_id", userId)
+      .eq("link_state", "linked_active")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.crm_stage) { setStageInfo(null); return; }
+    const def = getStageDef(data.crm_stage);
+    const idx = getStageIndex(data.crm_stage);
+    const pct = idx >= 0 ? Math.round(((idx + 1) / CRM_STAGE_ORDER.length) * 100) : 0;
+    setStageInfo({ label: def?.label || data.crm_stage, pct, icon: def?.icon });
   };
 
   const loadEvents = async (userId: string) => {
@@ -154,6 +177,8 @@ export default function CaseTrackingPage() {
     );
   }
 
+  const StageIcon = stageInfo?.icon as React.ElementType | undefined;
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -187,6 +212,24 @@ export default function CaseTrackingPage() {
             </div>
           </div>
 
+          {stageInfo && (
+            <Card className="mb-5 border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  {StageIcon && <StageIcon className="h-4 w-4 text-primary" />}
+                  <span className="text-sm font-medium text-foreground">Текущий этап: {stageInfo.label}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">{stageInfo.pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${stageInfo.pct}%` }} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Этап ведёт ваш юрист. Ниже — события вашего дела.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {events.length === 0 ? (
             <Card className="text-center py-16">
               <CardContent>
@@ -199,69 +242,49 @@ export default function CaseTrackingPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border/60 hidden sm:block" />
-
-              <div className="space-y-4">
-                {events.map((ev, idx) => {
-                  const typeLabel = EVENT_TYPES.find(t => t.value === ev.event_type)?.label || ev.event_type;
-                  const outcomeLabel = OUTCOMES.find(o => o.value === ev.outcome)?.label;
-                  return (
-                    <div key={ev.id} className="flex gap-4 sm:gap-6 relative">
-                      {/* Dot */}
-                      <div className="hidden sm:flex items-start pt-4">
-                        <div className="w-3 h-3 rounded-full bg-primary border-2 border-background ring-2 ring-primary/30 z-10" />
-                      </div>
-
-                      <Card className="flex-1 hover:shadow-soft transition-shadow">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <span className="text-xs text-muted-foreground font-medium">
-                                  {format(new Date(ev.event_date), "d MMMM yyyy", { locale: ru })}
-                                </span>
-                                <Badge variant="outline" className="text-xs">{typeLabel}</Badge>
-                                {ev.outcome && (
-                                  <Badge variant="outline" className={`text-xs flex items-center gap-1 ${outcomeBadge(ev.outcome)}`}>
-                                    {outcomeIcon(ev.outcome)}
-                                    {outcomeLabel}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="font-semibold text-foreground">{ev.title}</p>
-                              {ev.description && (
-                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{ev.description}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {ev.outcome === "negative" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 gap-1.5 text-xs border-gold/40 hover:bg-gold/5"
-                                  onClick={() => setAppealForEvent(ev)}
-                                >
-                                  <FileSignature className="h-3.5 w-3.5 text-gold-deep" />
-                                  <span className="hidden sm:inline">Жалоба</span>
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(ev)}>
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => deleteEvent(ev.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+            <CaseTimeline
+              items={events.map((ev) => {
+                const meta = eventTypeMeta(ev.event_type);
+                const outcomeLabel = OUTCOMES.find((o) => o.value === ev.outcome)?.label;
+                return {
+                  id: ev.id,
+                  date: ev.event_date,
+                  title: ev.title,
+                  description: ev.description,
+                  icon: meta.icon,
+                  dotClass: meta.dot,
+                  typeLabel: meta.label,
+                  badgeClass: meta.badgeClass,
+                  rightSlot: (
+                    <div className="flex items-center gap-1">
+                      {ev.outcome && (
+                        <Badge variant="outline" className={`text-[10px] flex items-center gap-1 ${outcomeBadge(ev.outcome)}`}>
+                          {outcomeIcon(ev.outcome)}
+                          <span className="hidden sm:inline">{outcomeLabel}</span>
+                        </Badge>
+                      )}
+                      {ev.outcome === "negative" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs border-gold/40 hover:bg-gold/5"
+                          onClick={() => setAppealForEvent(ev)}
+                        >
+                          <FileSignature className="h-3.5 w-3.5 text-gold-deep" />
+                          <span className="hidden sm:inline">Жалоба</span>
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(ev)}>
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => deleteEvent(ev.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  ),
+                };
+              })}
+            />
           )}
         </div>
       </main>

@@ -2,8 +2,17 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles } from "lucide-react";
+import { Check, Crown, Sparkles, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+
+// URL счёта YooMoney для тарифа Lawyer Pro. Пусто по умолчанию.
+// TODO(владелец): создать счёт в ЮKassa/ЮMoney (как клиентский 990 ₽/мес в
+// PaymentInstructionsDialog) и вставить сюда ссылку — тогда включится онлайн-
+// оплата картой. Пока пусто — диалог использует обращение по почте.
+// Подтверждение оплаты ручное: владелец/админ ставит lawyer_profiles
+// .subscription_tier='pro' в /admin/users (метка платежа — label=lawyer-uid:<id>).
+const LAWYER_PRO_PAYMENT_URL: string = "";
 
 interface LawyerUpgradeDialogProps {
   open: boolean;
@@ -50,9 +59,24 @@ const TIERS = [
 const LawyerUpgradeDialog = ({ open, onOpenChange, currentTier = "basic" }: LawyerUpgradeDialogProps) => {
   const [cycle, setCycle] = useState<"month" | "year">("month");
 
-  // Контакт-флоу: подписка оформляется через менеджера (нет онлайн-Stripe для юристов).
-  // Открываем заранее заполненное обращение в Telegram / письмо.
-  const startUpgrade = () => {
+  // Онлайн-оплата картой (если настроен счёт) ИЛИ обращение по почте (fallback).
+  const startUpgrade = async () => {
+    if (LAWYER_PRO_PAYMENT_URL) {
+      let url = LAWYER_PRO_PAYMENT_URL;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (uid) {
+          const sep = url.includes("?") ? "&" : "?";
+          url = `${url}${sep}label=${encodeURIComponent(`lawyer-uid:${uid}`)}`;
+        }
+      } catch {
+        /* без сессии — откроем счёт без метки */
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // Fallback: счёт для юриста ещё не подключён онлайн — оформляем через почту.
     const subject = encodeURIComponent("Оформление тарифа Lawyer Pro");
     const body = encodeURIComponent(
       `Здравствуйте! Хочу оформить тариф Lawyer Pro на сайте nepriziv.ru.\nЦикл оплаты: ${cycle === "month" ? "помесячно" : "годовой"}.`,
@@ -149,6 +173,7 @@ const LawyerUpgradeDialog = ({ open, onOpenChange, currentTier = "basic" }: Lawy
                     )}
                     onClick={startUpgrade}
                   >
+                    {LAWYER_PRO_PAYMENT_URL && <CreditCard className="h-4 w-4 mr-1.5" />}
                     {tier.cta}
                   </Button>
                 )}

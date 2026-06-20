@@ -42,8 +42,7 @@ import { CRM_STAGES } from "@/lib/crmStages";
 import LawyerUpgradeDialog from "@/components/LawyerUpgradeDialog";
 import LawyerDossierExportButton from "@/components/LawyerDossierExportButton";
 import LawyerShareLinkCard from "@/components/LawyerShareLinkCard";
-import LawyerCasePlanner from "@/components/LawyerCasePlanner";
-import LawyerCaseAssistant from "@/components/LawyerCaseAssistant";
+import LawyerCaseStrategyFlow from "@/components/LawyerCaseStrategyFlow";
 
 const stripMarkdown = (s: string) =>
   s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1")
@@ -103,6 +102,7 @@ const LawyerClientDetail = () => {
   const [hasDocAccess, setHasDocAccess] = useState(false);
 
   const [notes, setNotes] = useState<CaseNote[]>([]);
+  const [savingStage, setSavingStage] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
@@ -417,6 +417,22 @@ const LawyerClientDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.client_user_id, user?.id, clientId]);
 
+  // Realtime: лента дела (case_notes) — смена этапа, ИИ-анализ, ручные заметки
+  // обновляются без F5. Требует case_notes в supabase_realtime
+  // (миграция 20260527008000_realtime_case_data.sql).
+  useEffect(() => {
+    if (!clientId) return;
+    const channel = supabase.channel(`caseNotes-${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "case_notes", filter: `lawyer_client_id=eq.${clientId}` },
+        () => { loadNotes(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
   const handleSave = async () => {
     setSaving(true);
     const prevStage = client?.crm_stage;
@@ -451,6 +467,36 @@ const LawyerClientDetail = () => {
       toast({ title: "Сохранено" });
     }
     setSaving(false);
+  };
+
+  // «Мост» case_events ↔ crm_stage: смена этапа в один клик прямо из карточки.
+  // Сразу пишет в ленту дела (case_notes) и системным сообщением в чат —
+  // клиент видит прогресс без отдельного «Сохранить».
+  const quickSetStage = async (newStage: string) => {
+    if (!clientId || newStage === form.crm_stage) return;
+    setSavingStage(true);
+    const prevStage = form.crm_stage;
+    const { error } = await supabase.from("lawyer_clients").update({ crm_stage: newStage }).eq("id", clientId);
+    if (error) {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+      setSavingStage(false);
+      return;
+    }
+    setClient((prev) => ({ ...prev, crm_stage: newStage }));
+    setForm((f) => ({ ...f, crm_stage: newStage }));
+    const label = (v?: string) => CRM_STAGES.find((s) => s.value === v)?.label || v;
+    await supabase.from("case_notes").insert({
+      lawyer_client_id: clientId, author_id: user!.id,
+      content: `Этап изменён: ${label(prevStage)} → ${label(newStage)}`,
+      note_type: "stage_change",
+    });
+    await (supabase as any).from("lawyer_chat_messages").insert({
+      lawyer_client_id: clientId, sender_id: user!.id, message_type: "system",
+      content: `Этап дела изменён: ${label(prevStage)} → ${label(newStage)}`,
+    });
+    loadNotes();
+    toast({ title: "Этап обновлён", description: label(newStage) });
+    setSavingStage(false);
   };
 
   const handleMarkWon = async () => {
@@ -986,8 +1032,7 @@ const LawyerClientDetail = () => {
 
           {/* ── TAB: Strategy (планировщик A3 + ассистент дела) ──────────── */}
           <TabsContent value="strategy" className="space-y-4">
-            <LawyerCasePlanner lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
-            <LawyerCaseAssistant lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
+            <LawyerCaseStrategyFlow lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
           </TabsContent>
 
           {/* ── TAB: Overview ────────────────────────────────────────────── */}
@@ -1081,6 +1126,28 @@ const LawyerClientDetail = () => {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{CRM_STAGES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
                   </Select>
+                  {(() => {
+                    const i = CRM_STAGES.findIndex((s) => s.value === form.crm_stage);
+                    return (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <Button
+                          type="button" variant="outline" size="sm" className="h-8 gap-1"
+                          disabled={savingStage || i <= 0}
+                          onClick={() => i > 0 && quickSetStage(CRM_STAGES[i - 1].value)}
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5" /> Назад
+                        </Button>
+                        <Button
+                          type="button" size="sm" className="h-8 gap-1"
+                          disabled={savingStage || i < 0 || i >= CRM_STAGES.length - 1}
+                          onClick={() => i >= 0 && i < CRM_STAGES.length - 1 && quickSetStage(CRM_STAGES[i + 1].value)}
+                        >
+                          {savingStage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Следующий этап <ArrowRight className="h-3.5 w-3.5" /></>}
+                        </Button>
+                        <span className="text-[11px] text-muted-foreground">в один клик · клиент увидит в чате</span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div><Label>Диагноз</Label><Input value={form.diagnosis} onChange={(e) => setForm((f) => ({ ...f, diagnosis: e.target.value }))} /></div>
                 <div><Label>Ожидаемая категория</Label><Input value={form.expected_category} onChange={(e) => setForm((f) => ({ ...f, expected_category: e.target.value }))} /></div>

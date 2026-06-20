@@ -670,7 +670,7 @@ function DocsPicker({ docs, onInsert }: { docs: DocItem[]; onInsert: (listStr: s
       ) : (
         <div className="max-h-[60vh] overflow-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+            <thead className="sticky top-0 z-10 bg-muted">
               <tr className="text-left">
                 <th className="p-2"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Выбрать все" /></th>
                 <th className="p-2 font-medium">Документ</th>

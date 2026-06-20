@@ -107,7 +107,7 @@ serve(async (req) => {
       });
     }
 
-    const { imageBase64, images, documentId, userId, manualText, isHandwritten } = await req.json();
+    const { imageBase64, images, documentId, userId, manualText, isHandwritten, lawyerDocId } = await req.json();
 
     if (!OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not configured");
@@ -753,6 +753,49 @@ ${checklistText}`;
     if (primaryArticleNumber && articles) {
       const foundArticle = articles.find((a) => a.article_number === String(primaryArticleNumber));
       primaryArticleId = foundArticle?.id || null;
+    }
+
+    // ── Режим юриста: документ загружен юристом в карточку клиента
+    //    (lawyer_client_med_docs). Пишем результат туда и выходим — client-путь
+    //    (documentId + document_article_links) НЕ затрагиваем. Юрист может
+    //    анализировать ТОЛЬКО свои документы (IDOR-защита по lawyer_id). ──
+    if (lawyerDocId) {
+      const { data: lawyerDoc } = await supabase
+        .from("lawyer_client_med_docs")
+        .select("lawyer_id")
+        .eq("id", lawyerDocId)
+        .single();
+
+      if (!lawyerDoc || lawyerDoc.lawyer_id !== authData.user.id) {
+        return new Response(
+          JSON.stringify({ error: "Документ не найден или доступ запрещён" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const { error: lawyerUpdateError } = await supabase
+        .from("lawyer_client_med_docs")
+        .update({
+          raw_text: result.extractedText,
+          ai_fitness_category: result.fitnessCategory,
+          ai_category_chance: result.categoryBChance || 0,
+          ai_recommendations: result.recommendations || [],
+          ai_explanation: result.explanation,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", lawyerDocId);
+
+      if (lawyerUpdateError) {
+        console.error("Failed to update lawyer_client_med_docs:", lawyerUpdateError);
+        return new Response(
+          JSON.stringify({ error: "Не удалось сохранить результат анализа документа" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Обновляем документ в базе данных если есть documentId

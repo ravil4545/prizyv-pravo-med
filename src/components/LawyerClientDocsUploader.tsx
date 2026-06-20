@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  FileText, Brain, Trash2, Eye, AlertCircle,
+  FileText, Brain, Trash2, Eye, AlertCircle, Loader2,
 } from "lucide-react";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import { extractFnError } from "@/lib/edgeError";
 import DocumentUploadWizard, { type DocumentUploadResult } from "@/components/DocumentUploadWizard";
 
 interface LawyerClientDocsUploaderProps {
@@ -43,6 +44,7 @@ const LawyerClientDocsUploader = ({
   const { toast } = useToast();
   const [docs, setDocs] = useState<LawyerClientDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDocs();
@@ -111,12 +113,74 @@ const LawyerClientDocsUploader = ({
     toast({ title: "Документ удалён" });
   };
 
-  const runAi = async (doc: LawyerClientDoc) => {
-    toast({
-      title: "ИИ-анализ скоро",
-      description: "В ближайшем апдейте подключим OCR + сопоставление с Расписанием болезней для документов, загруженных юристом.",
+  // Рендер PDF в JPEG-страницы (vision-функция принимает изображения, не PDF).
+  // Переиспользуем тот же pdfjs, что и PdfViewer (worker /pdf.worker.min.mjs).
+  const renderPdfToImages = async (signedUrl: string, maxPages = 6): Promise<string[]> => {
+    const pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    const buf = await (await fetch(signedUrl)).arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    try {
+      const out: string[] = [];
+      const n = Math.min(pdf.numPages, maxPages);
+      for (let i = 1; i <= n; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Не удалось подготовить холст для рендера PDF");
+        await page.render({ canvasContext: context, viewport, canvas }).promise;
+        out.push(canvas.toDataURL("image/jpeg", 0.8));
+      }
+      return out;
+    } finally {
+      try { await pdf.destroy(); } catch { /* освобождение ресурсов pdfjs */ }
+    }
+  };
+
+  const fileToDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
     });
-    // TODO: edge-function «analyze-lawyer-doc» — отдельная задача
+
+  // ИИ-анализ документа, загруженного юристом: готовим страницы → отправляем
+  // в analyze-medical-document в режиме lawyer (пишет результат в
+  // lawyer_client_med_docs). Требует деплоя обновлённой edge-функции.
+  const runAi = async (doc: LawyerClientDoc) => {
+    setAnalyzingId(doc.id);
+    try {
+      const signedUrl = await getSignedDocumentUrl(doc.file_url);
+      if (!signedUrl) throw new Error("Не удалось получить файл документа");
+
+      const isPdf = (doc.file_url || "").toLowerCase().endsWith(".pdf");
+      let images: string[];
+      if (isPdf) {
+        images = await renderPdfToImages(signedUrl);
+      } else {
+        const blob = await (await fetch(signedUrl)).blob();
+        images = [await fileToDataUrl(blob)];
+      }
+      if (!images.length) throw new Error("Не удалось подготовить страницы документа");
+
+      const { error } = await supabase.functions.invoke("analyze-medical-document", {
+        body: { images, lawyerDocId: doc.id },
+      });
+      if (error) {
+        toast({ title: "Ошибка анализа", description: await extractFnError(error), variant: "destructive" });
+        return;
+      }
+      toast({ title: "Анализ завершён", description: "Категория и рекомендации сохранены в документе." });
+      loadDocs();
+    } catch (e: any) {
+      toast({ title: "Не удалось проанализировать", description: e?.message || "Попробуйте позже", variant: "destructive" });
+    } finally {
+      setAnalyzingId(null);
+    }
   };
 
   const openPreview = async (doc: LawyerClientDoc) => {
@@ -171,8 +235,8 @@ const LawyerClientDocsUploader = ({
                     <Button variant="outline" size="sm" onClick={() => openPreview(doc)} className="gap-1">
                       <Eye className="h-3.5 w-3.5" /> Открыть
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => runAi(doc)} className="gap-1">
-                      <Brain className="h-3.5 w-3.5" /> ИИ
+                    <Button variant="outline" size="sm" onClick={() => runAi(doc)} disabled={analyzingId === doc.id} className="gap-1">
+                      {analyzingId === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />} ИИ
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => deleteDoc(doc)} className="gap-1 text-destructive hover:text-destructive">
                       <Trash2 className="h-3.5 w-3.5" />
@@ -188,8 +252,8 @@ const LawyerClientDocsUploader = ({
       <div className="text-[11px] text-muted-foreground flex items-start gap-1.5">
         <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
         <span>
-          ИИ-сопоставление с Расписанием болезней пока в работе. После анализа здесь появится
-          предполагаемая категория годности и обоснование.
+          Нажмите «ИИ» у документа — система распознает текст и сопоставит с Расписанием болезней:
+          появится предполагаемая категория годности и обоснование.
         </span>
       </div>
     </div>

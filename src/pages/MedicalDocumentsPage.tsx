@@ -55,6 +55,7 @@ import PrivacyBadge from "@/components/PrivacyBadge";
 import PrivacyExplainer from "@/components/PrivacyExplainer";
 import TermHint from "@/components/TermHint";
 import DocumentValidityBadge from "@/components/DocumentValidityBadge";
+import DocumentAnalysisStatusChip from "@/components/DocumentAnalysisStatusChip";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -2223,12 +2224,13 @@ export default function MedicalDocumentsPage() {
                                 Статья {doc.disease_articles_565.article_number}
                               </div>
                             )}
-                            {/* На мобиле колонка «Статус» скрыта — показываем анализ тут */}
-                            {isDocAnalyzing(doc.id) && (
-                              <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-300 md:hidden">
-                                <Loader2 className="h-3 w-3 animate-spin" /> Анализ…
-                              </span>
-                            )}
+                            {/* На мобиле колонка «Статус» скрыта — показываем чип тут */}
+                            <DocumentAnalysisStatusChip
+                              isAnalyzing={isDocAnalyzing(doc.id)}
+                              isClassified={doc.is_classified}
+                              compact
+                              className="mt-1 md:hidden"
+                            />
                           </TableCell>
                           <TableCell className="hidden md:table-cell max-w-[150px]">
                             {doc.meta?.parts && doc.meta.parts.length > 1 ? (
@@ -2287,33 +2289,24 @@ export default function MedicalDocumentsPage() {
                             )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            {isDocAnalyzing(doc.id) ? (
-                              <Badge variant="outline" className="animate-pulse">
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Анализ...
-                              </Badge>
-                            ) : doc.is_classified ? (
-                              <div className="flex flex-col gap-1 items-start">
-                                <Badge variant="default">
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Обработан
-                                </Badge>
-                                {(() => {
-                                  const q = getOcrQuality(doc.raw_text, doc.is_classified);
-                                  if (!q) return null;
-                                  return (
-                                    <span
-                                      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] rounded border ${ocrLevelColor[q.level]}`}
-                                      title={q.advice || `Извлечено символов: ${q.charCount}`}
-                                    >
-                                      OCR: {q.label}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            ) : (
-                              <Badge variant="outline">Не обработан</Badge>
-                            )}
+                            <div className="flex flex-col gap-1 items-start">
+                              <DocumentAnalysisStatusChip
+                                isAnalyzing={isDocAnalyzing(doc.id)}
+                                isClassified={doc.is_classified}
+                              />
+                              {!isDocAnalyzing(doc.id) && doc.is_classified && (() => {
+                                const q = getOcrQuality(doc.raw_text, doc.is_classified);
+                                if (!q) return null;
+                                return (
+                                  <span
+                                    className={`inline-flex items-center px-1.5 py-0.5 text-[10px] rounded border ${ocrLevelColor[q.level]}`}
+                                    title={q.advice || `Извлечено символов: ${q.charCount}`}
+                                  >
+                                    OCR: {q.label}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
