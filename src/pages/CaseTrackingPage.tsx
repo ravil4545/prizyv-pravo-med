@@ -215,10 +215,10 @@ export default function CaseTrackingPage() {
           {stageInfo && (
             <Card className="mb-5 border-primary/20">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  {StageIcon && <StageIcon className="h-4 w-4 text-primary" />}
-                  <span className="text-sm font-medium text-foreground">Текущий этап: {stageInfo.label}</span>
-                  <span className="text-xs text-muted-foreground ml-auto">{stageInfo.pct}%</span>
+                <div className="flex items-center gap-2 mb-2 min-w-0">
+                  {StageIcon && <StageIcon className="h-4 w-4 text-primary flex-shrink-0" />}
+                  <span className="text-sm font-medium text-foreground truncate min-w-0" title={stageInfo.label}>Текущий этап: {stageInfo.label}</span>
+                  <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">{stageInfo.pct}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div className="h-full bg-primary" style={{ width: `${stageInfo.pct}%` }} />

@@ -69,17 +69,25 @@ export default function PdfViewer({ url, className = "" }: PdfViewerProps) {
     const renderPage = async () => {
       const page = await pdf.getPage(currentPage);
       const viewport = page.getViewport({ scale: scale * 1.5 }); // Base scale for quality
-      
+
       const canvas = canvasRef.current!;
       const context = canvas.getContext("2d")!;
-      
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      
+
+      // Рендерим в backing store с учётом плотности пикселей экрана, иначе на
+      // мобильных (DPR 2–3) страница выглядела смазанной. Кап на 2 — баланс
+      // чёткости и памяти (на слабых Android холст не должен раздуваться).
+      // CSS оставляет maxWidth:100% / height:auto, поэтому крупный холст
+      // ужимается до ширины контейнера и текст становится резким.
+      const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+
       await page.render({
         canvasContext: context,
         viewport: viewport,
         canvas: canvas,
+        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
       }).promise;
     };
 

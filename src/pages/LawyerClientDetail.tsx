@@ -1625,7 +1625,9 @@ const LawyerClientDetail = () => {
       <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) { setPreviewDoc(null); setPreviewSignedUrl(null); } }}>
         <DialogContent className="max-w-4xl w-full h-[90vh] flex flex-col p-0">
           <DialogHeader className="px-4 pt-4 pb-2 flex-shrink-0">
-            <div className="flex items-center justify-between gap-3">
+            {/* pr-9 оставляет место под штатный крестик закрытия диалога (absolute right-4),
+                иначе кнопка «Скачать» наезжает на него (особенно заметно на мобиле). */}
+            <div className="flex items-center justify-between gap-3 pr-9">
               <DialogTitle className="text-base truncate">{previewDoc?.title}</DialogTitle>
               {previewSignedUrl && (
                 <a

@@ -119,10 +119,10 @@ const ClientCaseStatusCard = () => {
           </Badge>
         ) : (
           <>
-            <div className="flex items-center gap-2">
-              {StageIcon && <StageIcon className="h-4 w-4 text-muted-foreground" />}
-              <span className="font-medium">{stage?.label || row.crm_stage}</span>
-              <span className="text-xs text-muted-foreground ml-auto">{pct}%</span>
+            <div className="flex items-center gap-2 min-w-0">
+              {StageIcon && <StageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+              <span className="font-medium truncate min-w-0" title={stage?.label || row.crm_stage}>{stage?.label || row.crm_stage}</span>
+              <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">{pct}%</span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden">
               <div
