@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface SubscriptionData {
   is_paid: boolean;
@@ -28,52 +30,57 @@ const DEFAULT_SUBSCRIPTION: SubscriptionData = {
 export const TRIAL_DOC_LIMIT = 9;
 export const TRIAL_AI_LIMIT = 9;
 
+const subscriptionKey = (userId: string | undefined) => ["subscription", userId] as const;
+
 export function useSubscription() {
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.id;
 
-  const fetchSubscription = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("user_subscriptions")
-      .select("*")
-      .eq("user_id", session.user.id)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error fetching subscription:", error);
-      setLoading(false);
-      return;
-    }
-
-    if (!data) {
-      // Auto-create subscription record
-      const { data: newSub, error: insertError } = await supabase
+  // React Query шарит результат между ВСЕМИ вызовами хука по одному ключу
+  // ["subscription", user.id]. Раньше каждый компонент (LimitsBadge,
+  // SubscriptionStatusCard, TrialCountdownCard, NotificationsInbox, ИИ-чат,
+  // документы…) фетчил user_subscriptions независимо — на загрузку кабинета
+  // летело 3–4 одинаковых запроса. Ключ включает user.id, поэтому после смены
+  // аккаунта подписка не «залипает» от прежнего пользователя.
+  const { data: subscription = null, isPending, isFetching } = useQuery({
+    queryKey: subscriptionKey(userId),
+    enabled: !authLoading && !!userId,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<SubscriptionData | null> => {
+      const { data, error } = await supabase
         .from("user_subscriptions")
-        .insert({ user_id: session.user.id })
-        .select()
-        .single();
+        .select("*")
+        .eq("user_id", userId!)
+        .maybeSingle();
 
-      if (insertError) {
-        console.error("Error creating subscription:", insertError);
-        setSubscription(DEFAULT_SUBSCRIPTION);
-      } else {
-        setSubscription(newSub as unknown as SubscriptionData);
+      if (error) {
+        console.error("Error fetching subscription:", error);
+        return null;
       }
-    } else {
-      setSubscription(data as unknown as SubscriptionData);
-    }
-    setLoading(false);
-  }, []);
 
-  useEffect(() => {
-    fetchSubscription();
-  }, [fetchSubscription]);
+      if (!data) {
+        // Auto-create subscription record
+        const { data: newSub, error: insertError } = await supabase
+          .from("user_subscriptions")
+          .insert({ user_id: userId! })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Error creating subscription:", insertError);
+          return DEFAULT_SUBSCRIPTION;
+        }
+        return newSub as unknown as SubscriptionData;
+      }
+
+      return data as unknown as SubscriptionData;
+    },
+  });
+
+  // loading истинно, только пока реально идёт первичная загрузка (фоновый
+  // refetch по истечении staleTime не дёргает скелетоны). Без сессии — false.
+  const loading = authLoading || (!!userId && isPending && isFetching);
 
   // Активен ли 3-дневный пробный период (с момента регистрации).
   const isTrialActive = useCallback((): boolean => {
@@ -111,30 +118,32 @@ export function useSubscription() {
   }, [subscription, isPaidActive, isTrialActive]);
 
   const incrementDocumentUploads = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session || !subscription) return;
+    if (!userId || !subscription) return;
 
     const newCount = subscription.document_uploads_used + 1;
     await supabase
       .from("user_subscriptions")
       .update({ document_uploads_used: newCount })
-      .eq("user_id", session.user.id);
+      .eq("user_id", userId);
 
-    setSubscription(prev => prev ? { ...prev, document_uploads_used: newCount } : prev);
-  }, [subscription]);
+    queryClient.setQueryData<SubscriptionData | null>(subscriptionKey(userId), (prev) =>
+      prev ? { ...prev, document_uploads_used: newCount } : prev,
+    );
+  }, [userId, subscription, queryClient]);
 
   const incrementAIQuestions = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session || !subscription) return;
+    if (!userId || !subscription) return;
 
     const newCount = subscription.ai_questions_used + 1;
     await supabase
       .from("user_subscriptions")
       .update({ ai_questions_used: newCount })
-      .eq("user_id", session.user.id);
+      .eq("user_id", userId);
 
-    setSubscription(prev => prev ? { ...prev, ai_questions_used: newCount } : prev);
-  }, [subscription]);
+    queryClient.setQueryData<SubscriptionData | null>(subscriptionKey(userId), (prev) =>
+      prev ? { ...prev, ai_questions_used: newCount } : prev,
+    );
+  }, [userId, subscription, queryClient]);
 
   // Действующие лимиты: в триале — TRIAL_* (9/9), после — бесплатные (3/3).
   const trialNow = isTrialActive();
@@ -148,6 +157,11 @@ export function useSubscription() {
   const remainingAIQuestions = subscription
     ? Math.max(0, currentAiLimit - subscription.ai_questions_used)
     : 0;
+
+  const refresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: subscriptionKey(userId) }),
+    [queryClient, userId],
+  );
 
   return {
     subscription,
@@ -164,6 +178,6 @@ export function useSubscription() {
     remainingAIQuestions,
     currentDocLimit,
     currentAiLimit,
-    refresh: fetchSubscription,
+    refresh,
   };
 }

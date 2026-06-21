@@ -147,9 +147,9 @@ const Header = () => {
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-gold" aria-hidden />
             </div>
             <div className="hidden sm:flex flex-col min-w-0">
-              <h1 className="font-serif text-base sm:text-lg leading-none text-ink truncate">
+              <span className="font-serif text-base sm:text-lg leading-none text-ink truncate">
                 {brandShortName}
-              </h1>
+              </span>
               <p className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/60 mt-1">
                 {branding.subtitle}
               </p>
