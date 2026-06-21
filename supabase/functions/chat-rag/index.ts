@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
-import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
+import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 
 // ─── CORS (same pattern as other functions in this project) ──────────────────
 const getAllowedOrigin = (req: Request): string => {
@@ -148,10 +148,13 @@ Deno.serve(async (req) => {
     // 1-2. Гибридный поиск по базе знаний (keyword + вектор) — устойчивее
     // чистого вектора на русских мед-текстах (низкая дискриминация Jina v3).
     // Чанки обрезаются (1600), чтобы таблицы степеней/порогов не резались на половине.
-    const chunks = await searchHybrid(supabase, message, {
-      matchCount: 6,
+    // Над-извлечение (12) + LLM-реранк до 6: гибрид даёт кандидатов, реранкер
+    // отсекает поверхностно похожие, чтобы модель не отвлекалась на нерелевантное.
+    const candidates = await searchHybrid(supabase, message, {
+      matchCount: 12,
       categories: KNOWLEDGE_CATEGORIES, // публичный виджет — только выверенные знания, без сырой практики
     });
+    const chunks = await rerankChunks(message, candidates, { keep: 6 });
     const retrievedContext = renderChunks(chunks, 1600);
 
     // 3. Load foundational system context (cached after first call)

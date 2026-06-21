@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured, humanizeLlmError } from "../_shared/llmGateway.ts";
-import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
+import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 
 // CORS configuration - allow production and preview origins
 const getAllowedOrigin = (req?: Request) => {
@@ -249,10 +249,12 @@ ${medicalContext}`;
           Deno.env.get("SUPABASE_URL")!,
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
-        const chunks = await searchHybrid(ragClient, lastUser.content, {
-          matchCount: 6,
+        // Над-извлечение (12) + LLM-реранк до 6 (см. ragSearch.rerankChunks).
+        const candidates = await searchHybrid(ragClient, lastUser.content, {
+          matchCount: 12,
           categories: KNOWLEDGE_CATEGORIES, // клиентский ассистент — только выверенные знания, без сырой практики
         });
+        const chunks = await rerankChunks(lastUser.content, candidates, { keep: 6 });
         if (chunks.length) {
           ragContext = `Ниже — выдержки из ЭКСПЕРТНОЙ БАЗЫ ЗНАНИЙ юриста (ОСНОВНОЙ ИСТОЧНИК ОТВЕТА). Числа, пороги, категории годности и НОМЕРА СТАТЕЙ Расписания болезней бери ДОСЛОВНО из этих выдержек, цитируй статьи как [Ст. NN]. НИКОГДА не называй номер статьи или числовой порог «по памяти»: если нужного нет в выдержках — честно скажи, что это нужно уточнить, и НЕ выдумывай (особенно номер статьи).
 

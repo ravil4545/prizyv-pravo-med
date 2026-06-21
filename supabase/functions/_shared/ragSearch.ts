@@ -5,14 +5,20 @@
 //  SecondBrain скриптом scripts/ingest_rag.py (база знаний + реальная практика:
 //  кейсы, вопросы врачу, стратегии, расписание болезней).
 //
-//  Три способа поиска (берём подходящий под задачу):
+//  Способы поиска (берём подходящий под задачу):
 //    • searchByArticles — точная выборка экспертных заметок по номерам статей РБ
 //      (для analyze-medical-document, когда статья уже определена). Без эмбеддинга.
-//    • searchByVector   — семантический поиск (Jina + RPC match_rag_chunks).
-//      Для свободных вопросов в чатах. Нужен JINA_API_KEY.
+//    • searchHybrid     — гибрид FTS (русская морфология) + вектор, слияние RRF
+//      на стороне БД (RPC hybrid_rag_chunks). Для свободных вопросов в чатах.
+//    • searchByVector   — чистый семантический поиск (Jina + RPC match_rag_chunks).
+//      Откат для searchHybrid. Нужен JINA_API_KEY.
 //    • searchByText     — дешёвый ilike-фолбэк (для агентов с жёстким бюджетом контекста,
 //      где лишние токены/вызовы критичны). Без эмбеддинга и без Jina.
+//    • rerankChunks     — LLM-реранкер (как в Hermes): над-извлечение → отбор
+//      реально релевантных кандидатов. Fail-open.
 // ════════════════════════════════════════════════════════════════════════
+
+import { llmChat, MODEL_FAST } from "./llmGateway.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = any;
@@ -74,7 +80,7 @@ export function isVectorSearchAvailable(): boolean {
   return !!JINA_KEY;
 }
 
-/** Эмбеддинг запроса (Jina v3, 1024 dims, retrieval.query). */
+/** Эмбеддинг запроса (Jina v3, 1024 dims, retrieval.passage — симметрично инжесту). */
 export async function embedQuery(text: string): Promise<number[]> {
   if (!JINA_KEY) throw new Error("JINA_API_KEY не настроен");
   const res = await fetch("https://api.jina.ai/v1/embeddings", {
@@ -96,8 +102,9 @@ export async function embedQuery(text: string): Promise<number[]> {
 }
 
 /**
- * Семантический поиск по базе знаний. Возвращает [] при любой ошибке
- * (fail-open: RAG не должен ронять основной ответ ИИ).
+ * Чистый семантический поиск по базе знаний. Возвращает [] при любой ошибке
+ * (fail-open: RAG не должен ронять основной ответ ИИ). Используется как откат
+ * для searchHybrid, если RPC гибрида недоступен.
  */
 export async function searchByVector(
   sb: Sb,
@@ -189,11 +196,13 @@ export async function searchByText(
 }
 
 /**
- * Гибридный поиск: ключевые слова (точные совпадения) + вектор (семантика).
- * Нужен, потому что эмбеддинги Jina v3 на русских мед-текстах слабо
- * дискриминируют (cosine ~0.9 даже между разными темами) — чистый вектор
- * часто не вытаскивает нужную заметку. Keyword-совпадения по значимым словам
- * запроса ставятся выше и гарантируют попадание тематических заметок.
+ * Гибридный поиск: Postgres FTS (русская морфология) + вектор, слияние
+ * Reciprocal Rank Fusion в одном RPC `hybrid_rag_chunks`. FTS ловит точные
+ * термины (номера статей, диоптрии/градусы, диагнозы), вектор добивает
+ * семантику. query_embedding опционален: без Jina работает только FTS-лег.
+ *
+ * Fail-open: ошибка RPC → откат на чистый вектор (searchByVector), затем на
+ * пусто. RAG не должен ронять основной ответ ИИ.
  */
 export async function searchHybrid(
   sb: Sb,
@@ -201,76 +210,101 @@ export async function searchHybrid(
   opts: { matchCount?: number; minSimilarity?: number; categories?: readonly string[]; articles?: string[] } = {},
 ): Promise<KnowledgeChunk[]> {
   const matchCount = opts.matchCount ?? 6;
+  try {
+    // Эмбеддинг запроса, если задан Jina. Без него гибрид деградирует до FTS —
+    // не падаем (query_embedding=null корректно обрабатывается в RPC).
+    let embedding: number[] | null = null;
+    if (JINA_KEY) {
+      try {
+        embedding = await embedQuery(query);
+      } catch (e) {
+        console.error("[ragSearch] embedQuery failed (FTS-only):", e instanceof Error ? e.message : e);
+      }
+    }
+    const { data, error } = await sb.rpc("hybrid_rag_chunks", {
+      query_text: query,
+      query_embedding: embedding,
+      match_count: matchCount,
+      filter_categories: opts.categories?.length ? [...opts.categories] : null,
+      filter_articles: opts.articles?.length ? opts.articles : null,
+    });
+    if (error) {
+      console.error("[ragSearch] hybrid_rag_chunks:", error.message);
+      return await searchByVector(sb, query, opts); // откат на чистый вектор
+    }
+    return (data ?? []) as KnowledgeChunk[];
+  } catch (e) {
+    console.error("[ragSearch] searchHybrid failed:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
 
-  // Значимые слова запроса (≥5 букв, до 6 штук). Грубый стемминг: режем 2
-  // последних буквы у длинных слов, чтобы ловить словоформы (плоскостопиЯ →
-  // корень «плоскостопи» матчит «плоскостопиЕ» в тексте). Русская морфология.
-  const rawWords = [...new Set(
-    (query.toLowerCase().match(/[а-яёa-z]{5,}/gi) || []),
-  )].slice(0, 6);
-  const stems = rawWords.map((w) => (w.length > 6 ? w.slice(0, -2) : w));
-
-  // Числа из запроса (155, 6.0, 17, № статьи…) — КЛЮЧЕВОЙ сигнал на медтекстах:
-  // чанк с тем же числом почти всегда самый релевантный. Keyword-regex цифры
-  // игнорирует ([а-яё]{5,}), поэтому учитываем их отдельно и сильно бустим ранг.
-  const nums = [...new Set((query.match(/\d+(?:[.,]\d+)?/g) || []))]
-    .map((n) => n.replace(",", "."))
-    .filter((n) => n.length >= 2)
-    .slice(0, 4);
-  const numHit = (content: string): boolean =>
-    nums.some((n) => content.includes(n) || content.includes(n.replace(".", ",")));
-
-  // 1) Keyword: чанки с корнями слов запроса; ранг = покрытие корней + бонус за число.
-  let kw: KnowledgeChunk[] = [];
-  if (stems.length) {
-    // Доменные стоп-стемы: частотны в военкоматных текстах (есть почти в каждом
-    // чанке) → НЕ дискриминируют тему, но вытесняют специфичный термин из выборки
-    // `limit` (которая без ORDER BY). Убираем их, чтобы OR искал по значимым словам
-    // («плоскостоп»), а не по «болезн/категор/статья». Без этого score=5-чанк про
-    // плоскостопие не попадал в 30 кандидатов из-за частых общих слов.
-    const STOP_STEMS = ["болезн", "категор", "стать", "расписан", "годнос", "призыв",
-      "военком", "какая", "какие", "какой", "нужно", "можно", "поэтому", "которы", "освобожд"];
-    let effStems = stems.filter((w) => !STOP_STEMS.some((s) => w.startsWith(s) || s.startsWith(w)));
-    if (!effStems.length) effStems = stems; // запрос состоит только из общих слов — откат
-    const orExpr = effStems.map((w) => `content.ilike.%${w}%`).join(",");
-    let qb = sb
-      .from("rag_chunks")
-      .select("id, content, category, section_title, schedule_articles")
-      .eq("is_foundational", false)
-      .or(orExpr);
-    // Срез по разделам (напр. публичный виджет — только выверенные знания,
-    // без сырой практики) — точнее и не тянет лишнее в промпт.
-    if (opts.categories?.length) qb = qb.in("category", [...opts.categories]);
-    const { data } = await qb.limit(60);
-    kw = (data ?? [])
-      .map((c: KnowledgeChunk) => {
-        const lc = c.content.toLowerCase();
-        const stemScore = effStems.filter((w) => lc.includes(w)).length;
-        return { c, score: stemScore + (numHit(c.content) ? 3 : 0) };
+/**
+ * LLM-реранкер (как в Hermes rag_pipeline). Из кандидатов оставляет только
+ * реально релевантные запросу чанки, переупорядочивая по убыванию релевантности.
+ * Паттерн: над-извлечение (matchCount 10-12) → реранк до keep (~5-6). Убирает
+ * поверхностно похожие чанки, чтобы LLM не отвлекался на нерелевантное.
+ *
+ * Дешёвая модель (MODEL_FAST), JSON-режим, temperature=0. Fail-open: при любой
+ * ошибке/таймауте возвращает исходный топ (keep), не теряя выдачу.
+ */
+export async function rerankChunks(
+  query: string,
+  chunks: KnowledgeChunk[],
+  opts: { keep?: number; signal?: AbortSignal } = {},
+): Promise<KnowledgeChunk[]> {
+  const keep = opts.keep ?? 5;
+  if (chunks.length <= 1) return chunks.slice(0, keep);
+  try {
+    const listing = chunks
+      .map((c, i) => {
+        const title = c.section_title
+          ? `${c.category ?? "знание"}: ${c.section_title}`
+          : (c.category ?? "знание");
+        return `[${i}] (${title})\n${c.content.slice(0, 500)}`;
       })
-      .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
-      .filter((x: { score: number }) => x.score >= Math.min(2, effStems.length))
-      .map((x: { c: KnowledgeChunk }) => x.c);
+      .join("\n\n");
+    const system =
+      "Ты — реранкер фрагментов базы знаний для медико-юридического ассистента по призыву (РФ). " +
+      "Дан вопрос пользователя и пронумерованные фрагменты. Верни индексы ТОЛЬКО тех фрагментов, " +
+      "которые реально отвечают на вопрос (тот же диагноз / статья РБ / процедура / ситуация). " +
+      "Поверхностно похожие или про другую тему — НЕ включай. Сохрани порядок по убыванию " +
+      'релевантности. Ответь строго JSON: {"relevant": [<номера фрагментов>]}';
+    const res = await llmChat({
+      model: MODEL_FAST,
+      temperature: 0,
+      responseFormat: "json_object",
+      maxTokens: 200,
+      maxRetries: 1,
+      signal: opts.signal,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Вопрос: ${query}\n\nФрагменты:\n${listing}` },
+      ],
+    });
+    if (!res.ok) {
+      console.error("[ragSearch] rerankChunks LLM error:", res.status);
+      return chunks.slice(0, keep);
+    }
+    const json = await res.json();
+    const content = json?.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(content);
+    const ids: unknown = parsed?.relevant;
+    const picked = (Array.isArray(ids) ? ids : [])
+      .filter((i): i is number => Number.isInteger(i) && i >= 0 && i < chunks.length)
+      .map((i) => chunks[i]);
+    // Дедуп; если реранкер вернул пусто/мусор — откат на исходный топ.
+    const seen = new Set<string>();
+    const out: KnowledgeChunk[] = [];
+    for (const c of picked) {
+      if (c?.id && !seen.has(c.id)) { seen.add(c.id); out.push(c); }
+      if (out.length >= keep) break;
+    }
+    return out.length ? out : chunks.slice(0, keep);
+  } catch (e) {
+    console.error("[ragSearch] rerankChunks failed:", e instanceof Error ? e.message : e);
+    return chunks.slice(0, keep);
   }
-
-  // 2) Вектор (семантика) — добивает то, что keyword не поймал.
-  const vec = await searchByVector(sb, query, {
-    matchCount,
-    minSimilarity: opts.minSimilarity ?? 0.2,
-    categories: opts.categories,
-    articles: opts.articles,
-  });
-
-  // 3) Слияние с дедупликацией: сначала точные keyword-хиты, затем вектор.
-  const seen = new Set<string>();
-  const out: KnowledgeChunk[] = [];
-  for (const c of [...kw, ...vec]) {
-    if (!c?.id || seen.has(c.id)) continue;
-    seen.add(c.id);
-    out.push(c);
-    if (out.length >= matchCount) break;
-  }
-  return out;
 }
 
 /** Рендер чанков в компактный текст для подмешивания в промпт. */
