@@ -196,7 +196,6 @@ const LawyerTemplatesPage = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <TemplatesWorkspace
-        key={clientId || "none"}
         profile={data?.profile || null}
         docs={data?.docs || []}
         email={data?.email || null}

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- профиль/документы из БД читаются динамически без сгенерированных типов */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,6 +116,23 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
 
   useEffect(() => { setSaved(loadSaved(storageKey)); }, [storageKey]);
 
+  // Смена клиента (новый профиль) при ОТКРЫТОМ редакторе: дозаполняем ПУСТЫЕ поля
+  // данными выбранного клиента, ручной ввод не затираем. Редактор не пересобирается,
+  // поэтому работа над шаблоном не теряется. Адресные гос-поля прошлого клиента
+  // сбрасываем (их заново находит «Гос-структуры по адресу»).
+  const prevProfileRef = useRef(profile);
+  useEffect(() => {
+    if (prevProfileRef.current === profile) return;
+    prevProfileRef.current = profile;
+    setGov(null);
+    setEd((e) => {
+      if (!e) return e;
+      const ctx: FillContext = { profile, gov: null, email, today: todayRu() };
+      return { ...e, fields: e.fields.map((f) => (f.value.trim() ? f : { ...f, value: autofillValue(f.key, ctx) || f.value })) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
+
   const fillCtx = (): FillContext => ({ profile, gov, email, today: todayRu() });
 
   // Превью: отключённые («затенённые») поля исключаются из документа — их токены
@@ -139,6 +156,16 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
     }));
     setEd({ savedId: null, baseKey: t.key, title: t.title, category: t.category, fields, bodyTemplate: t.bodyTemplate, format: { ...DEFAULT_FORMAT }, tables: [] });
     setEditText(false);
+  };
+
+  // «Мой шаблон»: пустой редактор — юрист собирает документ полностью сам
+  // (свой текст, поля и таблицы). Данные клиента подставляются через селектор.
+  const openBlank = () => {
+    setEd({
+      savedId: null, baseKey: null, title: "Мой шаблон", category: "Свои шаблоны",
+      fields: [], bodyTemplate: "", format: { ...DEFAULT_FORMAT }, tables: [],
+    });
+    setEditText(true);
   };
 
   const openSaved = (s: SavedTemplate) => {
@@ -313,12 +340,72 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
 
             {headerExtra}
 
-            <div className="mb-6 mt-4 flex flex-wrap items-center gap-2">
+            {/* «Мои шаблоны»: первая карточка — «Мой шаблон» (создать с нуля),
+                рядом — уже сохранённые. После создания первого слот «Мой шаблон»
+                остаётся → всегда можно сделать ещё один. Прячем при поиске
+                (поиск работает по готовым шаблонам). */}
+            {!search.trim() && (
+              <section className="mb-8 mt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <h2 className="text-lg font-semibold">Мои шаблоны</h2>
+                  {saved.length > 0 && <Badge variant="secondary">{saved.length}</Badge>}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <button
+                    onClick={openBlank}
+                    className="flex flex-col items-start gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-primary/[0.03] p-5 text-left transition-colors hover:border-primary hover:bg-primary/[0.06]"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <FilePlus2 className="h-5 w-5" />
+                    </span>
+                    <span className="font-semibold">Мой шаблон</span>
+                    <span className="text-sm text-muted-foreground">
+                      Создайте документ с нуля: свой текст, поля и таблицы. Данные клиента
+                      подставятся из меню выбора клиента выше.
+                    </span>
+                  </button>
+                  {saved.map((s) => (
+                    <Card key={s.id} className="flex flex-col transition-shadow hover:shadow-md">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <FileText className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+                            <div className="min-w-0">
+                              <CardTitle className="break-words text-base leading-tight">{s.title || "Без названия"}</CardTitle>
+                              <span className="text-xs text-muted-foreground">
+                                Изменён {new Date(s.savedAt).toLocaleDateString("ru-RU")}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => deleteSaved(s.id)}
+                            className="flex-shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                            title="Удалить шаблон"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="mt-auto">
+                        <Button variant="outline" className="w-full" onClick={() => openSaved(s)}>
+                          <Pencil className="mr-2 h-4 w-4" /> Открыть
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">Сохранённые шаблоны хранятся в этом браузере.</p>
+              </section>
+            )}
+
+            <h2 className="mb-3 mt-4 text-lg font-semibold">Готовые шаблоны</h2>
+
+            <div className="mb-6 flex flex-wrap items-center gap-2">
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск шаблона…" className="pl-9" />
               </div>
-              {saved.length > 0 && (
+              {saved.length > 0 && search.trim() && (
                 <Button variant="outline" onClick={() => setSavedOpen(true)} className="flex-shrink-0">
                   <FolderOpen className="mr-2 h-4 w-4" /> Мои шаблоны
                   <Badge variant="secondary" className="ml-2">{saved.length}</Badge>
@@ -388,6 +475,10 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
               <Button size="sm" onClick={exportDocx}><Download className="mr-1.5 h-4 w-4" /> Скачать DOCX</Button>
             </div>
           </div>
+
+          {/* Селектор клиента доступен и в редакторе: выбор клиента дозаполняет
+              пустые поля его данными (см. эффект по profile выше). */}
+          {headerExtra}
 
           <Input
             value={ed.title}
