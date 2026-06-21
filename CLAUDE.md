@@ -111,13 +111,15 @@ The repo has bidirectional sync with the Lovable platform. Push changes here →
 - `rag_system_context` — 5 фундаментальных блоков (рамка консультации, мед./процедурные тонкости, диагностический анализ, правила улучшения), включаются в каждый промпт.
 - `rag_index` (VIEW) — оглавление: файл → категория, статьи РБ, размер. Для роутинга и генерации `00_Home/Оглавление.md`.
 - Навигационные файлы (`_MOC_*`, `Home`, `README`, `00_Index`, `00_Start_Here`, папка `00_Home`) НЕ индексируются (см. `SKIP_*` в ingest).
-- Поиск: RPC `match_rag_chunks(query_embedding, match_count, min_similarity, filter_categories?, filter_articles?)` — два последних параметра опциональны (точечный срез по разделам/статьям, обратносовместимо).
+- Поиск (гибрид, дефолт): RPC `hybrid_rag_chunks(query_text, query_embedding?, match_count, filter_categories?, filter_articles?, full_text_weight?, semantic_weight?, rrf_k?)` — Postgres FTS (`'russian'`, генерируемая колонка `content_fts` (section_title=A/content=B) + GIN) **+** pgvector, слияние Reciprocal Rank Fusion. `query_embedding` опционален: NULL → FTS-only (работает без Jina). FTS строит OR-запрос из лексем (`tsvector_to_array`), ранжирует `ts_rank_cd`.
+- Поиск (чистый вектор, откат): RPC `match_rag_chunks(query_embedding, match_count, min_similarity, filter_categories?, filter_articles?)` — два последних параметра опциональны.
+- Вектор-индекс: HNSW (`vector_cosine_ops`, m=16, ef_construction=64).
 
 Ключи берутся из env или из gitignored `scripts/ingest.secrets.env` (шаблон — `ingest.secrets.example.env`). НЕ хардкодить ключи в коде.
 
 **Где ИИ использует базу** (общий модуль [`supabase/functions/_shared/ragSearch.ts`](supabase/functions/_shared/ragSearch.ts)):
-- `chat-rag` — публичный виджет «База знаний» (гибрид keyword+вектор, срез `KNOWLEDGE_CATEGORIES`).
-- `chat` — клиентский ИИ-ассистент: подмешивает релевантные чанки в system-prompt (гибрид, срез `KNOWLEDGE_CATEGORIES`, fail-open).
+- `chat-rag` — публичный виджет «База знаний» (гибрид FTS+вектор RRF → над-извлечение 12 → LLM-реранк `rerankChunks` до 6, срез `KNOWLEDGE_CATEGORIES`).
+- `chat` — клиентский ИИ-ассистент: подмешивает релевантные чанки в system-prompt (гибрид FTS+вектор + реранк, срез `KNOWLEDGE_CATEGORIES`, fail-open).
 - `analyze-medical-document` — после анализа сверяет документ с экспертными требованиями по статьям (`searchByArticles`) и возвращает `documentGaps` (чего не хватает в документе).
 - Агенты-юристы (`lawyer-case-assistant`, `lawyer-build-plan`) — инструмент `search_knowledge` в [`_shared/agentTools.ts`](supabase/functions/_shared/agentTools.ts).
 
