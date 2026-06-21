@@ -9,7 +9,14 @@
     "build:dev": "vite build --mode development",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "telegram:preview": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run telegram:preview --",
+    "telegram:apply": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run telegram:apply --",
+    "telegram:send": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run telegram:send --",
+    "telegram:queue": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run telegram:queue --",
+    "vk:send": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run vk:send --",
+    "vk:branding": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run vk:branding --",
+    "vk:repost-profile": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run vk:repost-profile --"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
