@@ -416,6 +416,24 @@ def main() -> None:
         print(f"\n✅ Прецеденты: {pc} чанков из {pf} кейсов.")
         return
 
+    # Точечный ре-ингест: --match=<подстрока пути> — переэмбеддить только
+    # подходящие заметки (после правки одной-двух заметок, без полной пересборки).
+    match = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--match=")), None)
+    if match:
+        print(f"=== Точечный ре-ингест по фильтру: '{match}' ===")
+        total = ingested = 0
+        for path in sorted(RAG_BASE.rglob("*.md")):
+            rel = str(path.relative_to(RAG_BASE)).replace('\\', '/')
+            if match.lower() not in rel.lower():
+                continue
+            n = ingest_file(path, rel)
+            if n:
+                print(f"  ✅ {rel}: {n} чанк(ов)")
+                total += n
+                ingested += 1
+        print(f"\n✅ Точечно: {total} чанков из {ingested} файлов.")
+        return
+
     if fresh:
         wipe_chunks()
 
