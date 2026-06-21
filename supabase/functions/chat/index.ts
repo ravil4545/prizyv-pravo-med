@@ -199,7 +199,7 @@ serve(async (req) => {
 - Телефон: +7 (925) 350-05-33
 - WhatsApp и Telegram доступны
 - Email: dompc9@gmail.com
-- Запись на платную консультацию в офис: https://nepriziv.ru/?page_id=81`;
+- Запись на платную консультацию в офис: оставьте заявку на сайте https://nepriziv.ru/services или напишите в Telegram/WhatsApp`;
 
     if (medicalContext) {
       systemPrompt += `
