@@ -14,7 +14,7 @@ const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag
 
 const HIDDEN_ROUTES = [
   "/auth", "/login", "/register", "/reset-password",
-  "/dashboard", "/lawyer/chat", "/client/chat",
+  "/dashboard", "/lawyer/chat", "/client/chat", "/ai",
 ];
 
 const WELCOME_MESSAGE: Message = {
@@ -158,13 +158,13 @@ export function RagChat() {
           // Drag cursor on desktop
           "md:cursor-grab active:md:cursor-grabbing",
         )}
-        aria-label={open ? "Закрыть базу знаний" : "Открыть базу знаний"}
+        aria-label={open ? "Закрыть ИИ-чат" : "Спросить ИИ — бесплатно"}
       >
         {open
           ? <X className="h-5 w-5 shrink-0" />
           : <BookOpen className="h-5 w-5 shrink-0" />}
         <span className="hidden md:inline text-sm font-semibold whitespace-nowrap">
-          {open ? "Закрыть" : "База знаний"}
+          {open ? "Закрыть" : "Спросить ИИ"}
         </span>
       </button>
 
@@ -190,8 +190,8 @@ export function RagChat() {
             )}
           >
             <div>
-              <p className="font-semibold text-sm">База знаний nepriziv.ru</p>
-              <p className="text-xs opacity-80">Ответы по призыву и расписанию болезней</p>
+              <p className="font-semibold text-sm">ИИ-помощник · бесплатно</p>
+              <p className="text-xs opacity-80">Берут ли в армию с вашим диагнозом?</p>
             </div>
             <button
               onClick={() => setOpen(false)}

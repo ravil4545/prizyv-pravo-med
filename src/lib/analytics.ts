@@ -90,7 +90,13 @@ export type ConversionEvent =
   | "faq_question_open"
   | "ai_chat_started"
   | "ai_question_asked"
-  | "auth_signup";
+  | "auth_signup"
+  // Публичный ИИ-чат /ai (бесплатный вход в ценность до регистрации)
+  | "hero_ai_ask"
+  | "ai_public_open"
+  | "ai_public_question"
+  | "ai_public_gate_shown"
+  | "ai_public_gate_signup_click";
 
 interface TrackOptions {
   /** Уникальный id целевой сущности (тариф, статья, магнит). */

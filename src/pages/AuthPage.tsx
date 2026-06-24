@@ -22,6 +22,9 @@ const AuthPage = () => {
   const nextRaw = searchParams.get("next");
   // Защита: разрешаем только относительные пути, чтобы избежать open-redirect
   const nextPath = nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  // ?mode=signup открывает сразу вкладку «Регистрация». Триал/ИИ-ссылки ведут на неё:
+  // холодному посетителю «Вход» по умолчанию сигналит «у тебя уже должен быть аккаунт».
+  const initialTab = searchParams.get("mode") === "signup" ? "signup" : "signin";
   const branding = useBranding();
   const brandLawyerId = branding.lawyerUserId;
   const { toast } = useToast();
@@ -306,7 +309,7 @@ const AuthPage = () => {
             <CardDescription>Войдите или создайте аккаунт</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="signin">
+            <Tabs defaultValue={initialTab}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Вход</TabsTrigger>
                 <TabsTrigger value="signup">Регистрация</TabsTrigger>

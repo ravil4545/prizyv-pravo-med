@@ -67,6 +67,8 @@ const AuthPage = lazy(() => import("./pages/AuthPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const AuthConfirmPage = lazy(() => import("./pages/AuthConfirmPage"));
+const AiChatPage = lazy(() => import("./pages/AiChatPage"));
 const TestimonialsPage = lazy(() => import("./pages/TestimonialsPage"));
 const DiagnosesPage = lazy(() => import("./pages/DiagnosesPage"));
 const DiagnosisDetailPage = lazy(() => import("./pages/DiagnosisDetailPage"));
@@ -201,7 +203,9 @@ const App = () => (
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/auth/confirm" element={<AuthConfirmPage />} />
                 <Route path="/services" element={<ServicesPage />} />
+                <Route path="/ai" element={<AiChatPage />} />
                 <Route path="/testimonials" element={<TestimonialsPage />} />
                 <Route path="/templates" element={<TemplatesPage />} />
                 <Route path="/diagnoses" element={<DiagnosesPage />} />

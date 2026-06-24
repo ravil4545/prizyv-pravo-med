@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, MessageCircle, Send, Bot, Sparkles, ArrowRight, ShieldCheck, Clock, Lock } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
@@ -7,6 +8,14 @@ import { trackEvent } from "@/lib/analytics";
 const Hero = () => {
   const navigate = useNavigate();
   const branding = useBranding();
+  const [aiQuestion, setAiQuestion] = useState("");
+
+  const handleAskAI = (e: React.FormEvent) => {
+    e.preventDefault();
+    trackEvent("hero_ai_ask");
+    const q = aiQuestion.trim();
+    navigate(`/ai${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+  };
 
   const nameParts = branding.displayName.trim().split(/\s+/);
   const initialsShort = nameParts.length >= 2
@@ -15,7 +24,7 @@ const Hero = () => {
 
   const phoneDigits = (branding.phone || "+79253500533").replace(/\D/g, "");
   const dashboardHome = `${branding.routePrefix}/dashboard`;
-  const trialPath = `${branding.routePrefix}/auth?next=${encodeURIComponent(`${dashboardHome}?pay=trial`)}`;
+  const trialPath = `${branding.routePrefix}/auth?mode=signup&next=${encodeURIComponent(`${dashboardHome}?pay=trial`)}`;
 
   const handlePhoneCall = () => {
     trackEvent("hero_cta_phone");
@@ -121,6 +130,28 @@ const Hero = () => {
               ))}
             </div>
 
+            {/* Прямой бесплатный вход в ИИ — главное действие для холодного трафика.
+                Раньше «ИИ» вёл незалогиненного на /auth; теперь — сразу в чат /ai. */}
+            <form onSubmit={handleAskAI} className="max-w-2xl mb-5">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  value={aiQuestion}
+                  onChange={(e) => setAiQuestion(e.target.value)}
+                  placeholder="Возьмут ли в армию с… (ваш диагноз)"
+                  aria-label="Вопрос ИИ о призыве"
+                  className="flex-1 bg-paper/10 border border-paper/25 px-4 py-3.5 text-paper placeholder:text-paper/45 focus:outline-none focus:border-gold transition-colors"
+                />
+                <button
+                  type="submit"
+                  className="group flex items-center justify-center gap-2 px-5 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-gold-deep hover:text-paper transition-all duration-300 whitespace-nowrap"
+                >
+                  <Bot className="h-5 w-5 flex-shrink-0" />
+                  Спросить ИИ — бесплатно
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </button>
+              </div>
+            </form>
+
             {/* Two equal CTAs — same visual weight */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mb-5">
               <button
@@ -189,7 +220,7 @@ const Hero = () => {
                 WhatsApp
               </button>
               <button
-                onClick={() => navigate(dashboardHome)}
+                onClick={() => navigate("/ai")}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 border border-paper/25 text-paper/85 text-xs sm:text-sm font-medium hover:border-gold hover:text-gold transition-colors"
               >
                 <Bot className="h-3.5 w-3.5" />

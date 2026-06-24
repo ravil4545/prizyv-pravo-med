@@ -61,7 +61,7 @@ const MobileBottomNav = () => {
     : [
         { label: "Главная",   icon: Home,         path: "/" },
         { label: "Документы", icon: FileHeart,    path: "/dashboard/medical-documents" },
-        { label: "ИИ чат",    icon: MessageSquare, path: "/dashboard/ai-chat", featured: true },
+        { label: "ИИ чат",    icon: MessageSquare, path: isAuthenticated ? "/dashboard/ai-chat" : "/ai", featured: true },
         { label: "Диагнозы",  icon: BookOpen,     path: "/medical-history" },
         { label: isAuthenticated ? "Кабинет" : "Войти", icon: User, path: isAuthenticated ? "/dashboard" : "/auth" },
       ];
