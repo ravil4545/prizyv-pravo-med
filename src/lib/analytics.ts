@@ -133,12 +133,64 @@ export const trackEvent = (event: ConversionEvent, options: TrackOptions = {}) =
     };
 
     // Не дожидаемся ответа — fire-and-forget.
-    void supabase.from("analytics_events").insert(payload as never);
+    // .then() обязателен — иначе ленивый билдер supabase-js v2 не отправит запрос.
+    void supabase.from("analytics_events").insert(payload as never).then(() => {}, () => {});
     // Зеркалим в Яндекс.Метрику как JS-цель с тем же именем (no-op без счётчика).
     ymGoal(event);
   } catch {
     // ignore
   }
+};
+
+// ── Трекинг кликов ───────────────────────────────────────────────────────────
+// Пишем каждый значимый клик (кнопка / ссылка / [data-track]) в analytics_events
+// как event_type='click', event_ref = подпись элемента. Это даёт в админке «что
+// кликают» (Метрика рисует визуальную карту, но не отдаёт queryable-данные).
+// Собираем ТОЛЬКО подписи интерактивных элементов — никакого текста из полей ввода.
+let lastClickKey = "";
+let lastClickAt = 0;
+
+const trackClick = (label: string, href?: string | null) => {
+  const ref = (href ? `${label} → ${href}` : label).slice(0, 180);
+  const key = window.location.pathname + "|" + ref;
+  const now = Date.now();
+  if (key === lastClickKey && now - lastClickAt < 1200) return; // дедуп быстрых повторов
+  lastClickKey = key;
+  lastClickAt = now;
+  try {
+    void supabase.from("analytics_events").insert({
+      session_id: getSessionId(),
+      event_type: "click",
+      page_url: window.location.pathname,
+      page_title: document.title,
+      event_ref: ref,
+      referrer: href || null,
+      user_agent: navigator.userAgent,
+      // .then() ОБЯЗАТЕЛЕН: в supabase-js v2 билдер «ленивый» — без await/.then()
+      // запрос НЕ уходит. Из-за этого вся клиентская аналитика молчала с ~20.06.
+    } as never).then(() => {}, () => {});
+  } catch {
+    // аналитика не должна ломать клики
+  }
+};
+
+/** Глобальный перехват кликов по интерактивным элементам. Возвращает отписку. */
+export const initClickTracking = (): (() => void) => {
+  const onClick = (e: MouseEvent) => {
+    // Клики самого админа (в /admin) не засоряют статистику реальных посетителей.
+    if (window.location.pathname.startsWith("/admin")) return;
+    const start = e.target as HTMLElement | null;
+    const el = start?.closest<HTMLElement>("a, button, [role='button'], [data-track]");
+    if (!el) return;
+    const dataTrack = el.getAttribute("data-track");
+    const aria = el.getAttribute("aria-label");
+    let label = (dataTrack || aria || el.textContent || "").replace(/\s+/g, " ").trim();
+    if (!label) label = el.tagName.toLowerCase();
+    const href = el instanceof HTMLAnchorElement ? el.getAttribute("href") : null;
+    trackClick(label.slice(0, 100), href);
+  };
+  document.addEventListener("click", onClick, { capture: true });
+  return () => document.removeEventListener("click", onClick, { capture: true });
 };
 
 /** Подключить scroll-depth трекинг. Возвращает функцию отписки. */

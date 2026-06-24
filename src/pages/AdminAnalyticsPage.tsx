@@ -10,6 +10,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { ArrowLeft, Users, Eye, Clock, MousePointer, TrendingDown, Activity, ShieldAlert } from 'lucide-react';
 import { format, startOfWeek, differenceInDays } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import AdminBehavior from '@/components/AdminBehavior';
 
 interface AnalyticsEvent {
   id: string;
@@ -220,12 +221,14 @@ const AdminAnalyticsPage = () => {
   const loadAnalytics = async () => {
     setLoading(true);
     try {
-      // Load recent events
+      // Аналитика за 30 дней (а не последние 100 событий — иначе цифры врут на росте трафика).
+      const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
       const { data: eventsData } = await supabase
         .from('analytics_events')
         .select('*')
+        .gte('created_at', since30)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(5000);
 
       if (eventsData) {
         setEvents(eventsData);
@@ -379,6 +382,7 @@ const AdminAnalyticsPage = () => {
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
+            <TabsTrigger value="behavior">Поведение</TabsTrigger>
             <TabsTrigger value="funnel">Воронка</TabsTrigger>
             <TabsTrigger value="cohorts">Когорты</TabsTrigger>
             <TabsTrigger value="pages">Страницы</TabsTrigger>
@@ -414,6 +418,10 @@ const AdminAnalyticsPage = () => {
                 </ChartContainer>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="behavior" className="space-y-4">
+            <AdminBehavior />
           </TabsContent>
 
           <TabsContent value="pages" className="space-y-4">

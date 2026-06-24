@@ -17,7 +17,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import LawyerLayout from "./components/LawyerLayout";
 import AdminLayout from "./components/AdminLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
-import { captureUTM, initScrollDepth } from "./lib/analytics";
+import { captureUTM, initScrollDepth, initClickTracking } from "./lib/analytics";
 import { captureError, ymHit } from "./lib/monitoring";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -130,8 +130,9 @@ const AnalyticsTracker = () => {
   // First-touch UTM capture + scroll-depth tracking — раз на сессию.
   useEffect(() => {
     captureUTM(window.location.search);
-    const cleanup = initScrollDepth();
-    return cleanup;
+    const cleanupScroll = initScrollDepth();
+    const cleanupClicks = initClickTracking();
+    return () => { cleanupScroll(); cleanupClicks(); };
   }, []);
 
   // SPA-hit Метрики на каждую смену маршрута (включая первую загрузку).

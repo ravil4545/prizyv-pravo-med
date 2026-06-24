@@ -66,7 +66,7 @@ export const useAnalyticsTracking = () => {
             device_type: getDeviceType(),
             duration_seconds: duration,
             ...getBrowserInfo(),
-          });
+          }).then(() => {}, () => {}); // .then() обязателен: ленивый билдер supabase-js v2
         }
 
         previousPathRef.current = location.pathname;
@@ -82,7 +82,7 @@ export const useAnalyticsTracking = () => {
           user_agent: navigator.userAgent,
           device_type: getDeviceType(),
           ...getBrowserInfo(),
-        });
+        }).then(() => {}, () => {}); // .then() обязателен: ленивый билдер supabase-js v2
       } catch (error) {
         console.debug('Analytics tracking error:', error);
       }
