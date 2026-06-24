@@ -61,7 +61,7 @@ export default function LawyerLayout() {
 
   return (
     <div
-      className={cn("cabinet-shell cabinet-bg flex", chat ? "min-h-0 overflow-hidden" : "min-h-screen md:h-screen md:overflow-hidden")}
+      className={cn("cabinet-shell cabinet-bg flex ym-hide-content", chat ? "min-h-0 overflow-hidden" : "min-h-screen md:h-screen md:overflow-hidden")}
       style={chat && chatViewportHeight ? { height: chatViewportHeight } : undefined}
     >
       {/* ── Десктоп: левый сайдбар ─────────────────────────────────────── */}

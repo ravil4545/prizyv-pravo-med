@@ -202,8 +202,8 @@ export function RagChat() {
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
+          {/* Messages — ym-hide-content: переписка о здоровье не попадает в записи Webvisor (152-ФЗ) */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm ym-hide-content">
             {messages.map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn(

@@ -29,7 +29,7 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="cabinet-shell cabinet-bg min-h-screen">
+    <div className="cabinet-shell cabinet-bg min-h-screen ym-hide-content">
       <header className="sticky top-0 z-40 border-b border-border bg-paper">
         <div className="flex h-12 items-center justify-between gap-3 px-4">
           <Link to="/admin" className="flex min-w-0 items-center gap-2 font-serif text-base text-ink">

@@ -157,7 +157,8 @@ const AiChatPage = () => {
         </div>
 
         {/* Лента сообщений */}
-        <div className="flex-1 rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto min-h-[320px]">
+        {/* ym-hide-content: тексты вопросов/ответов о здоровье не попадают в записи Webvisor (152-ФЗ) */}
+        <div className="flex-1 rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto min-h-[320px] ym-hide-content">
           {messages.map((m, i) => (
             <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div

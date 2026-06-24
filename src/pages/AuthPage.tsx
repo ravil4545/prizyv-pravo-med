@@ -296,7 +296,7 @@ const AuthPage = () => {
       <Header />
       
       <main className="flex-1 flex items-center justify-center py-20 px-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md ym-hide-content">
           <CardHeader>
             <CardTitle>Добро пожаловать</CardTitle>
             <CardDescription>Войдите или создайте аккаунт</CardDescription>

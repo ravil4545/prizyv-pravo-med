@@ -10,8 +10,10 @@
  * 2. Sentry: sentry.io → Create Project (React) → скопировать DSN в SENTRY_DSN.
  *
  * Пока константы пустые — ни один скрипт не грузится, ничего не отправляется.
- * Вебвизор сознательно ВЫКЛЮЧЕН: в кабинете медицинские данные (152-ФЗ),
- * запись экрана в сторонний сервис недопустима.
+ * Вебвизор ВКЛЮЧЁН (записи сессий публичных страниц). Кабинет (DashboardLayout/
+ * LawyerLayout/AdminLayout), формы входа и тексты ИИ-чатов помечены классом
+ * `ym-hide-content` — их содержимое в записи скрывается; ввод в поля Метрика по
+ * умолчанию не пишет. Так медданные (152-ФЗ) в записи сессий не попадают.
  */
 export const YM_COUNTER_ID = 109765864; // счётчик Яндекс.Метрики nepriziv.ru
 export const SENTRY_DSN = ""; // ← вставить DSN Sentry, например "https://…@….ingest.sentry.io/…"
@@ -73,7 +75,7 @@ function injectMetrika(id: number) {
     clickmap: true,
     trackLinks: true,
     accurateTrackBounce: true,
-    webvisor: false, // медданные в кабинете — запись экрана выключена (152-ФЗ)
+    webvisor: true, // вкл; кабинет/формы/ИИ-чат скрыты классом ym-hide-content (152-ФЗ)
     defer: true, // hit'ы шлём сами на смену маршрута (SPA)
   });
 }
