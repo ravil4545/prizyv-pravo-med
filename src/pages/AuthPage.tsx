@@ -30,9 +30,7 @@ const AuthPage = () => {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
   // 152-ФЗ: явное согласие на обработку ПДн при регистрации (и для модерации рекламы).
   const [pdnConsent, setPdnConsent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,6 +40,7 @@ const AuthPage = () => {
   const [forgotEmail, setForgotEmail] = useState("");
 
   useEffect(() => {
+    trackEvent("auth_view");
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         // Раньше здесь был autoAttachToBrand — молчаливый insert «Клиент #...»
@@ -63,6 +62,7 @@ const AuthPage = () => {
 
   const handleOAuth = async (provider: "google" | "azure" | "facebook") => {
     setOauthLoading(provider);
+    trackEvent("auth_oauth_click", { ref: provider });
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -87,18 +87,9 @@ const AuthPage = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+    trackEvent("auth_signup_submit");
 
-    if (password !== confirmPassword) {
-      setErrors({ confirmPassword: "Пароли не совпадают" });
-      toast({
-        variant: "destructive",
-        title: "Ошибка валидации",
-        description: "Пароли не совпадают",
-      });
-      return;
-    }
-
-    const validation = signUpSchema.safeParse({ email, password, fullName, phone });
+    const validation = signUpSchema.safeParse({ email, password, fullName });
     if (!validation.success) {
       const fieldErrors: Record<string, string> = {};
       validation.error.errors.forEach((err) => {
@@ -133,6 +124,7 @@ const AuthPage = () => {
       });
 
       if (error) {
+        trackEvent("auth_signup_error", { ref: "supabase" });
         toast({
           title: "Ошибка регистрации",
           description: error.message,
@@ -193,6 +185,7 @@ const AuthPage = () => {
           variant: "destructive",
         });
       } else {
+        trackEvent("auth_signin_success");
         toast({
           title: "Вход выполнен",
           description: "Добро пожаловать!",
@@ -413,18 +406,6 @@ const AuthPage = () => {
                     {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Телефон</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+7"
-                      maxLength={18}
-                    />
-                    {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="email-signup">Email</Label>
                     <Input
                       id="email-signup"
@@ -448,19 +429,6 @@ const AuthPage = () => {
                       minLength={8}
                     />
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password-signup">Подтвердите пароль</Label>
-                    <Input
-                      id="confirm-password-signup"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      maxLength={72}
-                      required
-                      minLength={8}
-                    />
-                    {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                   </div>
                   <div className="flex items-start gap-2">
                     <Checkbox

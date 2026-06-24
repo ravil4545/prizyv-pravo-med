@@ -230,7 +230,7 @@ const Hero = () => {
           </div>
 
           {/* Right: portrait as archival photograph */}
-          <div className="lg:col-span-5 flex justify-center lg:justify-end order-first lg:order-last">
+          <div className="lg:col-span-5 flex justify-center lg:justify-end lg:order-last">
             <div className="relative w-full max-w-[300px] sm:max-w-[360px] md:max-w-[400px]">
               {/* Gold frame corners */}
               <div className="absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 border-gold z-10" aria-hidden />

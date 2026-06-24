@@ -96,7 +96,13 @@ export type ConversionEvent =
   | "ai_public_open"
   | "ai_public_question"
   | "ai_public_gate_shown"
-  | "ai_public_gate_signup_click";
+  | "ai_public_gate_signup_click"
+  // Шаги воронки регистрации/входа (видеть, где именно бросают)
+  | "auth_view"
+  | "auth_oauth_click"
+  | "auth_signup_submit"
+  | "auth_signup_error"
+  | "auth_signin_success";
 
 interface TrackOptions {
   /** Уникальный id целевой сущности (тариф, статья, магнит). */
