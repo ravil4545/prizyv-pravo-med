@@ -74,10 +74,9 @@ JINA_KEY = os.getenv("JINA_API_KEY", "")
 # Путь к волту «второго мозга». Переопределяется переменной окружения.
 RAG_BASE = Path(os.getenv("SECONDBRAIN_PATH", r"D:\Obsidian\SecondBrain"))
 
-# Прецеденты Hermes-KB (обезличенные кейсы агента Hermes, плейсхолдеры
-# [ПЕРСОНА_NNN]) — отдельный корень, кладём в rag_chunks как категорию
-# "precedent". «Полное объединение информации»: сайт получает реальные кейсы.
-HERMESKB_PATH = Path(os.getenv("HERMESKB_PATH", r"D:\Obsidian\Main\Hermes-KB"))
+# Прецеденты (обезличенные кейсы, плейсхолдеры [ПЕРСОНА_NNN]) с 2026-07-03
+# живут ВНУТРИ волта: SecondBrain/60_Прецеденты → категория "precedent"
+# (см. FOLDER_CATEGORY). Отдельный корень Hermes-KB и --only-precedents удалены.
 
 # 5 фундаментальных блоков → rag_system_context (включаются в КАЖДЫЙ промпт ИИ).
 # Пути относительно RAG_BASE (прямые слэши).
@@ -96,6 +95,7 @@ FOUNDATIONAL: dict[str, str] = {
 # Ключ — фрагмент относительного пути; первый совпавший выигрывает, поэтому
 # вложенные/специфичные фрагменты идут ВЫШЕ общих (16_ раньше 15_).
 FOLDER_CATEGORY: list[tuple[str, str]] = [
+    ("60_Прецеденты",                           "precedent"),  # обезличенные кейсы (бывш. Hermes-KB/cases)
     ("20_Практика/22_Кейсы",                    "case"),
     ("20_Практика/21_Консультации",             "consultation"),
     ("20_Практика/23_Вопросы_врачу",            "doctor_qa"),
@@ -126,9 +126,19 @@ EMBED_DIMS = 1024
 RATE_LIMIT_DELAY = 0.15   # пауза между вызовами Jina
 REST_TIMEOUT = 60         # таймаут Supabase REST
 
-# Регэкспы для предупреждения о возможных персональных данных (152-ФЗ).
+# Регэкспы для детекта возможных персональных данных (152-ФЗ).
 PHONE_RE = re.compile(r"(?:\+7|\b8)[\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}\b")
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+CRM_RE   = re.compile(r"amocrm|voennik365|deal_id", re.I)
+FIO_RE   = re.compile(r"\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(?:ович|евич|ьич|овна|евна|ична)\b")
+
+# Категории, которые сайт отдаёт ПУБЛИЧНО (зеркало KNOWLEDGE_CATEGORIES из
+# ragSearch.ts). Для них ПДн-детект БЛОКИРУЕТ файл (не ингестим), для
+# внутренних (practice) — только предупреждает.
+PUBLIC_CATEGORIES = {
+    "medical_condition", "legal_procedure", "document_guide", "faq",
+    "schedule_rb", "rb_official", "reference", "strategy", "precedent",
+}
 # ---------------------------------------------------------------------------
 
 session = requests.Session()
@@ -269,14 +279,32 @@ def should_skip(path: Path, rel: str) -> bool:
     return False
 
 
-def warn_pii(rel: str, content: str) -> None:
+def pii_hits(content: str) -> list[str]:
     hits = []
     if PHONE_RE.search(content):
         hits.append("телефон")
     if EMAIL_RE.search(content):
         hits.append("email")
-    if hits:
-        print(f"     ⚠️  возможные ПДн ({', '.join(hits)}) в {rel} — проверьте анонимизацию")
+    if CRM_RE.search(content):
+        hits.append("CRM-ссылка/deal_id")
+    if FIO_RE.search(content):
+        hits.append("ФИО-паттерн")
+    return hits
+
+
+def check_pii(rel: str, content: str, category: str | None) -> bool:
+    """True → файл можно ингестить. Для публичных категорий ПДн-детект
+    БЛОКИРУЕТ файл (152-ФЗ: публичный чат не должен видеть ПДн), для
+    внутренних — только предупреждение."""
+    hits = pii_hits(content)
+    if not hits:
+        return True
+    if category in PUBLIC_CATEGORIES:
+        print(f"     ⛔ ПДн ({', '.join(hits)}) в ПУБЛИЧНОЙ категории "
+              f"'{category}': {rel} — ФАЙЛ ПРОПУЩЕН, обезличьте и повторите")
+        return False
+    print(f"     ⚠️  возможные ПДн ({', '.join(hits)}) в {rel} — проверьте анонимизацию")
+    return True
 
 
 def get_embedding(text: str, task: str = "retrieval.passage") -> list[float]:
@@ -333,7 +361,8 @@ def ingest_file(path: Path, rel: str) -> int:
 
     is_foundational = rel in FOUNDATIONAL
     category = category_for(rel, meta)
-    warn_pii(rel, content)
+    if not check_pii(rel, content, category):
+        return 0
 
     chunks = 0
     for i, (section_title, section_content) in enumerate(split_by_headings(content)):
@@ -353,68 +382,15 @@ def ingest_file(path: Path, rel: str) -> int:
             "type":              meta.get("type"),
             "is_foundational":   is_foundational,
             "section_title":     section_title,
-            "last_refined":      str(meta.get("last_refined", "")),
+            "last_refined":      str(meta.get("last_refined", meta.get("дата", ""))),
         })
         chunks += 1
     return chunks
 
 
-def ingest_precedents() -> tuple[int, int]:
-    """Прецеденты Hermes-KB (cases/) → rag_chunks, категория 'precedent'.
-    Обезличенные кейсы агента Hermes ([ПЕРСОНА_NNN]). Отдельный id-namespace
-    'hermeskb/cases/…', чтобы не пересекаться с заметками волта."""
-    base = HERMESKB_PATH / "cases"
-    if not base.exists():
-        print(f"  ⚠️  Hermes-KB cases не найдены: {base}")
-        return 0, 0
-    total, ingested = 0, 0
-    for path in sorted(base.rglob("*.md")):
-        if path.name.startswith(SKIP_NAME_PREFIXES):
-            continue
-        post = frontmatter.load(str(path))
-        meta = dict(post.metadata)
-        content = clean_wikilinks(post.content)
-        if not content.strip():
-            continue
-        rel = f"hermeskb/cases/{path.name}"
-        warn_pii(rel, content)
-        n = 0
-        for i, (section_title, section_content) in enumerate(split_by_headings(content)):
-            if not section_content.strip():
-                continue
-            chunk_id = rel if (i == 0 and section_title is None) else f"{rel}#s{i}"
-            embedding = get_embedding(section_content, task="retrieval.passage")
-            db_upsert("rag_chunks", {
-                "id":                chunk_id,
-                "content":           section_content.strip(),
-                "embedding":         embedding,
-                "category":          "precedent",
-                "tags":              norm(meta.get("tags")),
-                "schedule_articles": norm(meta.get("schedule_articles")),
-                "target_category":   meta.get("target_category"),
-                "priority":          meta.get("priority"),
-                "type":              meta.get("type"),
-                "is_foundational":   False,
-                "section_title":     section_title,
-                "last_refined":      str(meta.get("дата", meta.get("last_refined", ""))),
-            })
-            n += 1
-        total += n
-        if n:
-            ingested += 1
-    return total, ingested
-
-
 def main() -> None:
     fresh = "--fresh" in sys.argv
-    only_prec = "--only-precedents" in sys.argv
     validate_config()
-
-    if only_prec:
-        print(f"=== Только прецеденты Hermes-KB ({HERMESKB_PATH}) ===")
-        pc, pf = ingest_precedents()
-        print(f"\n✅ Прецеденты: {pc} чанков из {pf} кейсов.")
-        return
 
     # Точечный ре-ингест: --match=<подстрока пути> — переэмбеддить только
     # подходящие заметки (после правки одной-двух заметок, без полной пересборки).
@@ -459,10 +435,6 @@ def main() -> None:
             skipped += 1
 
     print(f"\n✅ База знаний: {total_chunks} чанков из {ingested} файлов (пропущено {skipped}).")
-
-    print(f"\n=== Прецеденты Hermes-KB ({HERMESKB_PATH}) ===")
-    pc, pf = ingest_precedents()
-    print(f"✅ Прецеденты: {pc} чанков из {pf} кейсов.")
     print("Для обновления после правок — запустите скрипт снова.")
 
 
