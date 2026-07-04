@@ -22,6 +22,9 @@ export interface DocumentUploadResult {
   sourceFiles: File[];
   /** Base64 первой страницы (для запуска AI-анализа на стороне родителя) */
   firstPageBase64?: string;
+  /** Base64 ВСЕХ страниц документа (включая первую), до 6 шт. — чтобы AI видел
+   *  документ целиком, а не только первую страницу, при многостраничных выписках. */
+  pagesBase64?: string[];
 }
 
 /** Что родитель возвращает из onUpload — позволяет показать в слоте
@@ -217,6 +220,7 @@ const DocumentUploadWizard = ({
         pages: allPages.length,
         sourceFiles: files,
         firstPageBase64: allPages[0]?.base64,
+        pagesBase64: allPages.slice(0, 6).map((p) => p.base64),
       });
       const ack: UploadAck = uploadAck || {};
 

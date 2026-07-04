@@ -654,25 +654,23 @@ ${examinationsList}
     let result;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        result = JSON.parse(content);
-      }
+      result = JSON.parse(jsonMatch ? jsonMatch[0] : content);
     } catch (e) {
+      // ВАЖНО: раньше сюда подставлялся fallback-объект и документ ниже помечался
+      // is_classified = true — пользователь видел «успешный» анализ с фиктивным
+      // результатом. Вместо этого возвращаем ошибку и НЕ трогаем документ в БД,
+      // чтобы клиент показал ошибку и позволил повторить анализ.
       console.error("Failed to parse JSON:", e, "Content:", content);
-      result = {
-        extractedText: "Не удалось извлечь текст из документа.",
-        documentDate: null,
-        documentTypeCode: "unknown",
-        linkedArticles: [],
-        primaryArticleNumber: null,
-        fitnessCategory: "Требуется анализ",
-        categoryBChance: 0,
-        explanation: "Не удалось автоматически проанализировать документ.",
-        recommendations: ["Загрузите более чёткое изображение документа"],
-        suggestedTitle: "Медицинский документ",
-      };
+      return new Response(
+        JSON.stringify({
+          error: "parse_error",
+          message: "Не удалось разобрать ответ ИИ. Попробуйте повторить анализ.",
+        }),
+        {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // ── RAG-обогащение: сверяем документ с экспертными требованиями базы знаний ──
@@ -950,6 +948,29 @@ ${checklistText}`;
             console.error("Failed to insert single article link:", insertError);
           }
         }
+      }
+    }
+
+    // Email-уведомление о завершении анализа — fail-open, не блокирует ответ
+    // пользователю. Пересылаем токен ВЫЗЫВАЮЩЕГО пользователя (не сервисный) —
+    // notify-analysis-complete сам достанет email из auth по этому токену.
+    if (documentId) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-analysis-complete`, {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            documentId,
+            documentTitle: result.suggestedTitle || null,
+            fitnessCategory: result.fitnessCategory,
+            analysisResult: result.explanation,
+          }),
+        });
+      } catch (notifyErr) {
+        console.error("[analyze] notify-analysis-complete failed (non-blocking):", notifyErr);
       }
     }
 

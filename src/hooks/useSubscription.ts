@@ -117,33 +117,44 @@ export function useSubscription() {
     return subscription.ai_questions_used < subscription.free_ai_limit;
   }, [subscription, isPaidActive, isTrialActive]);
 
+  // Счётчик документов теперь инкрементируется АТОМАРНО на сервере — триггером
+  // на INSERT в medical_documents_v2 (см. миграцию
+  // 20260704120100_subscription_rls_and_quota_hardening.sql). Раньше клиент
+  // писал document_uploads_used напрямую через .update(), а RLS разрешала
+  // менять в своей строке ЛЮБОЙ столбец — включая is_paid/admin_override
+  // (self-service обход оплаты). Теперь прямой UPDATE для пользователя закрыт;
+  // здесь просто перечитываем актуальное значение, которое уже увеличил триггер.
   const incrementDocumentUploads = useCallback(async () => {
-    if (!userId || !subscription) return;
+    if (!userId) return;
+    await queryClient.invalidateQueries({ queryKey: subscriptionKey(userId) });
+  }, [userId, queryClient]);
 
-    const newCount = subscription.document_uploads_used + 1;
-    await supabase
-      .from("user_subscriptions")
-      .update({ document_uploads_used: newCount })
-      .eq("user_id", userId);
-
-    queryClient.setQueryData<SubscriptionData | null>(subscriptionKey(userId), (prev) =>
-      prev ? { ...prev, document_uploads_used: newCount } : prev,
-    );
-  }, [userId, subscription, queryClient]);
-
+  // Инкремент AI-вопросов идёт через security-definer RPC с проверкой квоты
+  // на сервере (та же причина, что и у документов — прямой UPDATE закрыт RLS).
   const incrementAIQuestions = useCallback(async () => {
-    if (!userId || !subscription) return;
-
-    const newCount = subscription.ai_questions_used + 1;
-    await supabase
-      .from("user_subscriptions")
-      .update({ ai_questions_used: newCount })
-      .eq("user_id", userId);
-
-    queryClient.setQueryData<SubscriptionData | null>(subscriptionKey(userId), (prev) =>
-      prev ? { ...prev, ai_questions_used: newCount } : prev,
-    );
-  }, [userId, subscription, queryClient]);
+    if (!userId) return;
+    // Кастуем вызов: RPC создана миграцией 20260704120100_*, её ещё нет в
+    // автосгенерированных типах (src/integrations/supabase/types.ts обновится
+    // при следующем `supabase gen types` после деплоя миграции — руками не трогаем).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.rpc as any)("increment_ai_question_usage") as {
+      data: SubscriptionData | null;
+      error: { message: string } | null;
+    };
+    if (error) {
+      // Не бросаем: этот вызов идёт ПОСЛЕ того как ответ ИИ уже получен и
+      // показан пользователю (см. AIChatDashboardPage) — раньше ошибка
+      // .update() тоже молча игнорировалась. Настоящий гейт квоты — canAskAI()
+      // ПЕРЕД отправкой следующего вопроса, для него достаточно перечитать
+      // актуальный счётчик из БД через invalidate.
+      console.error("Error incrementing AI question usage:", error);
+      await queryClient.invalidateQueries({ queryKey: subscriptionKey(userId) });
+      return;
+    }
+    if (data) {
+      queryClient.setQueryData<SubscriptionData | null>(subscriptionKey(userId), data as unknown as SubscriptionData);
+    }
+  }, [userId, queryClient]);
 
   // Действующие лимиты: в триале — TRIAL_* (9/9), после — бесплатные (3/3).
   const trialNow = isTrialActive();

@@ -57,6 +57,7 @@ import TermHint from "@/components/TermHint";
 import DocumentValidityBadge from "@/components/DocumentValidityBadge";
 import DocumentAnalysisStatusChip from "@/components/DocumentAnalysisStatusChip";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
+import { fileToPages } from "@/lib/documentMerger";
 import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1131,7 +1132,10 @@ export default function MedicalDocumentsPage() {
     }
     const analysisPromise = (async () => {
       try {
-        await analyzeDocument(insertedDoc.id, result.firstPageBase64);
+        // Все страницы документа (не только первую) — иначе многостраничные
+        // выписки анализируются вслепую по одной странице.
+        const extraImages = (result.pagesBase64 ?? []).slice(1);
+        await analyzeDocument(insertedDoc.id, result.firstPageBase64, extraImages);
         // analyzeDocument сам пишет ai_fitness_category / ai_explanation в БД
         // через edge function — забираем итог оттуда.
         const { data } = await supabase
@@ -1213,6 +1217,7 @@ export default function MedicalDocumentsPage() {
       }
 
       let base64 = imageBase64;
+      let derivedExtraImages: string[] = [];
 
       // Если base64 не передан, загружаем из URL
       if (!base64) {
@@ -1222,19 +1227,33 @@ export default function MedicalDocumentsPage() {
         if (!signedUrl) throw new Error("Не удалось получить доступ к файлу");
         const response = await fetch(signedUrl);
         const blob = await response.blob();
-        base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+
+        const isPdf = blob.type === "application/pdf" || doc.file_url.toLowerCase().endsWith(".pdf");
+        if (isPdf) {
+          // Хранимый файл — склеенный PDF (стандартный путь через мастер загрузки).
+          // Рендерим все страницы в JPEG на клиенте, как при первичной загрузке —
+          // иначе сырые байты PDF летят в AI как «картинка» и отклоняются.
+          // globalThis.File — в этом файле `File` уже импортирован как иконка lucide-react
+          const pdfFile = new globalThis.File([blob], "document.pdf", { type: "application/pdf" });
+          const pages = await fileToPages(pdfFile);
+          if (pages.length === 0) throw new Error("Не удалось прочитать страницы PDF");
+          base64 = pages[0].base64;
+          derivedExtraImages = pages.slice(1).map((p) => p.base64);
+        } else {
+          base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result.split(",")[1]);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
       }
 
-      // Все страницы документа: первая (base64) + дополнительные (extraImages).
-      const images = [base64, ...(extraImages ?? [])].filter(Boolean).slice(0, 6);
+      // Все страницы документа: первая (base64) + дополнительные (extraImages / derivedExtraImages).
+      const images = [base64, ...(extraImages ?? []), ...derivedExtraImages].filter(Boolean).slice(0, 6);
       const { data, error } = await supabase.functions.invoke("analyze-medical-document", {
         body: { imageBase64: base64, images, documentId, userId: currentUserId },
       });
