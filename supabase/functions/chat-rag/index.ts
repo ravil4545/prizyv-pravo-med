@@ -2,6 +2,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
+import { getClientIp, hashIp, checkAnonRateLimit, captureStreamUsageAndRecord, waitUntil } from "../_shared/aiUsage.ts";
+
+// Публичный виджет — самый большой анонимный анти-абьюз-риск (без логина,
+// без аккаунта на который вешать ₽-бюджет). Единственная защита — IP-лимит
+// в сутки + жёсткий потолок вывода/истории (см. запрос ниже).
+const CHAT_RAG_MAX_PER_DAY = Number(Deno.env.get("CHAT_RAG_MAX_PER_DAY")) || 20;
+const CHAT_RAG_MAX_TOKENS = Number(Deno.env.get("CHAT_RAG_MAX_TOKENS")) || 1000;
 
 // ─── CORS (same pattern as other functions in this project) ──────────────────
 const getAllowedOrigin = (req: Request): string => {
@@ -145,6 +152,17 @@ Deno.serve(async (req) => {
 
     const { message, history } = parsed.data;
 
+    // Rate-limit по IP ДО дорогого поиска/вызова LLM — публичный виджет без
+    // логина, единственная защита от скриптового абьюза.
+    const ipHash = await hashIp(getClientIp(req));
+    const allowed = await checkAnonRateLimit(supabase, "chat-rag", ipHash, CHAT_RAG_MAX_PER_DAY);
+    if (!allowed) {
+      return Response.json(
+        { error: "Слишком много вопросов с вашего IP за сегодня. Попробуйте завтра или зарегистрируйтесь — там свой лимит." },
+        { status: 429, headers: corsHeaders },
+      );
+    }
+
     // 1-2. Гибридный поиск по базе знаний (keyword + вектор) — устойчивее
     // чистого вектора на русских мед-текстах (низкая дискриминация Jina v3).
     // Чанки обрезаются (1600), чтобы таблицы степеней/порогов не резались на половине.
@@ -196,6 +214,8 @@ ${sysCtx}`;
       // в одном запросе не влезали в лимит малой модели.
       model: MODEL_MAIN,
       stream: true,
+      trackUsage: true,
+      maxTokens: CHAT_RAG_MAX_TOKENS,
       messages: [
         { role: "system", content: systemText },
         // Conversation history (last 6 turns to keep context manageable)
@@ -221,8 +241,17 @@ ${sysCtx}`;
       );
     }
 
-    // 5. Stream response back to the client
-    return new Response(aiRes.body, {
+    // 5. Stream response back to the client — вторая половина tee() читается
+    // в фоне для учёта расхода (см. _shared/aiUsage.ts), клиента не задерживает.
+    const [clientStream, usageStream] = aiRes.body!.tee();
+    waitUntil(captureStreamUsageAndRecord(usageStream, supabase, {
+      functionName: "chat-rag",
+      ipHash,
+      userId: null,
+      model: MODEL_MAIN,
+    }));
+
+    return new Response(clientStream, {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/event-stream",

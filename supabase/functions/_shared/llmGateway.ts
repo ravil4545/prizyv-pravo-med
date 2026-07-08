@@ -82,6 +82,10 @@ export interface LlmChatOpts {
   // Function-calling (ТЗ §2.2): инструменты агентов + стратегия выбора.
   tools?: LlmTool[];
   toolChoice?: "auto" | "none" | "required";
+  // Анти-абьюз (см. _shared/aiUsage.ts): при stream=true запрашивает финальный
+  // usage-чанк в SSE (stream_options.include_usage) — иначе токены в стриме
+  // не видны вызывающему. Для stream=false не нужен — usage уже есть в JSON.
+  trackUsage?: boolean;
 }
 
 /**
@@ -103,6 +107,7 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     maxRetries = 3,
     tools,
     toolChoice,
+    trackUsage,
   } = opts;
 
   const payload: Record<string, unknown> = { model, messages, stream };
@@ -110,6 +115,7 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
   // OpenAI: max_completion_tokens; temperature только для не-reasoning моделей.
   if (!isReasoningModel(model)) payload.temperature = temperature;
   if (maxTokens) payload.max_completion_tokens = maxTokens;
+  if (stream && trackUsage) payload.stream_options = { include_usage: true };
 
   if (responseFormat) payload.response_format = { type: responseFormat };
   if (tools?.length) {

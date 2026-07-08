@@ -11,6 +11,7 @@ import { ArrowLeft, Users, Eye, Clock, MousePointer, TrendingDown, Activity, Shi
 import { format, startOfWeek, differenceInDays } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import AdminBehavior from '@/components/AdminBehavior';
+import AdminAiUsage from '@/components/AdminAiUsage';
 
 interface AnalyticsEvent {
   id: string;
@@ -383,6 +384,7 @@ const AdminAnalyticsPage = () => {
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="behavior">Поведение</TabsTrigger>
+            <TabsTrigger value="ai-usage">Расход ИИ</TabsTrigger>
             <TabsTrigger value="funnel">Воронка</TabsTrigger>
             <TabsTrigger value="cohorts">Когорты</TabsTrigger>
             <TabsTrigger value="pages">Страницы</TabsTrigger>
@@ -422,6 +424,10 @@ const AdminAnalyticsPage = () => {
 
           <TabsContent value="behavior" className="space-y-4">
             <AdminBehavior />
+          </TabsContent>
+
+          <TabsContent value="ai-usage" className="space-y-4">
+            <AdminAiUsage />
           </TabsContent>
 
           <TabsContent value="pages" className="space-y-4">

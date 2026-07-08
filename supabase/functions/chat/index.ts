@@ -1,7 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { llmChat, MODEL_MAIN, isLlmConfigured, humanizeLlmError } from "../_shared/llmGateway.ts";
+import { llmChat, MODEL_MAIN, MODEL_FAST, isLlmConfigured, humanizeLlmError } from "../_shared/llmGateway.ts";
 import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
+import {
+  getServiceRoleClient, getClientIp, hashIp, getMonthlySpendRub, pickBudgetTier,
+  checkAnonRateLimit, recordUsage, waitUntil,
+} from "../_shared/aiUsage.ts";
+
+// Анти-абьюз (см. _shared/aiUsage.ts): подписка 4990₽/мес — расход ИИ на
+// подписчика не должен превышать это без деградации. Порог "как есть" по
+// умолчанию, реальные ₽/модель/провайдер могут отличаться — сверить и
+// поправить через секреты, не хардкодить заново.
+const AI_MONTHLY_BUDGET_RUB = Number(Deno.env.get("AI_MONTHLY_BUDGET_RUB")) || 1650;
+const AI_HARD_STOP_MULTIPLIER = Number(Deno.env.get("AI_HARD_STOP_MULTIPLIER")) || 2;
+// Эндпоинт технически отвечает и без Bearer (auth нужен только под
+// medicalContext) — единственная защита анонимных вызовов здесь: IP-лимит,
+// т.к. нет аккаунта, на который вешать ₽-бюджет.
+const CHAT_ANON_MAX_PER_DAY = Number(Deno.env.get("CHAT_ANON_MAX_PER_DAY")) || 6;
+// История, отправляемая модели (не то, что хранит/показывает клиент) — длинные
+// диалоги иначе линейно наращивают стоимость каждого следующего сообщения.
+const HISTORY_LIMIT_FOR_MODEL = 16;
 
 // CORS configuration - allow production and preview origins
 const getAllowedOrigin = (req?: Request) => {
@@ -89,6 +107,33 @@ serve(async (req) => {
 
     if (!isLlmConfigured()) {
       throw new Error("OPENAI_API_KEY is not configured");
+    }
+
+    // ── Анти-абьюз: бюджет/деградация модели (авторизованные) или IP-лимит (аноним) ──
+    const admin = getServiceRoleClient();
+    const ipHash = await hashIp(getClientIp(req));
+    let modelTier: "normal" | "degraded" = "normal";
+
+    if (!authenticatedUser) {
+      const allowed = await checkAnonRateLimit(admin, "chat", ipHash, CHAT_ANON_MAX_PER_DAY);
+      if (!allowed) {
+        return new Response(
+          JSON.stringify({ error: "Слишком много запросов без входа в аккаунт. Войдите или попробуйте позже." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } else {
+      const spentRub = await getMonthlySpendRub(admin, authenticatedUser.id);
+      const tier = pickBudgetTier(spentRub, AI_MONTHLY_BUDGET_RUB, AI_HARD_STOP_MULTIPLIER);
+      if (tier === "blocked") {
+        return new Response(
+          JSON.stringify({
+            error: `В этом месяце уже использован большой объём ИИ-ресурсов (~${Math.round(spentRub)}₽). Лимит обновится в начале следующего месяца — если это ошибка, напишите в поддержку.`,
+          }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (tier === "degraded") modelTier = "degraded";
     }
 
     let systemPrompt = `Вы — виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
@@ -268,7 +313,10 @@ ${renderChunks(chunks, 1100)}`;
 
     // Делаем non-stream запрос к OpenAI, затем отдаём результат как SSE-стрим
     // одним чанком, чтобы существующий клиент работал без изменений.
-    const PRIMARY_MODEL = MODEL_MAIN;
+    // При деградации (бюджет исчерпан) — дешёвая модель + короче ответ, а не
+    // жёсткий отказ: платник не упирается в стену на 100% бюджета.
+    const PRIMARY_MODEL = modelTier === "degraded" ? MODEL_FAST : MODEL_MAIN;
+    const MAX_COMPLETION_TOKENS = modelTier === "degraded" ? 700 : 1400;
     const TIMEOUT_MS = 50_000; // запас под клиентский 60 сек
 
     let content = "";
@@ -282,7 +330,12 @@ ${renderChunks(chunks, 1100)}`;
     console.log("[Chat] Calling OpenAI, model:", PRIMARY_MODEL, "messages:", messages.length);
 
     try {
-      const chatMsgs = [{ role: "system", content: systemPrompt }, ...messages];
+      // Модели отправляем хвост истории, а не всё до 50 сообщений — иначе
+      // длинный диалог линейно наращивает стоимость каждого следующего ответа.
+      const modelMessages = messages.length > HISTORY_LIMIT_FOR_MODEL
+        ? messages.slice(-HISTORY_LIMIT_FOR_MODEL)
+        : messages;
+      const chatMsgs = [{ role: "system", content: systemPrompt }, ...modelMessages];
       // Материалы базы знаний — отдельным system-сообщением ПЕРЕД последним
       // сообщением пользователя (так у модели максимальный приоритет на них).
       if (ragContext) {
@@ -291,6 +344,7 @@ ${renderChunks(chunks, 1100)}`;
       const r = await llmChat({
         model: PRIMARY_MODEL,
         messages: chatMsgs,
+        maxTokens: MAX_COMPLETION_TOKENS,
         signal: ctrl.signal,
       });
       clearTimeout(t);
@@ -308,6 +362,17 @@ ${renderChunks(chunks, 1100)}`;
           usedModel = `openai/${PRIMARY_MODEL}`;
         } else {
           lastErrorText = "empty content";
+        }
+        // Леджер расхода (см. _shared/aiUsage.ts) — не блокирует ответ пользователю.
+        if (data?.usage) {
+          waitUntil(recordUsage(admin, {
+            userId: authenticatedUser?.id || null,
+            ipHash: authenticatedUser ? null : ipHash,
+            functionName: "chat",
+            model: PRIMARY_MODEL,
+            promptTokens: data.usage.prompt_tokens || 0,
+            completionTokens: data.usage.completion_tokens || 0,
+          }));
         }
       }
     } catch (err) {
