@@ -33,6 +33,25 @@ const loadSentry = () => {
   return sentryPromise;
 };
 
+let metrikaScriptRequested = false;
+const METRIKA_SCRIPT_DELAY_MS = 6000;
+
+const scheduleAfterLoad = (callback: () => void) => {
+  const runWhenIdle = () => {
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(callback, { timeout: 3000 });
+    } else {
+      globalThis.setTimeout(callback, 1200);
+    }
+  };
+
+  if (document.readyState === "complete") {
+    window.setTimeout(runWhenIdle, METRIKA_SCRIPT_DELAY_MS);
+  } else {
+    window.addEventListener("load", () => window.setTimeout(runWhenIdle, METRIKA_SCRIPT_DELAY_MS), { once: true });
+  }
+};
+
 export function initMonitoring() {
   if (SENTRY_DSN) {
     loadSentry()
@@ -66,10 +85,6 @@ function injectMetrika(id: number) {
     };
     stub.l = Date.now();
     window.ym = stub;
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = "https://mc.yandex.ru/metrika/tag.js";
-    document.head.appendChild(s);
   }
   window.ym(id, "init", {
     clickmap: true,
@@ -77,6 +92,16 @@ function injectMetrika(id: number) {
     accurateTrackBounce: true,
     webvisor: true, // вкл; кабинет/формы/ИИ-чат скрыты классом ym-hide-content (152-ФЗ)
     defer: true, // hit'ы шлём сами на смену маршрута (SPA)
+  });
+
+  if (metrikaScriptRequested) return;
+  metrikaScriptRequested = true;
+
+  scheduleAfterLoad(() => {
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://mc.yandex.ru/metrika/tag.js";
+    document.head.appendChild(s);
   });
 }
 

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Phone, MessageCircle, Send, LogIn, LogOut, Menu, User, MessageSquare, Briefcase, ChevronDown, ArrowRight } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Sheet,
@@ -20,9 +20,10 @@ import { useBranding } from "@/contexts/BrandingContext";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useLawyerProfile } from "@/hooks/useLawyerProfile";
 import LimitsBadge from "@/components/LimitsBadge";
-import CabinetChooserDialog from "@/components/CabinetChooserDialog";
 import { isCabinetPath, isAdminPath } from "@/lib/cabinetNav";
 import { isLawyerPath } from "@/lib/lawyerNav";
+
+const CabinetChooserDialog = lazy(() => import("@/components/CabinetChooserDialog"));
 
 const initials = (full: string): string => {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -457,7 +458,11 @@ const Header = () => {
         </div>
       </div>
     </header>
-    <CabinetChooserDialog open={cabinetChooserOpen} onOpenChange={setCabinetChooserOpen} />
+    {user && cabinetChooserOpen && (
+      <Suspense fallback={null}>
+        <CabinetChooserDialog open={cabinetChooserOpen} onOpenChange={setCabinetChooserOpen} />
+      </Suspense>
+    )}
     </>
   );
 };

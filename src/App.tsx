@@ -6,16 +6,12 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { lazy, Suspense, Component, ReactNode, useEffect } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
 import QuickActionFAB from "./components/QuickActionFAB";
-import ExitIntentDialog from "./components/ExitIntentDialog";
+import DeferredExitIntentDialog from "./components/DeferredExitIntentDialog";
+import DeferredRagChat from "./components/DeferredRagChat";
 import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import { ChatPresenceProvider } from "./contexts/ChatPresenceContext";
 import BrandedPWAMeta from "./components/BrandedPWAMeta";
-import RoleGuard from "./components/RoleGuard";
-import AdminGuard from "./components/AdminGuard";
-import DashboardLayout from "./components/DashboardLayout";
-import LawyerLayout from "./components/LawyerLayout";
-import AdminLayout from "./components/AdminLayout";
 import { useAnalyticsTracking } from "./hooks/useAnalyticsTracking";
 import { captureUTM, initScrollDepth, initClickTracking } from "./lib/analytics";
 import { captureError, ymHit } from "./lib/monitoring";
@@ -114,8 +110,12 @@ const ClientMessagesPage = lazy(() => import("./pages/ClientMessagesPage"));
 const ClientChatPage = lazy(() => import("./pages/ClientChatPage"));
 const FamilyAccessPage = lazy(() => import("./pages/FamilyAccessPage"));
 const FamilyAcceptPage = lazy(() => import("./pages/FamilyAcceptPage"));
-// Lazy-load RagChat — keeps react-markdown out of the main bundle
-const RagChat = lazy(() => import("./components/RagChat"));
+
+const RoleGuard = lazy(() => import("./components/RoleGuard"));
+const AdminGuard = lazy(() => import("./components/AdminGuard"));
+const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
+const LawyerLayout = lazy(() => import("./components/LawyerLayout"));
+const AdminLayout = lazy(() => import("./components/AdminLayout"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -278,9 +278,9 @@ const App = () => (
               </Routes>
             </Suspense>
             <QuickActionFAB />
-            <Suspense fallback={null}><RagChat /></Suspense>
+            <DeferredRagChat />
             <MobileBottomNav />
-            <ExitIntentDialog />
+            <DeferredExitIntentDialog />
           </ErrorBoundary>
           </ChatPresenceProvider>
           </BrandingProvider>

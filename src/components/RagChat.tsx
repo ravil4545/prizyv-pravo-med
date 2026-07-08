@@ -10,6 +10,10 @@ interface Message {
   content: string;
 }
 
+interface RagChatProps {
+  initialOpen?: boolean;
+}
+
 const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag";
 
 const HIDDEN_ROUTES = [
@@ -23,8 +27,8 @@ const WELCOME_MESSAGE: Message = {
     "Привет! Я AI-помощник nepriziv.ru. Отвечаю на вопросы о призыве, категориях годности и Расписании болезней на основе базы знаний.\n\nЧем могу помочь?",
 };
 
-export function RagChat() {
-  const [open, setOpen] = useState(false);
+export function RagChat({ initialOpen = false }: RagChatProps) {
+  const [open, setOpen] = useState(initialOpen);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,6 +48,10 @@ export function RagChat() {
   const hidden =
     HIDDEN_ROUTES.some((r) => location.pathname.startsWith(r)) ||
     isCabinetRoute;
+
+  useEffect(() => {
+    if (initialOpen) setOpen(true);
+  }, [initialOpen]);
 
   useEffect(() => {
     if (!hidden && open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
