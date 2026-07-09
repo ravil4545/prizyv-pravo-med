@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { searchByArticles, renderChunks } from "../_shared/ragSearch.ts";
+import { MODEL_VISION } from "../_shared/llmGateway.ts";
 
 const getAllowedOrigin = (req?: Request) => {
   const requestOrigin = req?.headers.get("origin") || "";
@@ -93,7 +94,7 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     // Vision-модель OpenAI (читает фото/скан документа). Переключаемо секретом.
-    const VISION_MODEL = Deno.env.get("OPENAI_MODEL_VISION") || "gpt-4.1-mini";
+    const VISION_MODEL = MODEL_VISION;
 
     // Verify user token
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

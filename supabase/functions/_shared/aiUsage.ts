@@ -21,10 +21,15 @@ const RUB_PER_USD = Number(Deno.env.get("AI_RUB_PER_USD")) || 90;
 const MODEL_PRICING_USD_PER_1M: Record<string, [number, number]> = {
   "llama-3.3-70b-versatile": [0.59, 0.79],
   "llama-3.1-8b-instant": [0.05, 0.08],
+  "gpt-5.6": [5.00, 30.00],
+  "gpt-5.6-sol": [5.00, 30.00],
+  "gpt-5.6-terra": [2.50, 15.00],
+  "gpt-5.6-luna": [1.00, 6.00],
+  "gpt-5.5": [5.00, 30.00],
   "gpt-4.1-mini": [0.40, 1.60],
   "gpt-4.1-nano": [0.10, 0.40],
 };
-const FALLBACK_PRICING_USD_PER_1M: [number, number] = [2.0, 6.0];
+const FALLBACK_PRICING_USD_PER_1M: [number, number] = [5.00, 30.00];
 
 export function computeCostRub(model: string, promptTokens: number, completionTokens: number): number {
   const [inPrice, outPrice] = MODEL_PRICING_USD_PER_1M[model] || FALLBACK_PRICING_USD_PER_1M;

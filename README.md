@@ -131,7 +131,7 @@ nepriziv/
 Менять их не нужно — они хранятся на стороне Supabase и доступны функциям через `Deno.env.get('...')`:
 
 - `OPENAI_API_KEY` — доступ к OpenAI API для AI-функций
-- `OPENAI_MODEL_MAIN`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_VISION` — модели OpenAI для основного, быстрого и vision-сценариев
+- `OPENAI_MODEL_MAIN`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_VISION`, `OPENAI_MODEL_VISION_FAST` — модели OpenAI для основного, быстрого и vision-сценариев
 - `RESEND_API_KEY` — отправка писем
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — авто-инжектируются Supabase
 

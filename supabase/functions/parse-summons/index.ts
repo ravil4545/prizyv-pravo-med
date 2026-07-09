@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { MODEL_VISION_FAST } from "../_shared/llmGateway.ts";
 
 /**
  * parse-summons — распознаёт повестку из военкомата по фото/PDF.
@@ -105,7 +106,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL_VISION") || "gpt-4.1-mini",
+        model: MODEL_VISION_FAST,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
