@@ -79,6 +79,12 @@ const ASTHMA_WORD_RE = /бронхиальн[а-яё]*\s+астм[а-яё]*|(?:^
 const ASTHMA_DEBUT_RE = /дебют|впервые\s+выявлен/iu;
 const ASTHMA_OBJECTIVE_SUPPORT_RE =
   /госпитализац|стационар|скор(?:ая|ой)|\bФВД\b|спирометр|ОФВ\s*1|бронхолитическ[а-яё]*\s+проб|проб[а-яё]*\s+с\s+бронхолит|пик[-\s]?флоу|метахолин|диспансерн|льготн[а-яё]*\s+(?:категор|рецепт)/iu;
+const ALLERGIC_RHINITIS_RE =
+  /\bJ\s*30(?:\s*[\.,]\s*\d)?\b|аллергическ[а-яё]*\s+ринит|поллиноз|сенсибилизац/iu;
+const POLYPOSIS_SINUS_SOURCE_RE =
+  /\bJ\s*33(?:\s*[\.,]\s*\d)?\b|полип|синусит|гайморит|риносинусит|пансинусит|пазух|сосудосужива|обонян/iu;
+const POLYPOSIS_SINUS_ADVICE_RE =
+  /полип|j\s*33|синусит|гайморит|риносинусит|кт\s+.*пазух|пазух.*кт|околоносов|придаточн[а-яё]*\s+пазух|лор[-\s]?врач|эндоскопическ[а-яё]*\s+исследован[а-яё]*\s+полости\s+носа|сосудосужива|обонян/iu;
 
 const normalizeText = (value: unknown): string => String(value ?? "").replace(/\s+/g, " ").trim();
 
@@ -102,6 +108,9 @@ const extractAsthmaIcdCode = (text: string): string | null => {
 const hasAsthmaEvidence = (text: string): boolean =>
   ASTHMA_ICD_RE.test(text) || ASTHMA_ABBREVIATION_RE.test(text) || ASTHMA_WORD_RE.test(text);
 
+const hasAllergicRhinitisWithoutPolypSinusEvidence = (text: string): boolean =>
+  ALLERGIC_RHINITIS_RE.test(text) && !POLYPOSIS_SINUS_SOURCE_RE.test(text);
+
 const isFalseAsthmaIcdGap = (message: string, sourceText: string): boolean => {
   if (!CONCRETE_ASTHMA_ICD_RE.test(sourceText)) return false;
 
@@ -115,12 +124,19 @@ const isFalseAsthmaIcdGap = (message: string, sourceText: string): boolean => {
   return complainsAboutCode && mentionsAsthma;
 };
 
-const cleanAsthmaFalseGaps = (items: unknown, sourceText: string): string[] => {
+const isIrrelevantPolypSinusAdvice = (message: string, sourceText: string): boolean => {
+  if (!ALLERGIC_RHINITIS_RE.test(sourceText)) return false;
+  if (POLYPOSIS_SINUS_SOURCE_RE.test(sourceText)) return false;
+  return POLYPOSIS_SINUS_ADVICE_RE.test(message);
+};
+
+const cleanIrrelevantDocumentAdvice = (items: unknown, sourceText: string): string[] => {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => normalizeText(item))
     .filter(Boolean)
-    .filter((item) => !isFalseAsthmaIcdGap(item, sourceText));
+    .filter((item) => !isFalseAsthmaIcdGap(item, sourceText))
+    .filter((item) => !isIrrelevantPolypSinusAdvice(item, sourceText));
 };
 
 const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<string, any> => {
@@ -142,6 +158,25 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
   }
 
   const linkedArticles = result.linkedArticles as Array<Record<string, any>>;
+  const hasSecondaryRhinitisOnly = hasAllergicRhinitisWithoutPolypSinusEvidence(extractedText);
+  for (const article of linkedArticles) {
+    article.recommendations = cleanIrrelevantDocumentAdvice(article?.recommendations, extractedText);
+    if (hasSecondaryRhinitisOnly && normalizeArticleNumber(article?.articleNumber) === "49") {
+      if (numericChance(article.categoryBChance) > 20) {
+        article.categoryBChance = 20;
+      }
+      if (["В", "Г", "Д"].includes(String(article.fitnessCategory))) {
+        article.fitnessCategory = "Б";
+      }
+      const explanation = normalizeText(article.explanation);
+      const secondaryNote =
+        "Аллергический ринит/поллиноз J30.x в этом документе является вторичным диагнозом и не подтверждает полипозный синусит J33.x.";
+      article.explanation = explanation && !explanation.includes(secondaryNote)
+        ? `${explanation} ${secondaryNote}`
+        : explanation || secondaryNote;
+    }
+  }
+
   const existingAsthma = linkedArticles.find((article) => {
     const articleNumber = normalizeArticleNumber(article?.articleNumber);
     const diagnosis = normalizeText(article?.diagnosisFound);
@@ -234,8 +269,8 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
     result.explanation = `${explanation} Также в документе учтено: ${asthmaExplanation}`;
   }
 
-  result.documentGaps = cleanAsthmaFalseGaps(result.documentGaps, extractedText);
-  result.recommendations = cleanAsthmaFalseGaps(result.recommendations, extractedText);
+  result.documentGaps = cleanIrrelevantDocumentAdvice(result.documentGaps, extractedText);
+  result.recommendations = cleanIrrelevantDocumentAdvice(result.recommendations, extractedText);
 
   return result;
 };
@@ -309,6 +344,7 @@ serve(async (req) => {
 - Любой конкретный код J45.0, J45.1, J45.8, J45.9 уже удовлетворяет требованию "J45.x". НЕ пиши, что нужно уточнить J45.x, если в документе уже указан конкретный код J45.0/J45.1/J45.8/J45.9.
 - Бронхиальная астма / БА / астма с кодом J45.x относится к статье 52 Расписания болезней. Обязательно добавляй статью 52 в linkedArticles, даже если в том же документе есть аллергический ринит по статье 49.
 - Если это "БА, дебют" / впервые выявленная астма и есть только одно заключение частной клиники без госпитализаций, скорой помощи, диспансерного наблюдения или результатов ФВД/спирометрии с бронхолитиком, НЕ ставь высокий шанс 70-90%. Для такого документа указывай умеренный предварительный шанс категории В около 55-65%.
+- Аллергический ринит / поллиноз / J30.x НЕ равен полипозному синуситу / J33.x. Если в документе нет J33.x, полипов, синусита/риносинусита, КТ пазух или эндоскопического описания полипов, НЕ требуй КТ придаточных пазух, ЛОР-заключение J33.x, данные о сосудосуживающих каплях, снижении обоняния или подтверждение полипозного синусита. В таких смешанных документах главный фокус отчёта держи на бронхиальной астме J45.x, а ринит/поллиноз упоминай вторично.
 
 КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ОЦЕНКИ СТЕПЕНЕЙ ЗАБОЛЕВАНИЙ:
 
@@ -878,6 +914,8 @@ ${examinationsList}
 - Пиши КОНКРЕТНО: не «нужны обследования», а «в заключении нет угла свода стопы в градусах для обеих стоп — без него степень не засчитают».
 - Для бронхиальной астмы: «БА» и «Астма» в графе диагноза считай указанием на бронхиальную астму. Формулировка «БА, дебют J45.0» = бронхиальная астма, дебют, МКБ-10 J45.0.
 - J45.x в требованиях означает семейство кодов. Конкретные коды J45.0/J45.1/J45.8/J45.9 уже выполняют это требование; если такой код есть в тексте документа, НЕ указывай пробел «нет/нужно уточнить J45.x».
+- Не переноси требования по полипозному синуситу/J33.x на аллергический ринит/J30.x или поллиноз. Если в тексте документа нет полипов, J33.x, синусита/риносинусита, КТ пазух или эндоскопического описания полипов, НЕ указывай пробелы про КТ придаточных пазух, ЛОР-заключение J33.x, сосудосуживающие капли, снижение обоняния или подтверждение полипозного синусита.
+- Если в документе одновременно есть J45.x/БА и J30.x/аллергический ринит/поллиноз, ранжируй пробелы и рекомендации сначала по бронхиальной астме, затем по вторичным аллергологическим диагнозам.
 - Если документ полностью соответствует требованиям — верни пустые массивы.
 - Опирайся ТОЛЬКО на требования ниже, ничего не выдумывай.
 
@@ -907,8 +945,8 @@ ${checklistText}`;
           const gapMatch = gapContent.match(/\{[\s\S]*\}/);
           const gaps = gapMatch ? JSON.parse(gapMatch[0]) : JSON.parse(gapContent);
           const sourceText = String(result.extractedText ?? "");
-          const gapList: string[] = cleanAsthmaFalseGaps(gaps.documentGaps, sourceText);
-          const strong: string[] = cleanAsthmaFalseGaps(gaps.strengthenedRecommendations, sourceText);
+          const gapList: string[] = cleanIrrelevantDocumentAdvice(gaps.documentGaps, sourceText);
+          const strong: string[] = cleanIrrelevantDocumentAdvice(gaps.strengthenedRecommendations, sourceText);
           const baseRecs = Array.isArray(result.recommendations) ? result.recommendations : [];
           if (gapList.length) {
             result.documentGaps = gapList;
