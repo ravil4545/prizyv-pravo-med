@@ -40,7 +40,7 @@ const AiChatPage = () => {
   const [asked, setAsked] = useState<number>(() => Number(localStorage.getItem(COUNT_KEY) || 0));
   const [isAuthed, setIsAuthed] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -51,7 +51,9 @@ const AiChatPage = () => {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = messagesRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
   const gateShown = !isAuthed && asked >= FREE_LIMIT;
@@ -143,7 +145,10 @@ const AiChatPage = () => {
 
         {/* Лента сообщений */}
         {/* ym-hide-content: тексты вопросов/ответов о здоровье не попадают в записи Webvisor (152-ФЗ) */}
-        <div className="flex-1 rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto min-h-[320px] ym-hide-content">
+        <div
+          ref={messagesRef}
+          className="h-[56dvh] min-h-[320px] max-h-[560px] flex-none overscroll-contain rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto ym-hide-content"
+        >
           {messages.map((m, i) => (
             <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div
@@ -151,11 +156,11 @@ const AiChatPage = () => {
                   "max-w-[88%] rounded-2xl px-4 py-2.5 leading-relaxed break-words text-sm",
                   m.role === "user"
                     ? "bg-primary text-primary-foreground rounded-tr-sm"
-                    : "bg-muted text-foreground rounded-tl-sm",
+                    : "border border-border bg-card text-card-foreground shadow-sm rounded-tl-sm",
                 )}
               >
                 {m.content ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-strong:text-current prose-ul:my-1 prose-li:my-0">
+                  <div className="prose prose-sm max-w-none text-card-foreground prose-p:my-1 prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground prose-ul:my-1 prose-li:my-0">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
@@ -180,7 +185,6 @@ const AiChatPage = () => {
               {error}
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
         {/* Мягкое предложение регистрации после лимита */}

@@ -41,7 +41,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
   const didDragRef = useRef(false);
   const dragStartRef = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const location = useLocation();
 
@@ -55,7 +55,10 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
   }, [initialOpen]);
 
   useEffect(() => {
-    if (!hidden && open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (hidden || !open) return;
+    const viewport = messagesRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
   }, [messages, open, hidden]);
 
   useEffect(() => {
@@ -197,18 +200,18 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
           </div>
 
           {/* Messages — ym-hide-content: переписка о здоровье не попадает в записи Webvisor (152-ФЗ) */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm ym-hide-content">
+          <div ref={messagesRef} className="flex-1 overscroll-contain overflow-y-auto p-3 space-y-3 text-sm ym-hide-content">
             {messages.map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn(
-                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words",
+                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words shadow-sm",
                   m.role === "user"
                     ? "bg-primary text-white rounded-tr-sm"
-                    : "bg-gray-100 text-gray-800 rounded-tl-sm",
+                    : "border border-slate-200 bg-white text-slate-950 rounded-tl-sm",
                 )}>
                   {m.content
                     ? (
-                      <div className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-current prose-ul:my-1 prose-li:my-0">
+                      <div className="prose prose-sm max-w-none text-slate-950 prose-p:my-1 prose-p:text-slate-950 prose-li:text-slate-950 prose-strong:text-slate-950 prose-headings:text-slate-950 prose-ul:my-1 prose-li:my-0">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -234,7 +237,6 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
             {error && (
               <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>
             )}
-            <div ref={bottomRef} />
           </div>
 
           {/* Input */}

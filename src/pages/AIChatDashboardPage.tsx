@@ -89,7 +89,6 @@ const AIChatDashboardPage = () => {
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const navigate = useNavigate();
@@ -256,29 +255,29 @@ const AIChatDashboardPage = () => {
     }
   };
 
-  const scrollToBottom = useCallback((force = false) => {
-    setTimeout(() => {
-      if (!force && !shouldAutoScrollRef.current) return;
-      messagesEndRef.current?.scrollIntoView({ block: "end" });
-      if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-        if (viewport) {
-          viewport.scrollTop = viewport.scrollHeight;
-        }
-      }
-      shouldAutoScrollRef.current = true;
-      setShowScrollJump(false);
-    }, 100);
+  const getChatViewport = useCallback(() => {
+    return scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]') || null;
   }, []);
 
+  const scrollToBottom = useCallback((force = false) => {
+    window.requestAnimationFrame(() => {
+      if (!force && !shouldAutoScrollRef.current) return;
+      const viewport = getChatViewport();
+      if (!viewport) return;
+      viewport.scrollTop = viewport.scrollHeight;
+      shouldAutoScrollRef.current = true;
+      setShowScrollJump(false);
+    });
+  }, [getChatViewport]);
+
   const handleChatScroll = useCallback(() => {
-    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    const viewport = getChatViewport();
     if (!viewport) return;
     const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     const nearBottom = distanceToBottom < 160;
     shouldAutoScrollRef.current = nearBottom;
     setShowScrollJump(!nearBottom);
-  }, []);
+  }, [getChatViewport]);
 
   useEffect(() => {
     scrollToBottom();
@@ -291,12 +290,12 @@ const AIChatDashboardPage = () => {
   }, [currentConversationId, scrollToBottom]);
 
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    const viewport = getChatViewport();
     if (!viewport) return;
     viewport.addEventListener("scroll", handleChatScroll, { passive: true });
     handleChatScroll();
     return () => viewport.removeEventListener("scroll", handleChatScroll);
-  }, [handleChatScroll, currentConversationId, messages.length]);
+  }, [getChatViewport, handleChatScroll, currentConversationId, messages.length]);
 
   useEffect(() => {
     checkUser();
@@ -526,6 +525,7 @@ const AIChatDashboardPage = () => {
     }
 
     const userMessage: Message = { role: "user", content: text };
+    shouldAutoScrollRef.current = true;
     setMessages((prev) => [...prev, userMessage]);
     if (!isDemoMode) await saveMessage(userMessage);
     setInput("");
@@ -1067,12 +1067,12 @@ const AIChatDashboardPage = () => {
                             className={`sm:max-w-[420px] max-w-[85vw] p-3 sm:p-4 rounded-2xl overflow-hidden ${
                               isUserMessage
                                 ? "bg-primary text-primary-foreground rounded-br-md"
-                                : "bg-muted rounded-bl-md"
+                                : "border border-border bg-card text-card-foreground shadow-sm rounded-bl-md"
                             }`}
                             style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                           >
                             {message.role === "assistant" ? (
-                              <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-[13.5px] sm:text-[14.5px] leading-[1.65] [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-gold-deep [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
+                              <div className="prose prose-sm max-w-none text-card-foreground text-[13.5px] sm:text-[14.5px] leading-[1.65] prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-primary [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
@@ -1083,7 +1083,7 @@ const AIChatDashboardPage = () => {
                                           <button
                                             type="button"
                                             onClick={() => navigate(href)}
-                                            className="text-gold-deep font-semibold hover:underline inline"
+                                            className="text-primary font-semibold hover:underline inline"
                                           >
                                             {children}
                                           </button>
@@ -1124,9 +1124,9 @@ const AIChatDashboardPage = () => {
                   })}
                   {sending && messages.length > 0 && messages[messages.length - 1].role === "user" && (
                     <div className="flex justify-start">
-                      <div className="bg-muted p-3 sm:p-4 rounded-lg">
+                      <div className="border border-border bg-card text-card-foreground p-3 sm:p-4 rounded-lg shadow-sm">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] sm:text-sm text-muted-foreground">ИИ думает</span>
+                          <span className="text-[13px] sm:text-sm text-card-foreground">ИИ думает</span>
                           <div className="flex gap-1">
                             <div className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                             <div className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -1136,7 +1136,6 @@ const AIChatDashboardPage = () => {
                       </div>
                     </div>
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
               {showScrollJump && (
