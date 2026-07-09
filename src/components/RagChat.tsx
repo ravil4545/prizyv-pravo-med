@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { X, BookOpen, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { readOpenAICompatibleStream } from "@/lib/openaiSse";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -111,26 +112,11 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
       }
       if (!res.body) throw new Error("Пустой ответ от сервера");
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
       let assistantText = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") break;
-          try {
-            const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantText += delta;
-              setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: assistantText }]);
-            }
-          } catch { /* ignore partial JSON */ }
-        }
-      }
+      await readOpenAICompatibleStream(res.body, (delta) => {
+        assistantText += delta;
+        setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: assistantText }]);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка соединения");
     } finally {

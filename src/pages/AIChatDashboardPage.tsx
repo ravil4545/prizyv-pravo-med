@@ -31,6 +31,7 @@ import LimitReachedDialog from "@/components/LimitReachedDialog";
 import { buildAIContext } from "@/lib/buildAIContext";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseConfig";
 import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
+import { readOpenAICompatibleStream } from "@/lib/openaiSse";
 
 interface Message {
   role: "user" | "assistant";
@@ -551,39 +552,7 @@ const AIChatDashboardPage = () => {
         abortController.abort();
       }, 60_000);
 
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-          "apikey": SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          ...(contextToSend ? { medicalContext: contextToSend } : {}),
-        }),
-        signal: abortController.signal,
-      });
-
-      console.log("[Chat] response", response.status, "model:", response.headers.get("x-ai-model") || "(нет header)");
-
-      if (!response.ok) {
-        // Edge-функция вернула JSON-ошибку (4xx/5xx). Читаем её и показываем.
-        let errText = `HTTP ${response.status}`;
-        try {
-          const errJson = await response.json();
-          errText = errJson.error || errText;
-        } catch {
-          // ignore
-        }
-        throw new Error(errText);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("Стрим недоступен");
-      const decoder = new TextDecoder();
       let assistantContent = "";
-      let buffer = "";
 
       // ВАЖНО: НЕ добавляем placeholder отдельным setMessages — React 18
       // батчит обновления, и первый чанк стрима мог прийти раньше, чем
@@ -592,49 +561,54 @@ const AIChatDashboardPage = () => {
       // отображался на месте вопроса. Вместо этого добавляем/обновляем
       // assistant-пузырь атомарно по роли.
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          clearTimeout(timeoutId);
-          break;
-        }
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            messages: [...messages, userMessage],
+            ...(contextToSend ? { medicalContext: contextToSend } : {}),
+          }),
+          signal: abortController.signal,
+        });
 
-        // Буфер для случая, когда SSE-сообщение разрезано между чанками.
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        // Последняя строка может быть неполной — оставляем в буфере до следующего чтения.
-        buffer = lines.pop() ?? "";
+        console.log("[Chat] response", response.status, "model:", response.headers.get("x-ai-model") || "(нет header)");
 
-        for (const line of lines) {
-          // SSE-комментарии (начинаются с ":") — keepalive, игнорируем.
-          // Пример: ": keepalive"
-          if (!line || line.startsWith(":")) continue;
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
-          if (data === "[DONE]") continue;
-
+        if (!response.ok) {
+          // Edge-функция вернула JSON-ошибку (4xx/5xx). Читаем её и показываем.
+          let errText = `HTTP ${response.status}`;
           try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) => {
-                const next = [...prev];
-                const last = next[next.length - 1];
-                // Если последний — assistant: апдейтим его. Иначе — добавляем новый.
-                // Это безопасно при любом порядке batched-обновлений React.
-                if (last && last.role === "assistant") {
-                  next[next.length - 1] = { role: "assistant", content: assistantContent };
-                } else {
-                  next.push({ role: "assistant", content: assistantContent });
-                }
-                return next;
-              });
-            }
+            const errJson = await response.json();
+            errText = errJson.error || errText;
           } catch {
-            // Неполный JSON-чанк — пропускаем
+            // ignore
           }
+          throw new Error(errText);
         }
+
+        if (!response.body) throw new Error("Стрим недоступен");
+
+        await readOpenAICompatibleStream(response.body, (content) => {
+          assistantContent += content;
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            // Если последний — assistant: апдейтим его. Иначе — добавляем новый.
+            // Это безопасно при любом порядке batched-обновлений React.
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = { role: "assistant", content: assistantContent };
+            } else {
+              next.push({ role: "assistant", content: assistantContent });
+            }
+            return next;
+          });
+        });
+      } finally {
+        clearTimeout(timeoutId);
       }
 
       // Если стрим завершился, но контент пустой — это тихий сбой

@@ -9,6 +9,7 @@ import SEOHead from "@/components/SEOHead";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { supabase } from "@/integrations/supabase/client";
+import { readOpenAICompatibleStream } from "@/lib/openaiSse";
 
 // Публичный ИИ-чат БЕЗ регистрации — главный «вход в ценность» для холодного трафика.
 // Раньше любой клик по «ИИ» вёл незалогиненного на /auth; из анонимной воронки было
@@ -77,27 +78,11 @@ const AiChatPage = () => {
           throw new Error(d.error || `Ошибка сервера: ${res.status}`);
         }
         setMessages((p) => [...p, { role: "assistant", content: "" }]);
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
         let acc = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          for (const line of decoder.decode(value, { stream: true }).split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") break;
-            try {
-              const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-              if (delta) {
-                acc += delta;
-                setMessages((p) => [...p.slice(0, -1), { role: "assistant", content: acc }]);
-              }
-            } catch {
-              /* ignore partial JSON */
-            }
-          }
-        }
+        await readOpenAICompatibleStream(res.body, (delta) => {
+          acc += delta;
+          setMessages((p) => [...p.slice(0, -1), { role: "assistant", content: acc }]);
+        });
         const next = asked + 1;
         setAsked(next);
         localStorage.setItem(COUNT_KEY, String(next));
