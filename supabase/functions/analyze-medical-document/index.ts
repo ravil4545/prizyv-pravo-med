@@ -72,6 +72,128 @@ async function callAIWithRetry(url: string, options: RequestInit, maxRetries: nu
   throw lastError || new Error("All retry attempts failed");
 }
 
+const ASTHMA_ICD_RE = /\bJ\s*45(?:\s*[\.,]\s*\d)?\b/i;
+const CONCRETE_ASTHMA_ICD_RE = /\bJ\s*45\s*[\.,]\s*\d\b/i;
+const ASTHMA_ABBREVIATION_RE = /(?:^|[^А-Яа-яЁёA-Za-z])БА(?:$|[^А-Яа-яЁёA-Za-z])/u;
+const ASTHMA_WORD_RE = /бронхиальн[а-яё]*\s+астм[а-яё]*|(?:^|[^А-Яа-яЁёA-Za-z])астм[а-яё]*/iu;
+const ASTHMA_DEBUT_RE = /дебют|впервые\s+выявлен/iu;
+
+const normalizeText = (value: unknown): string => String(value ?? "").replace(/\s+/g, " ").trim();
+
+const normalizeArticleNumber = (value: unknown): string => {
+  const match = String(value ?? "").match(/\d+/);
+  return match?.[0] ?? "";
+};
+
+const extractAsthmaIcdCode = (text: string): string | null => {
+  const match = text.match(/\bJ\s*45(?:\s*[\.,]\s*(\d))?\b/i);
+  if (!match) return null;
+  return match[1] ? `J45.${match[1]}` : "J45";
+};
+
+const hasAsthmaEvidence = (text: string): boolean =>
+  ASTHMA_ICD_RE.test(text) || ASTHMA_ABBREVIATION_RE.test(text) || ASTHMA_WORD_RE.test(text);
+
+const isFalseAsthmaIcdGap = (message: string, sourceText: string): boolean => {
+  if (!CONCRETE_ASTHMA_ICD_RE.test(sourceText)) return false;
+
+  const msg = normalizeText(message).toLowerCase();
+  const complainsAboutCode =
+    /(?:нет|отсутств|не указан[ао]?|не хватает)\s+(?:кода?\s*)?(?:мкб|j\s*45|код)/i.test(msg) ||
+    /(?:уточнить|добавить|указать)\s+(?:код\s*)?(?:мкб|j\s*45|код)/i.test(msg) ||
+    /j\s*45\s*(?:[\.,]\s*)?[xх]\b/i.test(msg);
+  const mentionsAsthma = /астм|бронхиальн|j\s*45/i.test(msg);
+
+  return complainsAboutCode && mentionsAsthma;
+};
+
+const cleanAsthmaFalseGaps = (items: unknown, sourceText: string): string[] => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+    .filter((item) => !isFalseAsthmaIcdGap(item, sourceText));
+};
+
+const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<string, any> => {
+  const extractedText = normalizeText(result.extractedText);
+  if (!extractedText || !hasAsthmaEvidence(extractedText)) {
+    return result;
+  }
+
+  const asthmaCode = extractAsthmaIcdCode(extractedText);
+  const hasDebut = ASTHMA_DEBUT_RE.test(extractedText);
+  const normalizedDiagnosis = `Бронхиальная астма${hasDebut ? ", дебют" : ""}${asthmaCode ? ` (${asthmaCode})` : ""}`;
+  const asthmaChance = hasDebut ? 60 : 80;
+  const asthmaCategory = hasDebut ? "Г" : "В";
+
+  if (!Array.isArray(result.linkedArticles)) {
+    result.linkedArticles = [];
+  }
+
+  const linkedArticles = result.linkedArticles as Array<Record<string, any>>;
+  const existingAsthma = linkedArticles.find((article) => {
+    const articleNumber = normalizeArticleNumber(article?.articleNumber);
+    const diagnosis = normalizeText(article?.diagnosisFound);
+    return articleNumber === "52" || ASTHMA_ICD_RE.test(diagnosis) || ASTHMA_WORD_RE.test(diagnosis);
+  });
+
+  const asthmaExplanation =
+    `В тексте документа есть формулировка "${ASTHMA_ABBREVIATION_RE.test(extractedText) ? "БА" : "астма"}"` +
+    `${asthmaCode ? ` и код МКБ-10 ${asthmaCode}` : ""}: это относится к бронхиальной астме по статье 52 Расписания болезней.` +
+    (hasDebut ? " Пометка «дебют» означает впервые выявленное заболевание, а не отсутствие диагноза." : "");
+
+  if (existingAsthma) {
+    existingAsthma.articleNumber = "52";
+    existingAsthma.diagnosisFound = normalizeText(existingAsthma.diagnosisFound) || normalizedDiagnosis;
+    if (!/бронхиальн|астм|j\s*45/i.test(existingAsthma.diagnosisFound)) {
+      existingAsthma.diagnosisFound = normalizedDiagnosis;
+    } else if (asthmaCode && !new RegExp(asthmaCode.replace(".", "\\."), "i").test(existingAsthma.diagnosisFound)) {
+      existingAsthma.diagnosisFound = `${existingAsthma.diagnosisFound} (${asthmaCode})`;
+    }
+    if (!existingAsthma.explanation || isFalseAsthmaIcdGap(existingAsthma.explanation, extractedText)) {
+      existingAsthma.explanation = asthmaExplanation;
+    }
+    if (typeof existingAsthma.categoryBChance !== "number" || existingAsthma.categoryBChance < asthmaChance) {
+      existingAsthma.categoryBChance = asthmaChance;
+    }
+    if (!existingAsthma.fitnessCategory || !["В", "Д"].includes(String(existingAsthma.fitnessCategory))) {
+      existingAsthma.fitnessCategory = asthmaCategory;
+    }
+  } else {
+    linkedArticles.push({
+      articleNumber: "52",
+      diagnosisFound: normalizedDiagnosis,
+      fitnessCategory: asthmaCategory,
+      categoryBChance: asthmaChance,
+      explanation: asthmaExplanation,
+      recommendations: [
+        "Сохранить заключение аллерголога/пульмонолога с диагнозом бронхиальная астма и кодом J45.x.",
+        "Пройти ФВД/спирометрию с бронхолитиком для объективного подтверждения бронхиальной обструкции.",
+      ],
+    });
+  }
+
+  const currentChance = typeof result.categoryBChance === "number" ? result.categoryBChance : 0;
+  if (currentChance < asthmaChance) {
+    result.primaryArticleNumber = "52";
+    result.categoryBChance = asthmaChance;
+    if (!["В", "Д"].includes(String(result.fitnessCategory))) {
+      result.fitnessCategory = asthmaCategory;
+    }
+  }
+
+  const explanation = normalizeText(result.explanation);
+  if (explanation && !/бронхиальн|астм|j\s*45/i.test(explanation)) {
+    result.explanation = `${explanation} Также в документе учтено: ${asthmaExplanation}`;
+  }
+
+  result.documentGaps = cleanAsthmaFalseGaps(result.documentGaps, extractedText);
+  result.recommendations = cleanAsthmaFalseGaps(result.recommendations, extractedText);
+
+  return result;
+};
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -134,6 +256,12 @@ serve(async (req) => {
 
     // Базовый промпт с правилами
     const basePrompt = `Ты медицинский эксперт-документовед высшей категории, специализирующийся на анализе медицинских документов для определения годности к военной службе по Постановлению Правительства РФ №565 (Расписание болезней).
+
+КРИТИЧЕСКИ ВАЖНО - МЕДИЦИНСКИЕ СОКРАЩЕНИЯ И КОДЫ МКБ:
+- В графе "Диагноз" сокращение "БА" означает "бронхиальная астма", если рядом есть контекст астмы, код J45.x, ингаляционная терапия или аллерголог/пульмонолог. Формулировку "БА, дебют J45.0" распознавай как "бронхиальная астма, дебют, код МКБ-10 J45.0".
+- Слово "дебют" при бронхиальной астме означает впервые выявленное/начальное проявление диагноза, а НЕ отсутствие диагноза и НЕ "подозрение", если в документе диагноз указан без вопросительного знака.
+- Любой конкретный код J45.0, J45.1, J45.8, J45.9 уже удовлетворяет требованию "J45.x". НЕ пиши, что нужно уточнить J45.x, если в документе уже указан конкретный код J45.0/J45.1/J45.8/J45.9.
+- Бронхиальная астма / БА / астма с кодом J45.x относится к статье 52 Расписания болезней. Обязательно добавляй статью 52 в linkedArticles, даже если в том же документе есть аллергический ринит по статье 49.
 
 КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ОЦЕНКИ СТЕПЕНЕЙ ЗАБОЛЕВАНИЙ:
 
@@ -656,6 +784,7 @@ ${examinationsList}
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       result = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+      result = normalizeAsthmaAnalysisResult(result);
     } catch (e) {
       // ВАЖНО: раньше сюда подставлялся fallback-объект и документ ниже помечался
       // is_classified = true — пользователь видел «успешный» анализ с фиктивным
@@ -700,6 +829,8 @@ ${examinationsList}
 
 Правила:
 - Пиши КОНКРЕТНО: не «нужны обследования», а «в заключении нет угла свода стопы в градусах для обеих стоп — без него степень не засчитают».
+- Для бронхиальной астмы: «БА» и «Астма» в графе диагноза считай указанием на бронхиальную астму. Формулировка «БА, дебют J45.0» = бронхиальная астма, дебют, МКБ-10 J45.0.
+- J45.x в требованиях означает семейство кодов. Конкретные коды J45.0/J45.1/J45.8/J45.9 уже выполняют это требование; если такой код есть в тексте документа, НЕ указывай пробел «нет/нужно уточнить J45.x».
 - Если документ полностью соответствует требованиям — верни пустые массивы.
 - Опирайся ТОЛЬКО на требования ниже, ничего не выдумывай.
 
@@ -728,10 +859,9 @@ ${checklistText}`;
           const gapContent = gapData.choices?.[0]?.message?.content ?? "";
           const gapMatch = gapContent.match(/\{[\s\S]*\}/);
           const gaps = gapMatch ? JSON.parse(gapMatch[0]) : JSON.parse(gapContent);
-          const gapList: string[] = Array.isArray(gaps.documentGaps) ? gaps.documentGaps.filter(Boolean) : [];
-          const strong: string[] = Array.isArray(gaps.strengthenedRecommendations)
-            ? gaps.strengthenedRecommendations.filter(Boolean)
-            : [];
+          const sourceText = String(result.extractedText ?? "");
+          const gapList: string[] = cleanAsthmaFalseGaps(gaps.documentGaps, sourceText);
+          const strong: string[] = cleanAsthmaFalseGaps(gaps.strengthenedRecommendations, sourceText);
           const baseRecs = Array.isArray(result.recommendations) ? result.recommendations : [];
           if (gapList.length) {
             result.documentGaps = gapList;
@@ -746,6 +876,8 @@ ${checklistText}`;
     } catch (e) {
       console.error("[analyze] RAG enrich failed (continuing):", e instanceof Error ? e.message : e);
     }
+
+    result = normalizeAsthmaAnalysisResult(result);
 
     // Находим ID типа документа по коду
     let documentTypeId = null;
