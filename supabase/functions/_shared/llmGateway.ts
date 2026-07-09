@@ -15,15 +15,18 @@
 //     поэтому vision-функции тоже могут ходить через этот шлюз.
 // ════════════════════════════════════════════════════════════════════════
 
-const OPENAI_BASE_URL = Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1";
+const OPENAI_BASE_URL = Deno.env.get("OPENAI_BASE_URL") ||
+  "https://api.openai.com/v1";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 
 // Модели переопределяются env. Сохранены имена экспортов MODEL_MAIN/MODEL_FAST,
 // чтобы вызывающие функции не менялись.
 export const MODEL_MAIN = Deno.env.get("OPENAI_MODEL_MAIN") || "gpt-5.5";
 export const MODEL_FAST = Deno.env.get("OPENAI_MODEL_FAST") || "gpt-4.1-nano";
-export const MODEL_VISION = Deno.env.get("OPENAI_MODEL_VISION") || "gpt-4.1-mini";
-export const MODEL_VISION_FAST = Deno.env.get("OPENAI_MODEL_VISION_FAST") || "gpt-4.1-mini";
+export const MODEL_VISION = Deno.env.get("OPENAI_MODEL_VISION") ||
+  "gpt-4.1-mini";
+export const MODEL_VISION_FAST = Deno.env.get("OPENAI_MODEL_VISION_FAST") ||
+  "gpt-4.1-mini";
 
 export const isLlmConfigured = (): boolean => !!OPENAI_API_KEY;
 
@@ -53,7 +56,8 @@ export function humanizeLlmError(status: number): string {
 }
 
 // reasoning-модели (gpt-5*, o1/o3/o4…) не принимают кастомную temperature.
-const isReasoningModel = (model: string): boolean => /^(gpt-5|o\d)/i.test(model);
+const isReasoningModel = (model: string): boolean =>
+  /^(gpt-5|o\d)/i.test(model);
 
 // Сообщение чата. content допускает массив частей (vision: text+image_url).
 // Допускает поля function-calling (tool_calls, tool_call_id, name) — OpenAI.
@@ -69,7 +73,11 @@ export interface LlmMessage {
 
 export interface LlmTool {
   type: "function";
-  function: { name: string; description?: string; parameters?: Record<string, unknown> };
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
 }
 
 export interface LlmChatOpts {
@@ -79,6 +87,7 @@ export interface LlmChatOpts {
   stream?: boolean;
   responseFormat?: "json_object";
   maxTokens?: number;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
   signal?: AbortSignal;
   maxRetries?: number;
   // Function-calling (ТЗ §2.2): инструменты агентов + стратегия выбора.
@@ -105,6 +114,7 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     stream = false,
     responseFormat,
     maxTokens,
+    reasoningEffort,
     signal,
     maxRetries = 3,
     tools,
@@ -116,6 +126,9 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
 
   // OpenAI: max_completion_tokens; temperature только для не-reasoning моделей.
   if (!isReasoningModel(model)) payload.temperature = temperature;
+  if (isReasoningModel(model) && reasoningEffort) {
+    payload.reasoning_effort = reasoningEffort;
+  }
   if (maxTokens) payload.max_completion_tokens = maxTokens;
   if (stream && trackUsage) payload.stream_options = { include_usage: true };
 
@@ -153,4 +166,34 @@ export async function llmChat(opts: LlmChatOpts): Promise<Response> {
     return res; // не-ретраиваемая ошибка или последняя попытка — разберёт caller
   }
   return res;
+}
+
+/**
+ * Chat Completions normally returns message.content as a string, but some
+ * compatible gateways return an array of text parts. Keep callers resilient
+ * to both shapes so a valid answer is not misclassified as empty.
+ */
+export function extractAssistantText(payload: unknown): string {
+  const data = payload as {
+    choices?: Array<{
+      message?: {
+        content?:
+          | string
+          | Array<string | { type?: string; text?: string }>
+          | null;
+      };
+    }>;
+  };
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (part && typeof part.text === "string") return part.text;
+      return "";
+    })
+    .join("")
+    .trim();
 }

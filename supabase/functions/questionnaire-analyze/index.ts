@@ -1,8 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
-import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
+import { isLlmConfigured, llmChat, MODEL_MAIN } from "../_shared/llmGateway.ts";
+import {
+  KNOWLEDGE_CATEGORIES,
+  renderChunks,
+  rerankChunks,
+  searchHybrid,
+  traceRagChunks,
+} from "../_shared/ragSearch.ts";
+import {
+  FALLBACK_ANSWER_POLICY,
+  getRagAnswerPolicy,
+} from "../_shared/ragPolicy.ts";
+import { dedupeAdvice, normalizeAdviceText } from "../_shared/medicalAdvice.ts";
 
 // ════════════════════════════════════════════════════════════════════════
 //  questionnaire-analyze (P3.2) — «адаптивный опросник по РБ».
@@ -23,7 +34,9 @@ import { searchHybrid, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/rag
 
 const getAllowedOrigin = (req: Request): string => {
   const origin = req.headers.get("origin") || "";
-  if (origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru") return origin;
+  if (
+    origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru"
+  ) return origin;
   if (origin.endsWith(".lovable.app")) return origin;
   if (origin.startsWith("http://localhost")) return origin;
   return origin || "*";
@@ -42,7 +55,8 @@ const requestSchema = z.object({
 });
 
 // Ответ считаем «значимым», если он не пустой и не явное отрицание.
-const NEGATIVE = /^(нет|не|нету|отрицаю|не было|не отмечал|здоров|всё в норме|норма|-|—|n\/?a)\.?$/i;
+const NEGATIVE =
+  /^(нет|не|нету|отрицаю|не было|не отмечал|здоров|всё в норме|норма|-|—|n\/?a)\.?$/i;
 const isMeaningful = (v: string): boolean => {
   const t = (v || "").trim();
   return t.length >= 2 && !NEGATIVE.test(t);
@@ -50,37 +64,55 @@ const isMeaningful = (v: string): boolean => {
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
     // ── Аутентификация (персональные медданные) ──────────────────────────
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return Response.json({ error: "Требуется аутентификация" }, { status: 401, headers: corsHeaders });
+      return Response.json({ error: "Требуется аутентификация" }, {
+        status: 401,
+        headers: corsHeaders,
+      });
     }
     const authedClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: authData, error: authErr } = await authedClient.auth.getUser();
+    const { data: authData, error: authErr } = await authedClient.auth
+      .getUser();
     if (authErr || !authData?.user) {
-      return Response.json({ error: "Неверный токен авторизации" }, { status: 401, headers: corsHeaders });
+      return Response.json({ error: "Неверный токен авторизации" }, {
+        status: 401,
+        headers: corsHeaders,
+      });
     }
 
     if (!isLlmConfigured()) {
-      return Response.json({ error: "OPENAI_API_KEY не настроен" }, { status: 500, headers: corsHeaders });
+      return Response.json({ error: "OPENAI_API_KEY не настроен" }, {
+        status: 500,
+        headers: corsHeaders,
+      });
     }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return Response.json({ error: "Неверный JSON" }, { status: 400, headers: corsHeaders });
+      return Response.json({ error: "Неверный JSON" }, {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
-      return Response.json({ error: "Некорректный запрос" }, { status: 400, headers: corsHeaders });
+      return Response.json({ error: "Некорректный запрос" }, {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
 
     // ── 1. Собираем значимые ответы в компактный текст ───────────────────
@@ -98,29 +130,41 @@ serve(async (req) => {
 
     if (!findings.trim()) {
       return Response.json(
-        { topics: [], summary: "В опроснике нет заполненных значимых ответов — заполните жалобы и анамнез." },
+        {
+          topics: [],
+          summary:
+            "В опроснике нет заполненных значимых ответов — заполните жалобы и анамнез.",
+        },
         { headers: corsHeaders },
       );
     }
 
     // ── 2. RAG-грунтовка по выявленным жалобам (вычищенная база) ──────────
     let ragBlock = "";
+    let answerPolicy = FALLBACK_ANSWER_POLICY;
     try {
       const svc = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      const chunks = await searchHybrid(svc, findings, {
-        matchCount: 8,
+      answerPolicy = await getRagAnswerPolicy(svc);
+      const candidates = await searchHybrid(svc, findings, {
+        matchCount: 12,
         categories: KNOWLEDGE_CATEGORIES,
       });
+      const chunks = await rerankChunks(findings, candidates, { keep: 6 });
+      traceRagChunks("questionnaire-analyze", chunks);
       if (chunks.length) ragBlock = renderChunks(chunks, 1100);
     } catch (e) {
-      console.error("[questionnaire-analyze] RAG failed (continuing):", e instanceof Error ? e.message : e);
+      console.error(
+        "[questionnaire-analyze] RAG failed (continuing):",
+        e instanceof Error ? e.message : e,
+      );
     }
 
     // ── 3. LLM → строго JSON ─────────────────────────────────────────────
-    const systemPrompt = `Ты — ассистент военно-врачебной экспертизы сайта nepriziv.ru. По ответам призывника на медицинский опросник и выдержкам из ЭКСПЕРТНОЙ БАЗЫ определи, какие непризывные основания стоит проработать, какие уточнения нужны и какие обследования собрать.
+    const systemPrompt =
+      `Ты — ассистент военно-врачебной экспертизы сайта nepriziv.ru. По ответам призывника на медицинский опросник и выдержкам из ЭКСПЕРТНОЙ БАЗЫ определи, какие непризывные основания стоит проработать, какие уточнения нужны и какие обследования собрать.
 
 ИСТОЧНИК И ТОЧНОСТЬ (КРИТИЧЕСКИ ВАЖНО):
 - Опирайся на блок «БАЗА ЗНАНИЙ». Номера статей РБ, степени, градусы, пороги бери ДОСЛОВНО из него; НЕ указывай числовые границы по памяти и не выдумывай статьи.
@@ -140,15 +184,22 @@ serve(async (req) => {
   ],
   "summary": "1–2 предложения: общий вывод и приоритет действий"
 }
-Только темы, по которым в ответах есть зацепка. Если зацепок нет — topics: [].`;
+Только темы, по которым в ответах есть зацепка. Если зацепок нет — topics: [].
 
-    const userPrompt = `ОТВЕТЫ ОПРОСНИКА (только заполненные, формат «<id вопроса>: <ответ>»):
+ЕДИНАЯ ПОЛИТИКА КАЧЕСТВА И КРАТКОСТИ:
+${answerPolicy}`;
+
+    const userPrompt =
+      `ОТВЕТЫ ОПРОСНИКА (только заполненные, формат «<id вопроса>: <ответ>»):
 
 ${findings}
 
 --- БАЗА ЗНАНИЙ (приоритетный источник чисел, статей и обследований) ---
 
-${ragBlock || "(релевантных выдержек не найдено — будь осторожен с числами, опирайся на общие непризывные основания и формулируй уточнения)"}`;
+${
+        ragBlock ||
+        "(релевантных выдержек не найдено — будь осторожен с числами, опирайся на общие непризывные основания и формулируй уточнения)"
+      }`;
 
     const res = await llmChat({
       model: MODEL_MAIN,
@@ -162,11 +213,20 @@ ${ragBlock || "(релевантных выдержек не найдено — 
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error("[questionnaire-analyze] LLM error:", res.status, errText.slice(0, 300));
+      console.error(
+        "[questionnaire-analyze] LLM error:",
+        res.status,
+        errText.slice(0, 300),
+      );
       if (res.status === 429) {
-        return Response.json({ error: "Превышен лимит запросов к ИИ. Попробуйте через минуту." }, { status: 429, headers: corsHeaders });
+        return Response.json({
+          error: "Превышен лимит запросов к ИИ. Попробуйте через минуту.",
+        }, { status: 429, headers: corsHeaders });
       }
-      return Response.json({ error: `Ошибка ИИ-сервиса: ${res.status}` }, { status: 503, headers: corsHeaders });
+      return Response.json({ error: `Ошибка ИИ-сервиса: ${res.status}` }, {
+        status: 503,
+        headers: corsHeaders,
+      });
     }
 
     const data = await res.json();
@@ -177,16 +237,45 @@ ${ragBlock || "(релевантных выдержек не найдено — 
       const m = content.match(/\{[\s\S]*\}/);
       result = JSON.parse(m ? m[0] : content);
     } catch (e) {
-      console.error("[questionnaire-analyze] JSON parse failed:", e instanceof Error ? e.message : e);
+      console.error(
+        "[questionnaire-analyze] JSON parse failed:",
+        e instanceof Error ? e.message : e,
+      );
       return Response.json(
-        { topics: [], summary: "Не удалось разобрать анализ. Попробуйте ещё раз или обратитесь к специалисту." },
+        {
+          topics: [],
+          summary:
+            "Не удалось разобрать анализ. Попробуйте ещё раз или обратитесь к специалисту.",
+        },
         { headers: corsHeaders },
       );
     }
 
-    const topics = Array.isArray(result.topics) ? result.topics : [];
-    const summary = typeof result.summary === "string" ? result.summary : "";
-    return Response.json({ topics, summary, ragUsed: !!ragBlock }, { headers: corsHeaders });
+    const topics = (Array.isArray(result.topics) ? result.topics : [])
+      .filter((topic): topic is Record<string, unknown> =>
+        !!topic && typeof topic === "object"
+      )
+      .slice(0, 5)
+      .map((topic) => ({
+        ...topic,
+        topic: normalizeAdviceText(topic.topic).slice(0, 120),
+        articles: [
+          ...new Set(
+            (Array.isArray(topic.articles) ? topic.articles : [])
+              .map((value) => normalizeAdviceText(value))
+              .filter(Boolean),
+          ),
+        ].slice(0, 5),
+        followUps: dedupeAdvice(topic.followUps).slice(0, 5),
+        exams: dedupeAdvice(topic.exams).slice(0, 6),
+        rationale: normalizeAdviceText(topic.rationale).slice(0, 500),
+      }));
+    const summary = typeof result.summary === "string"
+      ? normalizeAdviceText(result.summary).slice(0, 700)
+      : "";
+    return Response.json({ topics, summary, ragUsed: !!ragBlock }, {
+      headers: corsHeaders,
+    });
   } catch (err) {
     console.error("[questionnaire-analyze] Unexpected:", err);
     return Response.json(

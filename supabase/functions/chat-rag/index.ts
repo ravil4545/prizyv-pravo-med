@@ -1,8 +1,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
-import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
-import { getClientIp, hashIp, checkAnonRateLimit, captureStreamUsageAndRecord, waitUntil } from "../_shared/aiUsage.ts";
+import { isLlmConfigured, llmChat, MODEL_MAIN } from "../_shared/llmGateway.ts";
+import {
+  extractArticleNumbers,
+  KNOWLEDGE_CATEGORIES,
+  renderChunks,
+  rerankChunks,
+  searchHybrid,
+  traceRagChunks,
+} from "../_shared/ragSearch.ts";
+import { getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
+import {
+  captureStreamUsageAndRecord,
+  checkAnonRateLimit,
+  getClientIp,
+  hashIp,
+  waitUntil,
+} from "../_shared/aiUsage.ts";
 
 // Публичный виджет — самый большой анонимный анти-абьюз-риск (без логина,
 // без аккаунта на который вешать ₽-бюджет). Единственная защита — IP-лимит
@@ -13,7 +27,9 @@ const CHAT_RAG_MAX_TOKENS = Number(Deno.env.get("CHAT_RAG_MAX_TOKENS")) || 1000;
 // ─── CORS (same pattern as other functions in this project) ──────────────────
 const getAllowedOrigin = (req: Request): string => {
   const origin = req.headers.get("origin") || "";
-  if (origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru") return origin;
+  if (
+    origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru"
+  ) return origin;
   if (origin.endsWith(".lovable.app")) return origin;
   if (origin.startsWith("http://localhost")) return origin;
   return origin || "*";
@@ -21,7 +37,8 @@ const getAllowedOrigin = (req: Request): string => {
 
 const getCorsHeaders = (req: Request) => ({
   "Access-Control-Allow-Origin": getAllowedOrigin(req),
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 });
 
 // ─── Clients ─────────────────────────────────────────────────────────────────
@@ -30,7 +47,6 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const JINA_KEY = Deno.env.get("JINA_API_KEY");
 // Текстовый агент (RAG-виджет) идёт через единый OpenAI LLMGateway.
 // Vision не нужен — это чисто текстовый RAG-чат по базе знаний.
 
@@ -45,76 +61,6 @@ const requestSchema = z.object({
   history: z.array(messageSchema).max(10).optional().default([]),
 });
 
-// ─── System context cache (warm on cold start, refreshes each ~24h deploy) ───
-let cachedSystemContext: string | null = null;
-
-async function getSystemContext(): Promise<string> {
-  if (cachedSystemContext) return cachedSystemContext;
-
-  const ORDER = [
-    "рамка_консультации",
-    "медицинские_тонкости",
-    "процедурные_тонкости",
-    "диагностический_анализ",
-    "правила_улучшения",
-  ];
-
-  const { data, error } = await supabase
-    .from("rag_system_context")
-    .select("name, content")
-    .in("name", ORDER);
-
-  if (error) throw new Error(`Ошибка загрузки системного контекста: ${error.message}`);
-  if (!data?.length) {
-    throw new Error(
-      "Системный контекст пуст. Запустите python scripts/ingest_rag.py"
-    );
-  }
-
-  // Обрезаем каждый блок: суммарный system-context разросся (>47k символов),
-  // что вместе с retrieved-чанками превышало лимит запроса к LLM (413).
-  const BLOCK_CAP = 2500;
-  const map = Object.fromEntries(data.map((r) => [r.name, r.content]));
-  cachedSystemContext = ORDER
-    .filter((n) => map[n])
-    .map((n) => {
-      const c = map[n].length > BLOCK_CAP ? map[n].slice(0, BLOCK_CAP) + "…" : map[n];
-      return `### ${n}\n\n${c}`;
-    })
-    .join("\n\n---\n\n");
-
-  return cachedSystemContext;
-}
-
-// ─── Jina AI embeddings (jina-embeddings-v3, 1024 dims, strong Russian support) ─
-// task по умолчанию retrieval.passage — симметрично инжесту (ingest_rag.py).
-// Асимметрия query/passage на этой базе давала низкую similarity и мусор.
-async function embed(text: string, task: "retrieval.query" | "retrieval.passage" = "retrieval.passage"): Promise<number[]> {
-  if (!JINA_KEY) throw new Error("JINA_API_KEY не настроен");
-
-  const res = await fetch("https://api.jina.ai/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${JINA_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "jina-embeddings-v3",
-      task,
-      dimensions: 1024,
-      input: [text.slice(0, 8000)],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Jina embeddings error ${res.status}: ${err}`);
-  }
-
-  const json = await res.json();
-  return json.data[0].embedding as number[];
-}
-
 // ─── Main handler ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -124,9 +70,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!JINA_KEY || !isLlmConfigured()) {
+    if (!isLlmConfigured()) {
       return Response.json(
-        { error: !JINA_KEY ? "JINA_API_KEY не настроен" : "OPENAI_API_KEY не настроен" },
+        { error: "OPENAI_API_KEY не настроен" },
         { status: 500, headers: corsHeaders },
       );
     }
@@ -155,10 +101,18 @@ Deno.serve(async (req) => {
     // Rate-limit по IP ДО дорогого поиска/вызова LLM — публичный виджет без
     // логина, единственная защита от скриптового абьюза.
     const ipHash = await hashIp(getClientIp(req));
-    const allowed = await checkAnonRateLimit(supabase, "chat-rag", ipHash, CHAT_RAG_MAX_PER_DAY);
+    const allowed = await checkAnonRateLimit(
+      supabase,
+      "chat-rag",
+      ipHash,
+      CHAT_RAG_MAX_PER_DAY,
+    );
     if (!allowed) {
       return Response.json(
-        { error: "Слишком много вопросов с вашего IP за сегодня. Попробуйте завтра или зарегистрируйтесь — там свой лимит." },
+        {
+          error:
+            "Слишком много вопросов с вашего IP за сегодня. Попробуйте завтра или зарегистрируйтесь — там свой лимит.",
+        },
         { status: 429, headers: corsHeaders },
       );
     }
@@ -168,28 +122,31 @@ Deno.serve(async (req) => {
     // Чанки обрезаются (1600), чтобы таблицы степеней/порогов не резались на половине.
     // Над-извлечение (12) + LLM-реранк до 6: гибрид даёт кандидатов, реранкер
     // отсекает поверхностно похожие, чтобы модель не отвлекалась на нерелевантное.
+    const articles = extractArticleNumbers(message);
     const candidates = await searchHybrid(supabase, message, {
       matchCount: 12,
       categories: KNOWLEDGE_CATEGORIES, // публичный виджет — только выверенные знания, без сырой практики
+      articles: articles.length ? articles : undefined,
     });
     const chunks = await rerankChunks(message, candidates, { keep: 6 });
+    traceRagChunks("chat-rag", chunks);
     const retrievedContext = renderChunks(chunks, 1600);
 
-    // 3. Load foundational system context (cached after first call)
-    const sysCtx = await getSystemContext();
+    // 3. Compact canonical answer policy shared by all RAG consumers.
+    const sysCtx = await getRagAnswerPolicy(supabase);
 
     // System prompt — included in every OpenAI request
     const systemText =
       `Ты — специализированный AI-помощник сайта nepriziv.ru. Помогаешь призывникам разобраться в военно-медицинской экспертизе и юридических процедурах призыва в РФ.
 
 ПРАВИЛА:
-- ГЛАВНЫЙ ИСТОЧНИК — блок «ВНУТРЕННИЙ ЭКСПЕРТНЫЙ КОНТЕКСТ» в сообщении пользователя. Отвечай строго по нему; общая «База знаний» ниже — только фон.
+- ГЛАВНЫЙ ИСТОЧНИК — блок «ВНУТРЕННИЙ ЭКСПЕРТНЫЙ КОНТЕКСТ» в сообщении пользователя. Единая политика ответа ниже обязательна для структуры, приоритетов и краткости.
 - Внутренний контекст и база знаний НЕ видны клиенту. Никогда не пиши клиенту: «в материалах», «в найденных материалах», «в базе знаний», «вы загрузили документы», «в предоставленных документах», если клиент реально не прикладывал документы в этом чате.
 - ВСЕ ЧИСЛА И ПОРОГИ (градусы, диоптрии, мм, степени/стадии, номера статей и пунктов, категории) бери ДОСЛОВНО из внутреннего экспертного контекста. НИКОГДА не указывай числовые границы по памяти.
 - Если во внутреннем контексте есть таблица степеней/категорий — определяй степень и категорию СТРОГО по диапазону из таблицы, не сдвигая и не округляя границы (например, значение на границе диапазона относится к тому диапазону, где оно явно указано).
 - Если нужного числа/порога во внутреннем контексте НЕТ — честно скажи, что нужно уточнить, и предложи консультацию. НЕ придумывай числа и не бери их «из общих знаний».
 - Конкретно указывай статьи Расписания болезней (ПП РФ №565) и нормы ФЗ-53
-- Если нужной информации нет — честно скажи и предложи личную консультацию: +7 (925) 350-05-33
+- Если нужной информации нет — коротко назови недостающий факт. Личную консультацию предлагай только когда без неё нельзя определить следующий юридически значимый шаг.
 - Язык: русский, понятный призывнику 18 лет, без юридического жаргона
 - Первое сообщение клиента считай первичным обращением, если из истории не видно обратного. Начинай с приличного короткого приветствия: «Здравствуйте!» или «Добрый день!».
 - Давай практичный вывод сразу: какая статья/норма, какая категория или юридический риск возможны, что усиливает позицию, что ослабляет и что делать дальше.
@@ -197,14 +154,14 @@ Deno.serve(async (req) => {
 - Не начинай ответ с очевидного дисклеймера «решение принимает ВВК/комиссия». Упоминай комиссию, ВВК или военкомат только там, где это нужно для конкретного действия клиента.
 - Не выдумывай учреждения и процедуры. Если не уверен в конкретном учреждении, пиши нейтрально: «профильный врач», «профильная медицинская организация», «стационар», «юрист по призывному праву».
 - Ты справочный ИИ юридической консультации. Гарантий исхода не давай.
-- В конце каждого ответа: ⚠️ Это справочная информация, не замена юридической консультации
+- Не добавляй одинаковый дисклеймер и контакты в каждый ответ.
 
-ФОРМАТ (стиль Telegram/WhatsApp):
-- Разбивай ответ на смысловые блоки через ---
+ФОРМАТ:
+- Не более трёх коротких смысловых блоков; разделитель --- используй только при необходимости
 - **Жирный** только для: диагнозов, категорий годности, статей расписания
-- Один блок = одна мысль, 300–600 символов
+- Один блок = одна мысль; не повторяй вывод другими словами
 
---- БАЗА ЗНАНИЙ ---
+--- ЕДИНАЯ ПОЛИТИКА ОТВЕТА ---
 
 ${sysCtx}`;
 

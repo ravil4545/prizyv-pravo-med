@@ -106,7 +106,11 @@ def main() -> None:
 
         category = ing.category_for(rel, meta) or "—"
         title = str(meta.get("title") or first_h1(body) or path.stem)
-        articles = ing.norm(meta.get("schedule_articles"))
+        articles = ing.normalize_articles(meta.get("schedule_articles"))
+        heading_articles: list[str] = []
+        for heading, _ in ing.split_by_headings(ing.clean_wikilinks(body)):
+            heading_articles.extend(ing.articles_from_heading(heading))
+        articles = list(dict.fromkeys(articles + heading_articles))
         rec = {
             "title": title,
             "stem": path.stem,

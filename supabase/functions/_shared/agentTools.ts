@@ -19,8 +19,19 @@
 //  документ по произвольному id.
 // ════════════════════════════════════════════════════════════════════════
 
-import { llmChat, type LlmMessage, type LlmTool, MODEL_MAIN } from "./llmGateway.ts";
-import { searchByText } from "./ragSearch.ts";
+import {
+  llmChat,
+  type LlmMessage,
+  type LlmTool,
+  MODEL_MAIN,
+} from "./llmGateway.ts";
+import {
+  ALL_RAG_CATEGORIES,
+  diversifyChunks,
+  searchHybrid,
+  traceRagChunks,
+} from "./ragSearch.ts";
+import { canonicalizeAdvice } from "./medicalAdvice.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = any;
@@ -58,7 +69,11 @@ export const AGENT_TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Диагноз или ключевые слова (например, «плоскостопие», «гипертония», «сколиоз»)." },
+          query: {
+            type: "string",
+            description:
+              "Диагноз или ключевые слова (например, «плоскостопие», «гипертония», «сколиоз»).",
+          },
           // ВАЖНО: НЕ объявляем integer-параметры в схемах инструментов.
           // Модели иногда отдают числовой аргумент СТРОКОЙ ("5").
           // Лимит фиксируем в коде (см. runTool: search_rb).
@@ -76,7 +91,10 @@ export const AGENT_TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          article_number: { type: "string", description: "Номер статьи РБ, например «68» или «43»." },
+          article_number: {
+            type: "string",
+            description: "Номер статьи РБ, например «68» или «43».",
+          },
         },
         required: ["article_number"],
       },
@@ -91,7 +109,11 @@ export const AGENT_TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Диагноз/тема/ключевые слова (например, «плоскостопие тактика», «бронхиальная астма документы», «обжалование сроки»)." },
+          query: {
+            type: "string",
+            description:
+              "Диагноз/тема/ключевые слова (например, «плоскостопие тактика», «бронхиальная астма документы», «обжалование сроки»).",
+          },
         },
         required: ["query"],
       },
@@ -106,7 +128,10 @@ export const AGENT_TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          document_id: { type: "string", description: "id документа из контекста дела." },
+          document_id: {
+            type: "string",
+            description: "id документа из контекста дела.",
+          },
         },
         required: ["document_id"],
       },
@@ -140,7 +165,11 @@ export const AGENT_TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          topic: { type: "string", description: "К чему относится сомнение (например, «степень плоскостопия»)." },
+          topic: {
+            type: "string",
+            description:
+              "К чему относится сомнение (например, «степень плоскостопия»).",
+          },
           reason: { type: "string", description: "Почему уверенность низкая." },
         },
         required: ["topic", "reason"],
@@ -167,14 +196,29 @@ export const PLANNER_WRITE_TOOLS: LlmTool[] = [
             items: {
               type: "object",
               properties: {
-                item_type: { type: "string", enum: ["analysis", "examination", "specialist"], description: "Тип: анализ / инструментальное обследование / консультация специалиста." },
-                name: { type: "string", description: "Что именно (полное название анализа/обследования/специальности)." },
-                reason: { type: "string", description: "Зачем нужно (1 предложение)." },
+                item_type: {
+                  type: "string",
+                  enum: ["analysis", "examination", "specialist"],
+                  description:
+                    "Тип: анализ / инструментальное обследование / консультация специалиста.",
+                },
+                name: {
+                  type: "string",
+                  description:
+                    "Что именно (полное название анализа/обследования/специальности).",
+                },
+                reason: {
+                  type: "string",
+                  description: "Зачем нужно (1 предложение).",
+                },
               },
               required: ["item_type", "name"],
             },
           },
-          replace: { type: "boolean", description: "true (по умолчанию) — заменить прежний ИИ-план дела." },
+          replace: {
+            type: "boolean",
+            description: "true (по умолчанию) — заменить прежний ИИ-план дела.",
+          },
         },
         required: ["items"],
       },
@@ -195,14 +239,27 @@ export const PLANNER_WRITE_TOOLS: LlmTool[] = [
             items: {
               type: "object",
               properties: {
-                title: { type: "string", description: "Краткая формулировка шага." },
-                description: { type: "string", description: "Детали/как сделать (опционально)." },
-                priority: { type: "string", enum: ["low", "normal", "high"], description: "Приоритет." },
+                title: {
+                  type: "string",
+                  description: "Краткая формулировка шага.",
+                },
+                description: {
+                  type: "string",
+                  description: "Детали/как сделать (опционально).",
+                },
+                priority: {
+                  type: "string",
+                  enum: ["low", "normal", "high"],
+                  description: "Приоритет.",
+                },
               },
               required: ["title"],
             },
           },
-          replace: { type: "boolean", description: "true (по умолчанию) — заменить прежний ИИ-план дела." },
+          replace: {
+            type: "boolean",
+            description: "true (по умолчанию) — заменить прежний ИИ-план дела.",
+          },
         },
         required: ["items"],
       },
@@ -222,7 +279,10 @@ export const DEFERRED_TOOL_NAMES = [
 
 function sanitizeTerm(q: string): string {
   // Убираем символы, ломающие PostgREST .or()/.ilike() (запятые, скобки, %, *).
-  return String(q).replace(/[,()%*]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return String(q).replace(/[,()%*]/g, " ").replace(/\s+/g, " ").trim().slice(
+    0,
+    80,
+  );
 }
 
 function cap(s: string | null | undefined, n: number): string | null {
@@ -247,7 +307,9 @@ export async function runTool(
       const { data, error } = await sb
         .from("disease_articles_565")
         .select("article_number, title, category, body")
-        .or(`title.ilike.%${term}%,article_number.ilike.%${term}%,body.ilike.%${term}%`)
+        .or(
+          `title.ilike.%${term}%,article_number.ilike.%${term}%,body.ilike.%${term}%`,
+        )
         .eq("is_active", true)
         .limit(limit);
       if (error) return { error: error.message };
@@ -283,8 +345,19 @@ export async function runTool(
     case "search_knowledge": {
       const term = sanitizeTerm(String(args.query ?? ""));
       if (!term) return { error: "Пустой запрос" };
-      const chunks = await searchByText(sb, term, 4);
-      if (!chunks.length) return { results: [], note: "В экспертной базе ничего не найдено по запросу." };
+      const found = await searchHybrid(sb, term, {
+        matchCount: 8,
+        minSimilarity: 0.18,
+        categories: ALL_RAG_CATEGORIES,
+      });
+      const chunks = diversifyChunks(found, 2).slice(0, 4);
+      traceRagChunks("agent-search-knowledge", chunks);
+      if (!chunks.length) {
+        return {
+          results: [],
+          note: "В экспертной базе ничего не найдено по запросу.",
+        };
+      }
       return {
         results: chunks.map((c) => ({
           category: c.category ?? null,
@@ -298,10 +371,14 @@ export async function runTool(
     case "read_document": {
       const id = String(args.document_id ?? "").trim();
       const table = ctx.docSources[id];
-      if (!table) return { error: "Документ недоступен в контексте этого дела" };
+      if (!table) {
+        return { error: "Документ недоступен в контексте этого дела" };
+      }
       const { data, error } = await sb
         .from(table)
-        .select("title, document_date, ai_fitness_category, ai_explanation, raw_text")
+        .select(
+          "title, document_date, ai_fitness_category, ai_explanation, raw_text",
+        )
         .eq("id", id)
         .maybeSingle();
       if (error) return { error: error.message };
@@ -316,7 +393,9 @@ export async function runTool(
     }
 
     case "request_missing_info": {
-      const items = Array.isArray(args.items) ? args.items.map((x) => String(x)).filter(Boolean) : [];
+      const items = Array.isArray(args.items)
+        ? args.items.map((x) => String(x)).filter(Boolean)
+        : [];
       return { acknowledged: true, missing: items };
     }
 
@@ -330,25 +409,46 @@ export async function runTool(
 
     case "update_examination_plan": {
       if (!ctx.enableWrites || !ctx.lawyerClientId || !ctx.lawyerId) {
-        return { deferred: true, message: "Запись плана недоступна в этом контексте." };
+        return {
+          deferred: true,
+          message: "Запись плана недоступна в этом контексте.",
+        };
       }
       const raw = Array.isArray(args.items) ? args.items.slice(0, 30) : [];
-      const valid = raw
+      const normalized = raw
         .map((it) => it as Record<string, unknown>)
         .filter((it) =>
           it && typeof it.name === "string" && String(it.name).trim() &&
-          ["analysis", "examination", "specialist"].includes(String(it.item_type))
+          ["analysis", "examination", "specialist"].includes(
+            String(it.item_type),
+          )
         )
-        .map((it) => ({
-          lawyer_client_id: ctx.lawyerClientId,
-          lawyer_id: ctx.lawyerId,
-          item_type: String(it.item_type),
-          name: String(it.name).slice(0, 300),
-          reason: it.reason ? String(it.reason).slice(0, 500) : null,
-          source: "ai",
-          created_by: ctx.lawyerId,
-        }));
-      if (!valid.length) return { error: "Нет валидных пунктов плана дообследования." };
+        .map((it) => {
+          const canonical = canonicalizeAdvice(it.name);
+          return {
+            key: canonical?.key ?? String(it.name).toLowerCase().trim(),
+            row: {
+              lawyer_client_id: ctx.lawyerClientId,
+              lawyer_id: ctx.lawyerId,
+              item_type: String(it.item_type),
+              name: (canonical?.text ?? String(it.name)).slice(0, 300),
+              reason: it.reason ? String(it.reason).slice(0, 500) : null,
+              source: "ai",
+              created_by: ctx.lawyerId,
+            },
+          };
+        });
+      const seenPlanItems = new Set<string>();
+      const valid = normalized
+        .filter((item) => {
+          if (seenPlanItems.has(item.key)) return false;
+          seenPlanItems.add(item.key);
+          return true;
+        })
+        .map((item) => item.row);
+      if (!valid.length) {
+        return { error: "Нет валидных пунктов плана дообследования." };
+      }
       const replace = args.replace !== false;
       if (replace) {
         await sb.from("examination_plan_items").delete()
@@ -361,18 +461,27 @@ export async function runTool(
 
     case "update_action_plan": {
       if (!ctx.enableWrites || !ctx.lawyerClientId || !ctx.lawyerId) {
-        return { deferred: true, message: "Запись плана недоступна в этом контексте." };
+        return {
+          deferred: true,
+          message: "Запись плана недоступна в этом контексте.",
+        };
       }
       const raw = Array.isArray(args.items) ? args.items.slice(0, 30) : [];
       const valid = raw
         .map((it) => it as Record<string, unknown>)
-        .filter((it) => it && typeof it.title === "string" && String(it.title).trim())
+        .filter((it) =>
+          it && typeof it.title === "string" && String(it.title).trim()
+        )
         .map((it, idx) => ({
           lawyer_client_id: ctx.lawyerClientId,
           lawyer_id: ctx.lawyerId,
           title: String(it.title).slice(0, 300),
-          description: it.description ? String(it.description).slice(0, 800) : null,
-          priority: ["low", "normal", "high"].includes(String(it.priority)) ? String(it.priority) : "normal",
+          description: it.description
+            ? String(it.description).slice(0, 800)
+            : null,
+          priority: ["low", "normal", "high"].includes(String(it.priority))
+            ? String(it.priority)
+            : "normal",
           order_index: idx,
           source: "ai",
           created_by: ctx.lawyerId,
@@ -394,7 +503,8 @@ export async function runTool(
     case "create_template_draft":
       return {
         deferred: true,
-        message: `Инструмент «${name}» включится позже (P3 persist / P4 шаблоны). Сейчас не выполняется.`,
+        message:
+          `Инструмент «${name}» включится позже (P3 persist / P4 шаблоны). Сейчас не выполняется.`,
       };
 
     default:
@@ -417,7 +527,9 @@ export interface RunWithToolsOpts {
 export interface RunWithToolsResult {
   content: string;
   rounds: number;
-  toolCalls: Array<{ name: string; args: Record<string, unknown>; result: unknown }>;
+  toolCalls: Array<
+    { name: string; args: Record<string, unknown>; result: unknown }
+  >;
 }
 
 /**
@@ -461,13 +573,19 @@ export async function runWithTools(
     }
 
     // Кладём ответ ассистента (с tool_calls) в историю — обязательно перед tool-ответами.
-    messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
+    messages.push({
+      role: "assistant",
+      content: msg.content ?? null,
+      tool_calls: calls,
+    });
 
     // Исполняем каждый вызов и возвращаем результат ролью "tool".
     for (const call of calls) {
       let parsedArgs: Record<string, unknown> = {};
       try {
-        parsedArgs = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+        parsedArgs = call.function?.arguments
+          ? JSON.parse(call.function.arguments)
+          : {};
       } catch {
         parsedArgs = {};
       }
@@ -487,7 +605,11 @@ export async function runWithTools(
   const finalRes = await llmChat({
     messages: [
       ...messages,
-      { role: "system", content: "Достигнут лимит вызовов инструментов. Дай финальный ответ по уже собранным данным." },
+      {
+        role: "system",
+        content:
+          "Достигнут лимит вызовов инструментов. Дай финальный ответ по уже собранным данным.",
+      },
     ],
     model: opts.model ?? MODEL_MAIN,
     temperature: opts.temperature ?? 0.2,
@@ -507,10 +629,16 @@ export async function runWithTools(
 
 // Утилита: построить docSources из документов Context Bundle.
 // deno-lint-ignore no-explicit-any
-export function docSourcesFromBundle(documents: any[]): ToolContext["docSources"] {
+export function docSourcesFromBundle(
+  documents: any[],
+): ToolContext["docSources"] {
   const map: ToolContext["docSources"] = {};
   for (const d of documents || []) {
-    if (d?.id) map[d.id] = d.source === "lawyer_uploads" ? "lawyer_client_med_docs" : "medical_documents_v2";
+    if (d?.id) {
+      map[d.id] = d.source === "lawyer_uploads"
+        ? "lawyer_client_med_docs"
+        : "medical_documents_v2";
+    }
   }
   return map;
 }

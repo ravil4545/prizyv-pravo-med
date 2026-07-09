@@ -92,13 +92,14 @@ npm run lint        # линт
 
 Экспертная база знаний юриста живёт в Obsidian-волте **`D:\Obsidian\SecondBrain`** — единственный канонический источник (заболевания, юр.процедуры, документооборот, FAQ+консультации в `14_FAQ/Консультации`, расписание болезней, прецеденты в `60_Прецеденты`). Читают ОБА потребителя: сайт (этот ingest → Supabase) и локальный агент Hermes (`hermes-tools/rag_pipeline.py`). **Правило волта: НИКАКИХ отсылок к CRM (amocrm/deal_id/voennik365) и ПДн** — оригиналы с идентификаторами лежат в `D:\Obsidian\Main\amoCRM_Кейсы`, в RAG не попадают.
 
-**Конвейер:** `scripts/ingest_rag.py` читает волт → эмбеддинги Jina v3 (1024 dims) → таблицы:
-- `rag_chunks` — чанки знаний; **`category` строго по папке волта** (см. `FOLDER_CATEGORY` в ingest, ручной frontmatter не главнее). 14 категорий: `medical_condition`, `legal_procedure`, `document_guide`, `faq`, `schedule_rb`, `rb_official`, `reference`, `strategy`, `web_source`, `case`, `doctor_qa`, `consultation`, `transcript`, `precedent`.
+**Конвейер:** `scripts/ingest_rag.py` читает волт → строгая проверка всего корпуса → пакетные эмбеддинги Jina v3 (1024 dims) → `rag_chunks_staging` → проверка количества → атомарная публикация в `rag_chunks`. Активная база не очищается до готовности новой сборки.
+- `rag_chunks` — активные чанки знаний с `source_path`, `source_title`, `content_hash`, `build_id` и секционными `schedule_articles`. **`category` строго по папке волта** (см. `FOLDER_CATEGORY`, ручной frontmatter не главнее). 14 категорий: `medical_condition`, `legal_procedure`, `document_guide`, `faq`, `schedule_rb`, `rb_official`, `reference`, `strategy`, `web_source`, `case`, `doctor_qa`, `consultation`, `transcript`, `precedent`.
+- `rag_builds` — журнал полных и точечных публикаций; `rag_chunks_staging` — временная сборка, не обслуживает пользовательские запросы.
 - `rag_system_context` — 5 фундаментальных блоков, включаются в каждый промпт.
 - `rag_index` (VIEW) — оглавление файл→категория→статьи.
 - Навигационные файлы (`_MOC_*`, `Home`, `README`, `00_Index`, `00_Start_Here`, `00_Home`) не индексируются.
-- **ПДн-гейт (152-ФЗ):** `check_pii` детектит телефон/email/CRM-ссылки/ФИО. Для публичных категорий файл с ПДн блокируется полностью.
-- Поиск (гибрид, дефолт): RPC `hybrid_rag_chunks` — Postgres FTS + pgvector, RRF-слияние. `query_embedding` опционален (NULL → FTS-only).
+- **ПДн-гейт (152-ФЗ):** `check_pii` детектит телефон/email/CRM-ссылки/ФИО и блокирует файл в ЛЮБОЙ категории. Таблицы/RPC RAG не доступны `anon` и `authenticated` напрямую; все потребители работают через edge-функции с `service_role`.
+- Поиск (гибрид, дефолт): RPC `hybrid_rag_chunks` — Postgres FTS по заголовку/тегам/секции/тексту + pgvector, RRF-слияние. Документы индексируются как `retrieval.passage`, запросы — `retrieval.query`; `query_embedding` опционален (NULL → FTS-only).
 - Поиск (вектор, откат): RPC `match_rag_chunks`.
 - Вектор-индекс: HNSW (`vector_cosine_ops`, m=16, ef_construction=64).
 
@@ -106,7 +107,7 @@ npm run lint        # линт
 
 **Где используется** (общий модуль `supabase/functions/_shared/ragSearch.ts`): `chat-rag` (публичный виджет «База знаний»), `chat` (клиентский ИИ), `analyze-medical-document` (сверка требований по статьям), `lawyer-case-assistant`/`lawyer-build-plan` (инструмент `search_knowledge`).
 
-**Пополнение базы.** Доменный факт о призыве → должен попасть В ВОЛТ, не только в память ассистента: `scripts/add_note.py --category <...> --title "…" --articles NN --content "…"`, либо вручную `.md` с frontmatter + прогон `ingest_rag.py --fresh` + `build_index.py`.
+**Пополнение базы.** Доменный факт о призыве → должен попасть В ВОЛТ, не только в память ассистента: `scripts/add_note.py --category <...> --title "…" --articles NN --content "…"` либо вручную `.md` с frontmatter. Перед публикацией: `python scripts/audit_rag.py` и `python scripts/ingest_rag.py --dry-run`. Полная публикация: `python scripts/ingest_rag.py`; точечная: `python scripts/ingest_rag.py --match=<путь>`. Затем `python scripts/build_index.py` и отдельный реиндекс Hermes. Retrieval-регрессии проверяются `python scripts/eval_rag.py`.
 
 ## Groq / LLM-архитектура (5-агентная оркестрация, частично на нестабильной ветке)
 

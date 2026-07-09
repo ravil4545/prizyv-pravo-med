@@ -1,22 +1,46 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { llmChat, MODEL_MAIN, MODEL_FAST, isLlmConfigured, humanizeLlmError } from "../_shared/llmGateway.ts";
-import { searchHybrid, rerankChunks, renderChunks, KNOWLEDGE_CATEGORIES } from "../_shared/ragSearch.ts";
 import {
-  getServiceRoleClient, getClientIp, hashIp, getMonthlySpendRub, pickBudgetTier,
-  checkAnonRateLimit, recordUsage, waitUntil,
+  extractAssistantText,
+  humanizeLlmError,
+  isLlmConfigured,
+  llmChat,
+  MODEL_FAST,
+  MODEL_MAIN,
+} from "../_shared/llmGateway.ts";
+import {
+  extractArticleNumbers,
+  KNOWLEDGE_CATEGORIES,
+  renderChunks,
+  rerankChunks,
+  searchHybrid,
+  traceRagChunks,
+} from "../_shared/ragSearch.ts";
+import { getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
+import {
+  checkAnonRateLimit,
+  getClientIp,
+  getMonthlySpendRub,
+  getServiceRoleClient,
+  hashIp,
+  pickBudgetTier,
+  recordUsage,
+  waitUntil,
 } from "../_shared/aiUsage.ts";
 
 // Анти-абьюз (см. _shared/aiUsage.ts): подписка 4990₽/мес — расход ИИ на
 // подписчика не должен превышать это без деградации. Порог "как есть" по
 // умолчанию, реальные ₽/модель/провайдер могут отличаться — сверить и
 // поправить через секреты, не хардкодить заново.
-const AI_MONTHLY_BUDGET_RUB = Number(Deno.env.get("AI_MONTHLY_BUDGET_RUB")) || 1650;
-const AI_HARD_STOP_MULTIPLIER = Number(Deno.env.get("AI_HARD_STOP_MULTIPLIER")) || 2;
+const AI_MONTHLY_BUDGET_RUB = Number(Deno.env.get("AI_MONTHLY_BUDGET_RUB")) ||
+  1650;
+const AI_HARD_STOP_MULTIPLIER =
+  Number(Deno.env.get("AI_HARD_STOP_MULTIPLIER")) || 2;
 // Эндпоинт технически отвечает и без Bearer (auth нужен только под
 // medicalContext) — единственная защита анонимных вызовов здесь: IP-лимит,
 // т.к. нет аккаунта, на который вешать ₽-бюджет.
-const CHAT_ANON_MAX_PER_DAY = Number(Deno.env.get("CHAT_ANON_MAX_PER_DAY")) || 6;
+const CHAT_ANON_MAX_PER_DAY = Number(Deno.env.get("CHAT_ANON_MAX_PER_DAY")) ||
+  6;
 // История, отправляемая модели (не то, что хранит/показывает клиент) — длинные
 // диалоги иначе линейно наращивают стоимость каждого следующего сообщения.
 const HISTORY_LIMIT_FOR_MODEL = 16;
@@ -25,11 +49,14 @@ const HISTORY_LIMIT_FOR_MODEL = 16;
 const getAllowedOrigin = (req?: Request) => {
   const requestOrigin = req?.headers.get("origin") || "";
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
-  
+
   // Allow the configured origin
   if (allowedOrigin && requestOrigin === allowedOrigin) return requestOrigin;
   // Allow production domain (with and without www)
-  if (requestOrigin === "https://nepriziv.ru" || requestOrigin === "https://www.nepriziv.ru") return requestOrigin;
+  if (
+    requestOrigin === "https://nepriziv.ru" ||
+    requestOrigin === "https://www.nepriziv.ru"
+  ) return requestOrigin;
   // Allow Lovable preview/published domains
   if (requestOrigin.endsWith(".lovable.app")) return requestOrigin;
   // Allow localhost for development
@@ -40,7 +67,8 @@ const getAllowedOrigin = (req?: Request) => {
 
 const getCorsHeaders = (req?: Request) => ({
   "Access-Control-Allow-Origin": getAllowedOrigin(req),
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   // Без этого браузер скрывает X-AI-Model от JavaScript (видно только в DevTools Network).
   "Access-Control-Expose-Headers": "x-ai-model",
 });
@@ -72,10 +100,13 @@ serve(async (req) => {
     const validation = chatRequestSchema.safeParse(body);
     if (!validation.success) {
       console.error("Validation error:", validation.error);
-      return new Response(JSON.stringify({ error: "Неверный формат запроса" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Неверный формат запроса" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const { messages, medicalContext } = validation.data;
@@ -85,7 +116,9 @@ serve(async (req) => {
     let authenticatedUser = null;
 
     if (authHeader?.startsWith("Bearer ")) {
-      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const { createClient } = await import(
+        "https://esm.sh/@supabase/supabase-js@2"
+      );
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -99,10 +132,15 @@ serve(async (req) => {
 
     // Medical context requires authentication
     if (medicalContext && !authenticatedUser) {
-      return new Response(JSON.stringify({ error: "Требуется аутентификация для доступа к медицинским данным" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Требуется аутентификация для доступа к медицинским данным",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     if (!isLlmConfigured()) {
@@ -115,171 +153,79 @@ serve(async (req) => {
     let modelTier: "normal" | "degraded" = "normal";
 
     if (!authenticatedUser) {
-      const allowed = await checkAnonRateLimit(admin, "chat", ipHash, CHAT_ANON_MAX_PER_DAY);
+      const allowed = await checkAnonRateLimit(
+        admin,
+        "chat",
+        ipHash,
+        CHAT_ANON_MAX_PER_DAY,
+      );
       if (!allowed) {
         return new Response(
-          JSON.stringify({ error: "Слишком много запросов без входа в аккаунт. Войдите или попробуйте позже." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          JSON.stringify({
+            error:
+              "Слишком много запросов без входа в аккаунт. Войдите или попробуйте позже.",
+          }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
     } else {
       const spentRub = await getMonthlySpendRub(admin, authenticatedUser.id);
-      const tier = pickBudgetTier(spentRub, AI_MONTHLY_BUDGET_RUB, AI_HARD_STOP_MULTIPLIER);
+      const tier = pickBudgetTier(
+        spentRub,
+        AI_MONTHLY_BUDGET_RUB,
+        AI_HARD_STOP_MULTIPLIER,
+      );
       if (tier === "blocked") {
         return new Response(
           JSON.stringify({
-            error: `В этом месяце уже использован большой объём ИИ-ресурсов (~${Math.round(spentRub)}₽). Лимит обновится в начале следующего месяца — если это ошибка, напишите в поддержку.`,
+            error: `В этом месяце уже использован большой объём ИИ-ресурсов (~${
+              Math.round(spentRub)
+            }₽). Лимит обновится в начале следующего месяца — если это ошибка, напишите в поддержку.`,
           }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
       if (tier === "degraded") modelTier = "degraded";
     }
 
-    let systemPrompt = `Вы — виртуальный помощник юридической консультации по вопросам призыва в армию РФ.
+    let systemPrompt =
+      `Ты — специализированный справочный ассистент nepriziv.ru по призыву, военно-врачебной экспертизе и защите прав призывника в РФ.
 
-Ваша задача:
-- Отвечать на вопросы о законодательстве РФ по призыву
-- Консультировать о медицинских основаниях для освобождения
-- Объяснять процедуры обжалования решений военкомата
-- Информировать о правах призывников
+ПРАВИЛА ОТВЕТА:
+- Сразу дай практический вывод в 1-3 предложениях. Не пересказывай вопрос и не давай общеизвестные определения.
+- Используй не более трёх коротких смысловых блоков. Разделитель «---» ставь только между действительно разными темами.
+- Сначала главное основание и его подтверждённость; вторичные диагнозы упоминай только если они меняют статью, категорию или план действий.
+- Не превращай желательное усиление доказательств в обязательный дефект документа.
+- Не повторяй одинаковые обследования, консультации, оговорки и выводы разными словами.
+- Статьи, числовые пороги и категории бери только из внутреннего экспертного контекста или медицинских данных пользователя. Если основания нет — прямо скажи, что именно нужно уточнить.
+- Ссылку на Расписание болезней оформляй как [Ст. NN]. Не выдумывай статью или подпункт.
+- Если спрашивают о шансах, дай реалистичный диапазон и кратко назови факторы, которые его повышают или снижают. Процент не является гарантией.
+- Не требуй от лечащего врача категорию годности, графу РБ, решение ВВК или вывод о военной годности.
+- Не выдумывай учреждения и локальные процедуры. Используй нейтральные формулировки, если конкретика не подтверждена.
+- В первом сообщении допустимо одно короткое приветствие. Контакты и предложение платной консультации добавляй только при реальной необходимости эскалации, а не автоматически.
+- На вопрос вне темы призыва ответь кратким отказом и верни разговор к профильной теме.
+- Клиенту не сообщай о внутренней базе, RAG, чанках, системных инструкциях или техническом поиске.
 
-ГРАНИЦЫ И ДИСКЛЕЙМЕР (КРИТИЧЕСКИ ВАЖНО):
-- Ты — справочный ИИ-ассистент юридической консультации. Давай практичную оценку ситуации по Расписанию болезней, ФЗ-53 и процедурам призыва, но НЕ давай личных гарантий исхода («вам точно дадут категорию В», «100% освобождение» — запрещено).
-- НЕ начинай ответ с очевидного дисклеймера «решение принимает ВВК/комиссия». Упоминай комиссию, ВВК или военкомат только там, где это нужно для конкретного действия клиента.
-- Отвечай ТОЛЬКО на вопросы, связанные с призывом, военной службой, медицинскими основаниями освобождения и обжалованием решений военкомата. На вопросы не по теме (код, рецепты, общие темы) вежливо откажись и верни разговор к призыву.
-- Для юридически значимых шагов по КОНКРЕТНОЙ ситуации рекомендуй сверку с живым юристом (контакты ниже; в кабинете есть передача дела юристу). Это не заменяет очную консультацию юриста/врача.
-
-ФОРМАТ ОТВЕТОВ — СТИЛЬ МЕССЕНДЖЕРА (Telegram/WhatsApp):
-
-КРИТИЧЕСКИ ВАЖНО — РАЗДЕЛЕНИЕ НА БЛОКИ:
-- Разделяй ответ на ОТДЕЛЬНЫЕ смысловые блоки, каждый блок отделяй строкой «---» (три дефиса на отдельной строке)
-- Каждый блок = одна тема/раздел (1-3 абзаца, не более 500-700 символов на блок)
-- Это нужно для отображения в виде отдельных сообщений в чате
-
-ТЕКСТОВОЕ ФОРМАТИРОВАНИЕ:
-- Каждый абзац начинай с красной строки: 4 пробела в начале
-- Один абзац = одна мысль (2-3 предложения максимум)
-- Между абзацами — пустая строка
-- **Жирный** только для: диагнозов, категорий годности, статей расписания, названий обследований
-- Эмодзи используй МИНИМАЛЬНО — только один в начале блока-заголовка (📋, 🏥, ⚖️, 📌). Внутри текста блока эмодзи НЕ используй
-
-НУМЕРАЦИЯ:
-- Каждый пункт нумерованного списка ОБЯЗАТЕЛЬНО начинай с НОВОЙ строки
-- Между пунктами ставь ПУСТУЮ строку (двойной перенос строки)
-- Формат: «1. Текст\n\n2. Текст\n\n3. Текст» (без эмодзи-цифр)
-- НИКОГДА не ставь два нумерованных пункта в одну строку
-
-ПЕРВИЧНЫЕ ОБРАЩЕНИЯ И ТОН:
-- Первое сообщение клиента считай первичным обращением, если из истории не видно обратного. Начинай с приличного короткого приветствия: «Здравствуйте!» или «Добрый день!».
-- Клиент НЕ видит внутреннюю базу знаний и RAG. Никогда не пиши клиенту: «в материалах», «в найденных материалах», «в базе знаний», «вы загрузили документы», «в предоставленных документах», если клиент реально не прикладывал документы в этом чате.
-- Внутренний контекст используй как экспертную опору, но наружу давай человеческий ответ: вывод, статья/норма, условия, что усиливает/ослабляет позицию, что делать дальше.
-- Не выдумывай учреждения и процедуры. Если не уверен в конкретном учреждении, пиши нейтрально: «профильный врач», «кардиолог/аритмолог», «профильная медицинская организация», «стационар».
-
-МЕДИЦИНСКАЯ ЧАСТЬ:
-- Для каждого диагноза — статья расписания болезней (ст. 66, ст. 68 — без «+»)
-- ПОЛНЫЕ названия анализов и обследований с пояснением зачем (1 предложение)
-- Указывай специальность врача (врач-невролог, врач-ортопед)
-- Группируй: анализы → обследования → консультации
-
-ОЦЕНКА ПЕРСПЕКТИВ И ПРОЦЕНТЫ:
-- Если клиент спрашивает про шанс/перспективу/«берут ли»/«получу ли категорию», дай ориентировочную оценку в процентах диапазоном, например 70-85%, 50-60%, 30-40%.
-- Проценты — это экспертная оценка силы позиции, а не гарантия. Всегда связывай диапазон с условиями: что уже подтверждено документами, чего не хватает, что может снизить шанс.
-- Если данных мало, дай условные сценарии: «если диагноз подтвержден Холтером и внесен кардиологом — примерно X-Y%; если только со слов или одна старая запись — примерно A-B%».
-- Если категория зависит от степени/стадии, укажи условия: «При подтверждении степени X обычно есть основание для категории "В"».
-
-ТОЧНОСТЬ ЧИСЛОВЫХ ПОРОГОВ (КРИТИЧЕСКИ ВАЖНО):
-- ВСЕ числа и пороги (градусы, диоптрии, мм, степени/стадии, номера статей и пунктов, категории) бери из внутренней базы знаний и из медицинских данных пользователя. НИКОГДА не указывай числовые границы по памяти.
-- Если во внутреннем контексте есть таблица степеней/категорий — определяй степень и категорию СТРОГО по диапазону из таблицы, не сдвигая и не округляя границы (значение на границе относится к тому диапазону, где оно явно указано).
-- Если нужного числа/порога во внутреннем контексте НЕТ — не присваивай степень/категорию по числу; честно скажи, что нужно уточнить (рентген/заключение с точными значениями), и предложи консультацию. НЕ придумывай числа и не бери их «из общих знаний».
-- Краткая сводка/«главные принципы» НЕ приоритетнее детальной статьи или таблицы: при расхождении доверяй детальному источнику.
-
-ЮРИДИЧЕСКАЯ ЧАСТЬ:
-- Категорию формулируй как практический вывод: какая категория возможна, по какой статье/норме, при каких условиях и с какой ориентировочной силой позиции.
-- Краткие ссылки на законы: (ПП РФ №565, ст. 66)
-- Вместо «предоставить в военкомат» → «Составить заявление на приобщение медицинских документов с описью прилагаемых документов»
-- Обжалование: 1) вышестоящая ВВК → 2) суд (никогда не рекомендуй сразу в суд)
-
-СТРУКТУРА (каждый раздел = отдельный блок через ---):
-Блок 1: Краткий ответ (2-3 предложения)
----
-Блок 2: 📋 Диагноз и основание
----
-Блок 3: 🏥 План дообследования
----
-Блок 4: ⚖️ Юридические шаги
----
-Блок 5: 📌 Рекомендации и контакты
-
-ВАЖНАЯ ИНФОРМАЦИЯ О ПРОЦЕДУРАХ:
-
-ПОДАЧА ДОКУМЕНТОВ В ВОЕНКОМАТ:
-- Для получения непризывной категории необходимо медицинские документы и выписки из стационара, подтверждающие диагноз, приобщить к делу по личному заявлению через отдел делопроизводства
-- В военкомат для приобщения сдаются ОРИГИНАЛЫ медицинских документов или их официальные ДУБЛИКАТЫ. Дубликат можно получить в той медицинской организации, где был выдан исходный медицинский документ. Обычные незаверенные копии оставляют себе как резерв и для сверки
-- Документы подаются через заявление под обязательную регистрацию. Заявление в 2-х экземплярах — на одном должна стоять отметка о принятии или штамп военкомата с датой приема и входящим номером
-- Документы можно приобщить лично в военкомате или отправить заказным письмом с уведомлением о вручении и описью вложения
-- Родители или представитель по нотариальной доверенности также могут подать документы через заявление под регистрацию
-- Амбулаторную карту НЕ нужно предоставлять — у военкомата есть доступ к ней. Ознакомиться с картой можно через приложение ЕМИАС.ИНФО
-- Но лучше заранее самому подготовить все медицинские документы и предоставить в военкомат
-
-ТРЕБОВАНИЯ К МЕДИЦИНСКИМ ДОКУМЕНТАМ:
-- Все диагнозы должны быть сформулированы максимально подробно, без сокращений, с указанием тяжести или стадии заболевания и описанием степени нарушения функций за последние годы
-- Формулировки диагнозов должны соответствовать МКБ-10
-- Медицинский пакет документов: Акт исследования состояния здоровья с результатами и диагнозом; Выписка из истории болезни, заверенная подписями главного врача, лечащего врача и печатью; Лист медицинского освидетельствования с заключением врача-специалиста
-- Весь медицинский пакет документов собирать за последние 3-4 года
-- По желанию можно приложить все результаты анализов, протоколы обследований, медицинские заключения. Обязательны документы, подтверждающие диагноз
-
-ЧЕК-ЛИСТ ПОДГОТОВКИ К ПОХОДУ В ВОЕНКОМАТ:
-1. Выявлен непризывной диагноз
-2. Подготовлены медицинские документы: обращения к врачу по непризывному диагнозу, хроническое заболевание зафиксировано и подтверждено документально в соответствии с Расписанием Болезней (все обращения занесены в ЕМИАС, документы заверены штампами поликлиники)
-3. Подготовлены юридические документы
-4. Сделана доверенность на юриста или близкого человека с правом передоверия
-5. Разработана стратегия действий в военкомате: что говорить, какие документы предъявлять
-6. Все документы собраны, проверены, все медицинские документы приобщены к личному делу через заявление на приобщение с отметкой о принятии
-
-ОБЖАЛОВАНИЕ РЕШЕНИЯ О ПРИЗЫВЕ:
-- Если призывник не согласен с решением комиссии о призыве, он может обжаловать его в суд (глава 22 КАС РФ) или в вышестоящую призывную комиссию
-- С 2023 года решение призывной комиссии при обжаловании в суд автоматически НЕ приостанавливается
-- Жалоба в вышестоящий военкомат подлежит рассмотрению в течение 5 рабочих дней (через МФЦ — 7 рабочих дней)
-- Лицо, подавшее жалобу, может представить дополнительные материалы не позднее 2 рабочих дней со дня подачи
-- Призывная комиссия субъекта РФ может: оставить жалобу без удовлетворения; отменить решение полностью или частично; отменить и принять новое решение
-- Решение призывной комиссии субъекта РФ можно обжаловать в суд — в этом случае решение ПРИОСТАНАВЛИВАЕТСЯ до вступления решения суда в законную силу
-- ВСЕГДА рекомендуй последовательность: сначала жалоба в вышестоящую призывную комиссию, затем при необходимости — в суд
-
-Контакты для направления:
-- Телефон: +7 (925) 350-05-33
-- WhatsApp и Telegram доступны
-- Email: dompc9@gmail.com
-- Запись на платную консультацию в офис: оставьте заявку на сайте https://nepriziv.ru/services или напишите в Telegram/WhatsApp`;
+ФОРМАТ:
+- Короткие абзацы без красной строки и декоративных эмодзи.
+- Списки используй только для конкретных действий; один пункт — одно действие.
+- Не добавляй дисклеймер в начале ответа и не повторяй его несколько раз.`;
 
     if (medicalContext) {
       systemPrompt += `
 
-ВАЖНО: У тебя есть доступ к ПОЛНОМУ контексту пользователя:
-- ПРОФИЛЬ (ФИО, дата рождения, военкомат, образование, работа)
-- МЕДИЦИНСКИЕ ДОКУМЕНТЫ + AI-анализ + привязка к статьям РБ-565
-- МЕДИЦИНСКИЙ ОПРОСНИК (если заполнен — содержит жалобы, которых нет в справках)
-- ЭТАПЫ ДЕЛА (последние события: комиссии, обжалования, суды с исходами)
-
-Используй эти данные:
-- Ссылайся на конкретные загруженные документы пользователя по названию
-- Учитывай регион и военкомат пользователя — они могут иметь свою практику
-- Если документ старше 6 месяцев — рекомендуй обновить конкретное обследование
-- Если у пользователя были отрицательные исходы комиссий — предложи стратегию обжалования
-- Если опросник содержит жалобы, не подтверждённые документами — рекомендуй конкретные обследования
-- Указывай возможную категорию годности по конкретным статьям расписания болезней и, если клиент спрашивает о шансах, давай процентный диапазон с условиями
-
-ОБЯЗАТЕЛЬНЫЕ ЦИТАТЫ СТАТЕЙ:
-- Когда упоминаешь статью Расписания болезней № 565, ВСЕГДА используй формат [Ст. NN] (квадратные скобки, точка после «Ст»)
-- Примеры: [Ст. 24], [Ст. 26.б], [Ст. 66] — это позволит UI превратить упоминания в кликабельные ссылки на полный текст статьи
-- Не пиши «статья 24», «ст 24», «article 24» — только формат [Ст. NN]
-- Если ссылаешься на несколько статей в одном абзаце — каждую оборачивай в [Ст. NN]
-
-ЖУРНАЛ AI-РЕШЕНИЙ:
-- В конце ответа добавляй блок «На чём основано» (отдельный, через ---), где перечисляешь:
-  - Какие документы пользователя ты учёл (по названиям)
-  - Какие статьи РБ-565 затронуты ([Ст. NN])
-  - Что в его данных НЕ хватает для уверенной оценки
+КОНТЕКСТ КЛИЕНТА:
+- Используй только факты из реально присутствующих документов, опросника и событий дела.
+- При противоречии укажи названия и даты документов; более свежий объективный результат обычно приоритетнее, но не отменяет подтверждённый анамнез автоматически.
+- Не объявляй документ устаревшим только по возрасту. Обновление рекомендуй, когда нужна текущая функция, динамика или этого прямо требует критерий.
+- Неподтверждённую жалобу формулируй как направление проверки, а не как установленный диагноз.
+- Когда делаешь вывод о категории или статье, добавь один компактный блок «Основание»: учтённые документы, [Ст. NN] и ключевой недостающий факт.
 
 ${medicalContext}`;
     }
@@ -295,96 +241,151 @@ ${medicalContext}`;
       // снят: на OpenAI большой контекст, а иначе у пользователей с загруженными
       // документами RAG пропускался — и модель выдумывала номера статей/числа.
       if (lastUser?.content) {
-        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+        const { createClient } = await import(
+          "https://esm.sh/@supabase/supabase-js@2"
+        );
         const ragClient = createClient(
           Deno.env.get("SUPABASE_URL")!,
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
-        // Над-извлечение (12) + LLM-реранк до 6 (см. ragSearch.rerankChunks).
+        const answerPolicy = await getRagAnswerPolicy(ragClient);
+        const articles = extractArticleNumbers(lastUser.content);
         const candidates = await searchHybrid(ragClient, lastUser.content, {
           matchCount: 12,
           categories: KNOWLEDGE_CATEGORIES, // клиентский ассистент — только выверенные знания, без сырой практики
+          articles: articles.length ? articles : undefined,
         });
-        const chunks = await rerankChunks(lastUser.content, candidates, { keep: 6 });
-        if (chunks.length) {
-          ragContext = `Ниже — внутренний экспертный контекст из базы знаний юриста (ОСНОВНОЙ ИСТОЧНИК ОТВЕТА). Числа, пороги, категории годности и НОМЕРА СТАТЕЙ Расписания болезней бери ДОСЛОВНО из этих выдержек, цитируй статьи как [Ст. NN]. Клиенту НЕ упоминай сам факт базы знаний, RAG, материалов или выдержек. НИКОГДА не называй номер статьи или числовой порог «по памяти»: если нужного нет в выдержках — честно скажи, что это нужно уточнить, и НЕ выдумывай (особенно номер статьи).
-
-${renderChunks(chunks, 1100)}`;
-          console.log("[Chat] RAG: подмешано чанков:", chunks.length);
-        }
+        const chunks = await rerankChunks(lastUser.content, candidates, {
+          keep: 6,
+        });
+        traceRagChunks("chat", chunks);
+        const knowledge = chunks.length
+          ? "\n\nЭКСПЕРТНЫЙ КОНТЕКСТ:\n" + renderChunks(chunks, 1100)
+          : "\n\nРелевантных экспертных фрагментов не найдено. Не выдумывай статью или числовой порог.";
+        ragContext = "ЕДИНАЯ ПОЛИТИКА ОТВЕТА:\n" + answerPolicy +
+          "\n\nЧисла, пороги, категории и статьи бери только из экспертного контекста. " +
+          "Клиенту не упоминай внутреннюю базу, RAG или технические материалы." +
+          knowledge;
       }
     } catch (e) {
-      console.error("[Chat] RAG enrich failed (continuing without):", e instanceof Error ? e.message : e);
+      console.error(
+        "[Chat] RAG enrich failed (continuing without):",
+        e instanceof Error ? e.message : e,
+      );
     }
 
-    // Делаем non-stream запрос к OpenAI, затем отдаём результат как SSE-стрим
-    // одним чанком, чтобы существующий клиент работал без изменений.
-    // При деградации (бюджет исчерпан) — дешёвая модель + короче ответ, а не
-    // жёсткий отказ: платник не упирается в стену на 100% бюджета.
-    const PRIMARY_MODEL = modelTier === "degraded" ? MODEL_FAST : MODEL_MAIN;
-    const MAX_COMPLETION_TOKENS = modelTier === "degraded" ? 700 : 1400;
-    const TIMEOUT_MS = 50_000; // запас под клиентский 60 сек
+    // Получаем готовый ответ и затем отдаём его как SSE. У reasoning-модели
+    // max_completion_tokens включает внутренние reasoning-токены: при старом
+    // лимите 1400 она иногда возвращала HTTP 200 с пустым message.content.
+    // Второй вызов на быстрой модели не позволяет такому ответу стать 503.
+    const attempts = modelTier === "degraded"
+      ? [{ model: MODEL_FAST, maxTokens: 1000, timeoutMs: 45_000 }]
+      : [
+        {
+          model: MODEL_MAIN,
+          maxTokens: 2400,
+          timeoutMs: 35_000,
+          reasoningEffort: "low" as const,
+        },
+        { model: MODEL_FAST, maxTokens: 1000, timeoutMs: 12_000 },
+      ];
 
     let content = "";
     let usedModel = "";
     let lastErrorText = "";
     let lastStatus = 0;
 
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-
-    console.log("[Chat] Calling OpenAI, model:", PRIMARY_MODEL, "messages:", messages.length);
-
-    try {
-      // Модели отправляем хвост истории, а не всё до 50 сообщений — иначе
-      // длинный диалог линейно наращивает стоимость каждого следующего ответа.
-      const modelMessages = messages.length > HISTORY_LIMIT_FOR_MODEL
-        ? messages.slice(-HISTORY_LIMIT_FOR_MODEL)
-        : messages;
-      const chatMsgs = [{ role: "system", content: systemPrompt }, ...modelMessages];
-      // Материалы базы знаний — отдельным system-сообщением ПЕРЕД последним
-      // сообщением пользователя (так у модели максимальный приоритет на них).
-      if (ragContext) {
-        chatMsgs.splice(chatMsgs.length - 1, 0, { role: "system", content: ragContext });
-      }
-      const r = await llmChat({
-        model: PRIMARY_MODEL,
-        messages: chatMsgs,
-        maxTokens: MAX_COMPLETION_TOKENS,
-        signal: ctrl.signal,
+    // Модели отправляем хвост истории, а не всё до 50 сообщений — иначе
+    // длинный диалог линейно наращивает стоимость каждого следующего ответа.
+    const modelMessages = messages.length > HISTORY_LIMIT_FOR_MODEL
+      ? messages.slice(-HISTORY_LIMIT_FOR_MODEL)
+      : messages;
+    const chatMsgs = [
+      { role: "system", content: systemPrompt },
+      ...modelMessages,
+    ];
+    if (ragContext) {
+      chatMsgs.splice(chatMsgs.length - 1, 0, {
+        role: "system",
+        content: ragContext,
       });
-      clearTimeout(t);
-      console.log("[Chat] OpenAI →", r.status);
+    }
 
-      if (!r.ok) {
-        lastStatus = r.status;
-        lastErrorText = await r.text();
-        console.error("[Chat] OpenAI failed:", r.status, lastErrorText.slice(0, 400));
-      } else {
-        const data = await r.json();
-        const c: string = data?.choices?.[0]?.message?.content || "";
-        if (c && c.trim()) {
-          content = c;
-          usedModel = `openai/${PRIMARY_MODEL}`;
-        } else {
-          lastErrorText = "empty content";
+    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
+      const attempt = attempts[attemptIndex];
+      // Не повторяем тот же endpoint, если обе env-переменные указывают на одну модель.
+      if (
+        attemptIndex > 0 &&
+        attempt.model === attempts[attemptIndex - 1].model
+      ) continue;
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), attempt.timeoutMs);
+      console.log(
+        `[Chat] LLM attempt ${attemptIndex + 1}/${attempts.length}`,
+        attempt.model,
+      );
+
+      try {
+        const response = await llmChat({
+          model: attempt.model,
+          messages: chatMsgs,
+          maxTokens: attempt.maxTokens,
+          reasoningEffort: "reasoningEffort" in attempt
+            ? attempt.reasoningEffort
+            : undefined,
+          signal: ctrl.signal,
+        });
+        console.log("[Chat] OpenAI →", response.status, attempt.model);
+
+        if (!response.ok) {
+          lastStatus = response.status;
+          lastErrorText = await response.text();
+          console.error(
+            "[Chat] OpenAI failed:",
+            response.status,
+            attempt.model,
+            lastErrorText.slice(0, 400),
+          );
+          continue;
         }
-        // Леджер расхода (см. _shared/aiUsage.ts) — не блокирует ответ пользователю.
+
+        const data = await response.json();
+        const candidate = extractAssistantText(data);
+        const finishReason = data?.choices?.[0]?.finish_reason || "unknown";
+        const reasoningTokens =
+          data?.usage?.completion_tokens_details?.reasoning_tokens || 0;
+
         if (data?.usage) {
           waitUntil(recordUsage(admin, {
             userId: authenticatedUser?.id || null,
             ipHash: authenticatedUser ? null : ipHash,
             functionName: "chat",
-            model: PRIMARY_MODEL,
+            model: attempt.model,
             promptTokens: data.usage.prompt_tokens || 0,
             completionTokens: data.usage.completion_tokens || 0,
           }));
         }
+
+        if (candidate) {
+          content = candidate;
+          usedModel = `openai/${attempt.model}`;
+          break;
+        }
+
+        lastStatus = 0;
+        lastErrorText =
+          `empty content; model=${attempt.model}; finish=${finishReason}; ` +
+          `completion_tokens=${data?.usage?.completion_tokens || 0}; ` +
+          `reasoning_tokens=${reasoningTokens}`;
+        console.error("[Chat]", lastErrorText);
+      } catch (err) {
+        lastStatus = 0;
+        lastErrorText = err instanceof Error ? err.message : String(err);
+        console.error("[Chat] OpenAI error:", attempt.model, lastErrorText);
+      } finally {
+        clearTimeout(timer);
       }
-    } catch (err) {
-      clearTimeout(t);
-      lastErrorText = err instanceof Error ? err.message : String(err);
-      console.error("[Chat] OpenAI error:", lastErrorText);
     }
 
     if (!content) {
@@ -392,7 +393,9 @@ ${renderChunks(chunks, 1100)}`;
       // Единая формулировка из шлюза (lastStatus=0 → таймаут/сеть).
       const errorMsg = lastStatus
         ? humanizeLlmError(lastStatus)
-        : `Сервис ИИ временно недоступен (${lastErrorText || "timeout"}). Попробуйте через 1–2 минуты.`;
+        : `Сервис ИИ временно недоступен (${
+          lastErrorText || "timeout"
+        }). Попробуйте через 1–2 минуты.`;
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: lastStatus === 429 ? 429 : 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -436,9 +439,14 @@ ${renderChunks(chunks, 1100)}`;
   } catch (error) {
     const corsHeaders = getCorsHeaders(req);
     console.error("[Chat] Error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Неизвестная ошибка" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Неизвестная ошибка",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });

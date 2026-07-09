@@ -102,6 +102,7 @@ def main() -> None:
     ap.add_argument("--tags", help="Теги через запятую.")
     ap.add_argument("--folder", help="Переопределить папку (относительно волта).")
     ap.add_argument("--no-ingest", action="store_true", help="Только создать файл, без индексации.")
+    ap.add_argument("--force", action="store_true", help="Явно разрешить перезапись существующей заметки.")
     args = ap.parse_args()
 
     today = date.today().isoformat()
@@ -110,8 +111,12 @@ def main() -> None:
     target_dir.mkdir(parents=True, exist_ok=True)
 
     path = target_dir / f"{slugify(args.title)}.md"
+    if path.exists() and not args.force:
+        print(f"❌ Файл уже существует: {path}")
+        print("   Используйте другое название или явно передайте --force.")
+        sys.exit(2)
     if path.exists():
-        print(f"⚠️  Файл уже существует, будет перезаписан: {path}")
+        print(f"⚠️  Разрешена перезапись существующей заметки: {path}")
 
     md = build_markdown(args, today)
     path.write_text(md, encoding="utf-8")
@@ -126,6 +131,8 @@ def main() -> None:
     try:
         n = ing.ingest_file(path, rel)
         print(f"✅ Проиндексировано в rag_chunks: {n} чанк(ов). Знание доступно ИИ на сайте.")
+        import build_index
+        build_index.main()
     except Exception as e:
         print(f"❌ Ошибка индексации (заметка сохранена, попадёт при следующем общем прогоне): {e}")
         sys.exit(1)

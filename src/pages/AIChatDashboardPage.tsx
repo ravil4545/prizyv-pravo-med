@@ -544,8 +544,8 @@ const AIChatDashboardPage = () => {
 
       console.log("[Chat] POST", `${SUPABASE_URL}/functions/v1/chat`, "auth:", session?.user?.id ? "user" : "anon");
 
-      // Timeout 60 сек на сам запрос. Серверный fallback chain — 3 модели
-      // по 15 сек = до 45 сек + накладные расходы. 60 сек оставляет запас.
+      // Timeout 60 сек на сам запрос. Сервер успевает вызвать основную модель
+      // и при пустом ответе переключиться на быструю резервную.
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => {
         console.warn("[Chat] Timeout 60 сек — прерываю запрос");
