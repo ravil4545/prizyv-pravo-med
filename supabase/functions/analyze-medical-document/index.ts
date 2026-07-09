@@ -77,12 +77,20 @@ const CONCRETE_ASTHMA_ICD_RE = /\bJ\s*45\s*[\.,]\s*\d\b/i;
 const ASTHMA_ABBREVIATION_RE = /(?:^|[^А-Яа-яЁёA-Za-z])БА(?:$|[^А-Яа-яЁёA-Za-z])/u;
 const ASTHMA_WORD_RE = /бронхиальн[а-яё]*\s+астм[а-яё]*|(?:^|[^А-Яа-яЁёA-Za-z])астм[а-яё]*/iu;
 const ASTHMA_DEBUT_RE = /дебют|впервые\s+выявлен/iu;
+const ASTHMA_OBJECTIVE_SUPPORT_RE =
+  /госпитализац|стационар|скор(?:ая|ой)|\bФВД\b|спирометр|ОФВ\s*1|бронхолитическ[а-яё]*\s+проб|проб[а-яё]*\s+с\s+бронхолит|пик[-\s]?флоу|метахолин|диспансерн|льготн[а-яё]*\s+(?:категор|рецепт)/iu;
 
 const normalizeText = (value: unknown): string => String(value ?? "").replace(/\s+/g, " ").trim();
 
 const normalizeArticleNumber = (value: unknown): string => {
   const match = String(value ?? "").match(/\d+/);
   return match?.[0] ?? "";
+};
+
+const numericChance = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 };
 
 const extractAsthmaIcdCode = (text: string): string | null => {
@@ -123,8 +131,10 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
 
   const asthmaCode = extractAsthmaIcdCode(extractedText);
   const hasDebut = ASTHMA_DEBUT_RE.test(extractedText);
+  const hasObjectiveSupport = ASTHMA_OBJECTIVE_SUPPORT_RE.test(extractedText);
   const normalizedDiagnosis = `Бронхиальная астма${hasDebut ? ", дебют" : ""}${asthmaCode ? ` (${asthmaCode})` : ""}`;
-  const asthmaChance = hasDebut ? 60 : 80;
+  const asthmaChance = hasDebut ? (hasObjectiveSupport ? 65 : 60) : 80;
+  const asthmaMaxChance = hasDebut ? 65 : 100;
   const asthmaCategory = hasDebut ? "Г" : "В";
 
   if (!Array.isArray(result.linkedArticles)) {
@@ -141,7 +151,9 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
   const asthmaExplanation =
     `В тексте документа есть формулировка "${ASTHMA_ABBREVIATION_RE.test(extractedText) ? "БА" : "астма"}"` +
     `${asthmaCode ? ` и код МКБ-10 ${asthmaCode}` : ""}: это относится к бронхиальной астме по статье 52 Расписания болезней.` +
-    (hasDebut ? " Пометка «дебют» означает впервые выявленное заболевание, а не отсутствие диагноза." : "");
+    (hasDebut
+      ? " Пометка «дебют» означает впервые выявленное заболевание, а не отсутствие диагноза; без истории наблюдения, госпитализаций или объективных ФВД это предварительно даёт умеренный шанс категории В, примерно 55-65%."
+      : "");
 
   if (existingAsthma) {
     existingAsthma.articleNumber = "52";
@@ -154,8 +166,12 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
     if (!existingAsthma.explanation || isFalseAsthmaIcdGap(existingAsthma.explanation, extractedText)) {
       existingAsthma.explanation = asthmaExplanation;
     }
-    if (typeof existingAsthma.categoryBChance !== "number" || existingAsthma.categoryBChance < asthmaChance) {
+    if (typeof existingAsthma.categoryBChance !== "number") {
       existingAsthma.categoryBChance = asthmaChance;
+    } else if (existingAsthma.categoryBChance < asthmaChance) {
+      existingAsthma.categoryBChance = asthmaChance;
+    } else if (existingAsthma.categoryBChance > asthmaMaxChance) {
+      existingAsthma.categoryBChance = asthmaMaxChance;
     }
     if (!existingAsthma.fitnessCategory || !["В", "Д"].includes(String(existingAsthma.fitnessCategory))) {
       existingAsthma.fitnessCategory = asthmaCategory;
@@ -174,12 +190,42 @@ const normalizeAsthmaAnalysisResult = (result: Record<string, any>): Record<stri
     });
   }
 
-  const currentChance = typeof result.categoryBChance === "number" ? result.categoryBChance : 0;
+  const currentChance = numericChance(result.categoryBChance);
   if (currentChance < asthmaChance) {
     result.primaryArticleNumber = "52";
     result.categoryBChance = asthmaChance;
     if (!["В", "Д"].includes(String(result.fitnessCategory))) {
       result.fitnessCategory = asthmaCategory;
+    }
+  }
+
+  if (hasDebut && normalizeArticleNumber(result.primaryArticleNumber) === "52" && currentChance > asthmaMaxChance) {
+    result.categoryBChance = asthmaMaxChance;
+    if (!["В", "Д"].includes(String(result.fitnessCategory))) {
+      result.fitnessCategory = asthmaCategory;
+    }
+  }
+
+  const highestArticle = linkedArticles.reduce<Record<string, any> | null>((best, article) => {
+    return !best || numericChance(article?.categoryBChance) > numericChance(best?.categoryBChance) ? article : best;
+  }, null);
+  if (highestArticle) {
+    const highestChance = numericChance(highestArticle.categoryBChance);
+    const hasAsthmaArticle = linkedArticles.some((article) => normalizeArticleNumber(article?.articleNumber) === "52");
+    const asthmaWasOnlyHighSource =
+      hasDebut &&
+      hasAsthmaArticle &&
+      currentChance > highestChance &&
+      linkedArticles.every((article) => {
+        return normalizeArticleNumber(article?.articleNumber) === "52" || numericChance(article?.categoryBChance) <= asthmaMaxChance;
+      });
+
+    if (currentChance < highestChance || asthmaWasOnlyHighSource) {
+      result.primaryArticleNumber = normalizeArticleNumber(highestArticle.articleNumber) || result.primaryArticleNumber;
+      result.categoryBChance = highestChance;
+      if (highestArticle.fitnessCategory) {
+        result.fitnessCategory = highestArticle.fitnessCategory;
+      }
     }
   }
 
@@ -262,6 +308,7 @@ serve(async (req) => {
 - Слово "дебют" при бронхиальной астме означает впервые выявленное/начальное проявление диагноза, а НЕ отсутствие диагноза и НЕ "подозрение", если в документе диагноз указан без вопросительного знака.
 - Любой конкретный код J45.0, J45.1, J45.8, J45.9 уже удовлетворяет требованию "J45.x". НЕ пиши, что нужно уточнить J45.x, если в документе уже указан конкретный код J45.0/J45.1/J45.8/J45.9.
 - Бронхиальная астма / БА / астма с кодом J45.x относится к статье 52 Расписания болезней. Обязательно добавляй статью 52 в linkedArticles, даже если в том же документе есть аллергический ринит по статье 49.
+- Если это "БА, дебют" / впервые выявленная астма и есть только одно заключение частной клиники без госпитализаций, скорой помощи, диспансерного наблюдения или результатов ФВД/спирометрии с бронхолитиком, НЕ ставь высокий шанс 70-90%. Для такого документа указывай умеренный предварительный шанс категории В около 55-65%.
 
 КРИТИЧЕСКИ ВАЖНО - ПРАВИЛА ОЦЕНКИ СТЕПЕНЕЙ ЗАБОЛЕВАНИЙ:
 
