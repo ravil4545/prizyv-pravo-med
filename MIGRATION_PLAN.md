@@ -188,15 +188,15 @@ GPU не нужен.
 
 ### 6.1. Текст → OpenAI ✅
 - Модуль `_shared/llmGateway.ts`, прямой вызов `api.openai.com/v1/chat/completions`.
-- Модели: `OPENAI_MODEL_MAIN` и `OPENAI_MODEL_FAST` с дефолтами `gpt-5.6-sol` / `gpt-5.6-luna`.
+- Модели: `OPENAI_MODEL_MAIN` и `OPENAI_MODEL_FAST` с дефолтами `gpt-5.5` / `gpt-4.1-nano`.
 - Кто использует: `chat`, `analyze-diagnosis`, `generate-appeal`, `generate-document`,
   `find-government-structures`, `lawyer-*` (ассистент/планнер/ревью/ready-check/suggest/
   extract-date), `chat-rag` (генерация ответа) и др.
 - **При переезде:** перенести `OPENAI_API_KEY` на новый сервер.
 
 ### 6.2. Vision / изображения → OpenAI ✅
-- `analyze-medical-document` — OpenAI chat/completions с `OPENAI_MODEL_VISION` (`gpt-5.6-terra` по умолчанию).
-- `parse-summons` — OpenAI chat/completions с `OPENAI_MODEL_VISION_FAST` (`gpt-5.6-luna` по умолчанию).
+- `analyze-medical-document` — OpenAI chat/completions с `OPENAI_MODEL_VISION` (`gpt-4.1-mini` по умолчанию).
+- `parse-summons` — OpenAI chat/completions с `OPENAI_MODEL_VISION_FAST` (`gpt-4.1-mini` по умолчанию).
 - `enhance-document` — OpenAI Images API (`gpt-image-1`).
 
 ### 6.3. Эмбеддинги (RAG-поиск) → Jina

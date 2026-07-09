@@ -20,10 +20,10 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 
 // Модели переопределяются env. Сохранены имена экспортов MODEL_MAIN/MODEL_FAST,
 // чтобы вызывающие функции не менялись.
-export const MODEL_MAIN = Deno.env.get("OPENAI_MODEL_MAIN") || "gpt-5.6-sol";
-export const MODEL_FAST = Deno.env.get("OPENAI_MODEL_FAST") || "gpt-5.6-luna";
-export const MODEL_VISION = Deno.env.get("OPENAI_MODEL_VISION") || "gpt-5.6-terra";
-export const MODEL_VISION_FAST = Deno.env.get("OPENAI_MODEL_VISION_FAST") || "gpt-5.6-luna";
+export const MODEL_MAIN = Deno.env.get("OPENAI_MODEL_MAIN") || "gpt-5.5";
+export const MODEL_FAST = Deno.env.get("OPENAI_MODEL_FAST") || "gpt-4.1-nano";
+export const MODEL_VISION = Deno.env.get("OPENAI_MODEL_VISION") || "gpt-4.1-mini";
+export const MODEL_VISION_FAST = Deno.env.get("OPENAI_MODEL_VISION_FAST") || "gpt-4.1-mini";
 
 export const isLlmConfigured = (): boolean => !!OPENAI_API_KEY;
 
