@@ -160,7 +160,14 @@ const AiChatPage = () => {
                 )}
               >
                 {m.content ? (
-                  <div className="prose prose-sm max-w-none text-card-foreground prose-p:my-1 prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground prose-ul:my-1 prose-li:my-0">
+                  <div
+                    className={cn(
+                      "prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0",
+                      m.role === "user"
+                        ? "text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground prose-strong:text-primary-foreground prose-headings:text-primary-foreground prose-a:text-primary-foreground"
+                        : "text-card-foreground prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground prose-a:text-primary",
+                    )}
+                  >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{

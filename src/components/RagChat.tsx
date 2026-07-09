@@ -206,12 +206,19 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                 <div className={cn(
                   "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words shadow-sm",
                   m.role === "user"
-                    ? "bg-primary text-white rounded-tr-sm"
+                    ? "bg-primary text-primary-foreground rounded-tr-sm"
                     : "border border-slate-200 bg-white text-slate-950 rounded-tl-sm",
                 )}>
                   {m.content
                     ? (
-                      <div className="prose prose-sm max-w-none text-slate-950 prose-p:my-1 prose-p:text-slate-950 prose-li:text-slate-950 prose-strong:text-slate-950 prose-headings:text-slate-950 prose-ul:my-1 prose-li:my-0">
+                      <div
+                        className={cn(
+                          "prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0",
+                          m.role === "user"
+                            ? "text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground prose-strong:text-primary-foreground prose-headings:text-primary-foreground prose-a:text-primary-foreground"
+                            : "text-slate-950 prose-p:text-slate-950 prose-li:text-slate-950 prose-strong:text-slate-950 prose-headings:text-slate-950 prose-a:text-primary",
+                        )}
+                      >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
