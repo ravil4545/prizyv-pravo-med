@@ -31,14 +31,43 @@ DROP FUNCTION IF EXISTS public.hybrid_rag_chunks(
   text, vector, integer, text[], text[], double precision,
   double precision, integer
 );
+DROP FUNCTION IF EXISTS public.hybrid_rag_chunks(
+  text, vector, integer, text[], text[], double precision,
+  double precision, integer, double precision
+);
 ALTER TABLE public.rag_chunks
-  ADD COLUMN IF NOT EXISTS search_fts tsvector
-  GENERATED ALWAYS AS (
-    setweight(to_tsvector('russian', coalesce(source_title, '')), 'A') ||
-    setweight(to_tsvector('russian', coalesce(section_title, '')), 'A') ||
-    setweight(to_tsvector('russian', coalesce(array_to_string(tags, ' '), '')), 'B') ||
-    setweight(to_tsvector('russian', coalesce(content, '')), 'C')
-  ) STORED;
+  ADD COLUMN IF NOT EXISTS search_fts tsvector;
+
+CREATE OR REPLACE FUNCTION public.set_rag_chunks_search_fts()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $function$
+BEGIN
+  NEW.search_fts :=
+    setweight(to_tsvector('russian', coalesce(NEW.source_title, '')), 'A') ||
+    setweight(to_tsvector('russian', coalesce(NEW.section_title, '')), 'A') ||
+    setweight(to_tsvector('russian', coalesce(array_to_string(NEW.tags, ' '), '')), 'B') ||
+    setweight(to_tsvector('russian', coalesce(NEW.content, '')), 'C');
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS rag_chunks_search_fts_update ON public.rag_chunks;
+CREATE TRIGGER rag_chunks_search_fts_update
+BEFORE INSERT OR UPDATE OF source_title, section_title, tags, content
+ON public.rag_chunks
+FOR EACH ROW
+EXECUTE FUNCTION public.set_rag_chunks_search_fts();
+
+UPDATE public.rag_chunks
+SET search_fts =
+  setweight(to_tsvector('russian', coalesce(source_title, '')), 'A') ||
+  setweight(to_tsvector('russian', coalesce(section_title, '')), 'A') ||
+  setweight(to_tsvector('russian', coalesce(array_to_string(tags, ' '), '')), 'B') ||
+  setweight(to_tsvector('russian', coalesce(content, '')), 'C')
+WHERE search_fts IS NULL;
+
 CREATE INDEX IF NOT EXISTS rag_chunks_search_fts_idx
   ON public.rag_chunks USING gin (search_fts);
 
@@ -110,7 +139,7 @@ BEGIN
       p_build_id, v_staged, p_expected_count;
   END IF;
 
-  DELETE FROM public.rag_chunks;
+  DELETE FROM public.rag_chunks WHERE true;
   INSERT INTO public.rag_chunks (
     id, content, embedding, category, tags, schedule_articles,
     target_category, priority, type, is_foundational, section_title,
@@ -241,6 +270,10 @@ DROP FUNCTION IF EXISTS public.hybrid_rag_chunks(
   text, vector, integer, text[], text[], double precision,
   double precision, integer
 );
+DROP FUNCTION IF EXISTS public.hybrid_rag_chunks(
+  text, vector, integer, text[], text[], double precision,
+  double precision, integer, double precision
+);
 CREATE FUNCTION public.hybrid_rag_chunks(
   query_text text,
   query_embedding vector(1024) DEFAULT NULL,
@@ -271,31 +304,60 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $function$
-  WITH q AS (
-    SELECT to_tsquery(
-      'russian',
-      nullif(
-        array_to_string(
-          tsvector_to_array(to_tsvector('russian', coalesce(query_text, ''))),
-          ' | '
-        ),
-        ''
-      )
-    ) AS tsq
+  WITH input AS (
+    SELECT trim(
+      coalesce(query_text, '') ||
+      CASE
+        WHEN position('контрольн' in lower(coalesce(query_text, ''))) > 0
+          AND position('освидетельств' in lower(coalesce(query_text, ''))) > 0
+          AND position('кмо' in lower(coalesce(query_text, ''))) = 0
+          THEN ' кмо'
+        WHEN position('кмо' in lower(coalesce(query_text, ''))) > 0
+          AND position('освидетельств' in lower(coalesce(query_text, ''))) = 0
+          THEN ' контрольное медицинское освидетельствование'
+        ELSE ''
+      END
+    ) AS expanded_query
   ),
-  fts AS (
+  q AS (
+    SELECT
+      to_tsquery(
+        'russian',
+        nullif(
+          array_to_string(
+            tsvector_to_array(to_tsvector('russian', expanded_query)),
+            ' | '
+          ),
+          ''
+        )
+      ) AS tsq,
+      tsvector_to_array(to_tsvector('russian', expanded_query)) AS lexemes
+    FROM input
+  ),
+  fts_raw AS (
     SELECT
       c.id,
-      row_number() OVER (
-        ORDER BY ts_rank_cd(c.search_fts, q.tsq) DESC, c.id
-      ) AS rank_ix
+      ts_rank_cd(c.search_fts, q.tsq) AS rank_score,
+      (
+        SELECT count(*)::integer
+        FROM unnest(q.lexemes) AS lexeme
+        WHERE lexeme = ANY(tsvector_to_array(c.search_fts))
+      ) AS lexeme_overlap
     FROM public.rag_chunks c, q
     WHERE NOT c.is_foundational
       AND q.tsq IS NOT NULL
       AND c.search_fts @@ q.tsq
       AND (filter_categories IS NULL OR c.category = ANY(filter_categories))
       AND (filter_articles IS NULL OR c.schedule_articles && filter_articles)
-    ORDER BY rank_ix
+  ),
+  fts AS (
+    SELECT
+      id,
+      row_number() OVER (
+        ORDER BY lexeme_overlap DESC, rank_score DESC, id
+      ) AS rank_ix
+    FROM fts_raw
+    ORDER BY lexeme_overlap DESC, rank_score DESC, id
     LIMIT greatest(least(match_count * 4, 60), match_count)
   ),
   vec AS (
@@ -359,6 +421,8 @@ REVOKE EXECUTE ON FUNCTION public.publish_rag_build(uuid, integer)
   FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.publish_rag_sources(uuid, integer)
   FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_rag_chunks_search_fts()
+  FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.rag_chunks TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.rag_system_context TO service_role;
@@ -372,3 +436,4 @@ GRANT EXECUTE ON FUNCTION public.hybrid_rag_chunks(
 ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.publish_rag_build(uuid, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.publish_rag_sources(uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.set_rag_chunks_search_fts() TO service_role;

@@ -134,11 +134,11 @@ CHUNK_SIZE = 8_000       # макс. длина текста, отправляе
 SECTION_MAX = 2_600      # компактный чанк; заголовок/источник добавляются отдельно
 CHUNK_OVERLAP = 220      # сохраняет смысл на границе длинных секций
 EMBED_DIMS = 1024
-EMBED_BATCH_SIZE = 16
+EMBED_BATCH_SIZE = int(os.environ.get("JINA_EMBED_BATCH_SIZE", "16"))
 DB_BATCH_SIZE = 20
-RATE_LIMIT_DELAY = 0.15   # пауза между пакетами Jina
+RATE_LIMIT_DELAY = float(os.environ.get("JINA_RATE_LIMIT_DELAY", "0.35"))   # пауза между пакетами Jina
 REST_TIMEOUT = 60         # таймаут Supabase REST
-JINA_RETRIES = 3
+JINA_RETRIES = int(os.environ.get("JINA_RETRIES", "6"))
 
 ARTICLE_RE = re.compile(
     r"(?:^|\b)ст(?:атья|атьи|\.)?\s*№?\s*(\d{1,3})(?:\s*[«\"']?([а-д])(?:[»\"']|\b)?)?",
@@ -206,6 +206,27 @@ def db_patch(table: str, filters: str, row: dict) -> None:
     resp = session.patch(url, data=json.dumps(row), timeout=REST_TIMEOUT)
     if resp.status_code not in (200, 204):
         raise RuntimeError(f"DB patch failed [{resp.status_code}]: {resp.text[:500]}")
+
+
+def db_count(table: str, filters: str) -> int:
+    url = f"{SUPABASE_URL}/rest/v1/{table}?select=id&{filters}"
+    resp = session.get(
+        url,
+        headers={
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "apikey": SUPABASE_KEY,
+            "Range": "0-0",
+            "Prefer": "count=exact",
+        },
+        timeout=REST_TIMEOUT,
+    )
+    if resp.status_code not in (200, 206):
+        raise RuntimeError(f"DB count failed [{resp.status_code}]: {resp.text[:500]}")
+    content_range = resp.headers.get("Content-Range", "")
+    try:
+        return int(content_range.rsplit("/", 1)[1])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"DB count missing Content-Range: {content_range}") from exc
 
 
 def db_rpc(name: str, payload: dict):
@@ -496,7 +517,14 @@ def get_embeddings(
         except Exception as exc:
             last_error = exc
             if attempt < JINA_RETRIES:
-                time.sleep(2 ** (attempt - 1))
+                retry_after = None
+                if isinstance(exc, requests.HTTPError) and exc.response is not None:
+                    retry_after = exc.response.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else min(15 * attempt, 120)
+                print(
+                    f"  Jina retry {attempt}/{JINA_RETRIES} after {wait:.0f}s: {exc}"
+                )
+                time.sleep(wait)
     raise RuntimeError(f"Jina embeddings failed after {JINA_RETRIES} attempts: {last_error}")
 
 
@@ -638,21 +666,44 @@ def prepare_corpus(match: str | None = None) -> tuple[list[dict], int]:
     return chunks, ingested_files
 
 
-def publish_prepared(chunks: list[dict], mode: str) -> str:
-    build_id = str(uuid.uuid4())
-    db_upsert(
-        "rag_builds",
-        {
-            "id": build_id,
-            "mode": mode,
-            "status": "staging",
-            "expected_chunks": len(chunks),
-        },
-    )
+def publish_prepared(
+    chunks: list[dict],
+    mode: str,
+    resume_build_id: str | None = None,
+) -> str:
+    build_id = resume_build_id or str(uuid.uuid4())
+    if resume_build_id:
+        db_patch(
+            "rag_builds",
+            f"id=eq.{build_id}",
+            {
+                "mode": mode,
+                "status": "staging",
+                "expected_chunks": len(chunks),
+                "error": None,
+            },
+        )
+        staged_count = db_count("rag_chunks_staging", f"build_id=eq.{build_id}")
+        if staged_count > len(chunks):
+            raise RuntimeError(
+                f"В staging {staged_count} чанков, а текущая сборка содержит {len(chunks)}"
+            )
+        print(f"  resume build {build_id}: already staged {staged_count}/{len(chunks)}")
+    else:
+        staged_count = 0
+        db_upsert(
+            "rag_builds",
+            {
+                "id": build_id,
+                "mode": mode,
+                "status": "staging",
+                "expected_chunks": len(chunks),
+            },
+        )
 
     try:
-        uploaded = 0
-        for start in range(0, len(chunks), EMBED_BATCH_SIZE):
+        uploaded = staged_count
+        for start in range(staged_count, len(chunks), EMBED_BATCH_SIZE):
             batch = chunks[start:start + EMBED_BATCH_SIZE]
             embeddings = get_embeddings(
                 [chunk["_embedding_text"] for chunk in batch],
@@ -745,10 +796,18 @@ def main() -> None:
         action="store_true",
         help="Не обновлять rag_system_context после полной публикации.",
     )
+    parser.add_argument(
+        "--resume-build",
+        help="Продолжить существующую staging-сборку по UUID после временного сбоя Jina/Supabase.",
+    )
     args = parser.parse_args()
 
     validate_config(require_remote=not args.dry_run)
     mode = "targeted" if args.match else "full"
+    if args.resume_build and mode != "full":
+        raise SystemExit("--resume-build поддержан только для полной сборки без --match")
+    if args.resume_build and args.dry_run:
+        raise SystemExit("--resume-build нельзя использовать вместе с --dry-run")
     print(f"=== SecondBrain RAG: {mode}; dry_run={args.dry_run} ===")
     chunks, files = prepare_corpus(args.match)
     print_corpus_summary(chunks, files)
@@ -757,7 +816,7 @@ def main() -> None:
         print("✅ Dry-run завершён: Supabase и Jina не изменялись.")
         return
 
-    build_id = publish_prepared(chunks, mode=mode)
+    build_id = publish_prepared(chunks, mode=mode, resume_build_id=args.resume_build)
     if mode == "full" and not args.skip_system_context:
         ingest_system_context()
     elif mode == "targeted":
