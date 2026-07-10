@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -54,6 +54,9 @@ const LawyersDirectoryPage = () => {
   // lawyer_id → доступ открыт. Для текущего клиента — какие юристы уже подключены.
   const [accessMap, setAccessMap] = useState<Record<string, boolean>>({});
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const accessInFlightRef = useRef(new Set<string>());
+  const requestInFlightRef = useRef(false);
+  const consultationRequestIdsRef = useRef<Record<string, string>>({});
 
   useEffect(() => { loadLawyers(); loadMyAccess(); }, []);
 
@@ -72,11 +75,13 @@ const LawyersDirectoryPage = () => {
 
   // Тумблер «дать доступ» прямо из каталога/попапа.
   const toggleAccess = async (lawyerId: string, grant: boolean) => {
+    if (accessInFlightRef.current.has(lawyerId)) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
       navigate(`/auth?next=${encodeURIComponent(`/lawyers?request=${lawyerId}`)}`);
       return;
     }
+    accessInFlightRef.current.add(lawyerId);
     setTogglingId(lawyerId);
     // Оптимистично
     setAccessMap((prev) => ({ ...prev, [lawyerId]: grant }));
@@ -86,23 +91,21 @@ const LawyersDirectoryPage = () => {
           p_lawyer_id: lawyerId, p_grant_access: true,
         });
         if (error) throw error;
-        // Создаём первое сообщение в чат — чтобы у юриста появился диалог и
-        // пришло уведомление (realtime по recipient_id). Только если переписки
-        // ещё не было, чтобы не спамить при повторных переключениях тумблера.
+        // Отображаем изменение доступа системным событием. В качестве id берём
+        // UUID связи client↔lawyer: повторный запрос безопасно упирается в PK и
+        // не создаёт дубликат события.
         const row = Array.isArray(conn) ? conn[0] : conn;
         const lcId = row?.lawyer_client_id as string | undefined;
         if (lcId) {
-          const { count } = await supabase
-            .from("lawyer_chat_messages")
-            .select("id", { count: "exact", head: true })
-            .eq("lawyer_client_id", lcId);
-          if (!count) {
-            await supabase.from("lawyer_chat_messages").insert({
-              lawyer_client_id: lcId,
-              sender_id: session.user.id,
-              content: "Здравствуйте! Я открыл вам доступ к своим медицинским документам и ИИ-анализу через nepriziv.ru. Готов обсудить мою ситуацию здесь, в чате.",
-              message_type: "text",
-            });
+          const { error: eventError } = await supabase.from("lawyer_chat_messages").insert({
+            id: lcId,
+            lawyer_client_id: lcId,
+            sender_id: session.user.id,
+            content: "Клиент открыл юристу доступ к медицинским документам, профилю и ИИ-анализу.",
+            message_type: "system",
+          });
+          if (eventError && eventError.code !== "23505") {
+            console.warn("Не удалось добавить системное событие доступа", eventError);
           }
         }
         toast({ title: "Доступ открыт", description: "Юрист видит ваши документы, профиль и ИИ-расшифровки. Отозвать можно здесь же." });
@@ -115,6 +118,7 @@ const LawyersDirectoryPage = () => {
       setAccessMap((prev) => ({ ...prev, [lawyerId]: !grant })); // откат
       toast({ title: "Ошибка", description: e.message, variant: "destructive" });
     } finally {
+      accessInFlightRef.current.delete(lawyerId);
       setTogglingId(null);
     }
   };
@@ -198,7 +202,7 @@ const LawyersDirectoryPage = () => {
   }, [lawyers, tierFilter, search]);
 
   const requestConsultation = async () => {
-    if (!selectedLawyer) return;
+    if (!selectedLawyer || requestInFlightRef.current) return;
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
@@ -206,6 +210,7 @@ const LawyersDirectoryPage = () => {
       return;
     }
 
+    requestInFlightRef.current = true;
     setRequesting(true);
     try {
       // Связь создаём через RPC (прямой INSERT в lawyer_clients от клиента
@@ -220,15 +225,27 @@ const LawyersDirectoryPage = () => {
       const lawyerClientId = row?.lawyer_client_id;
       if (!lawyerClientId) throw new Error("Не удалось создать диалог");
 
-      // Первое сообщение от клиента
-      const messageText = requestMessage.trim() ||
-        "Здравствуйте! Прошу проконсультировать по моему вопросу через защищённый чат сайта.";
-      await supabase.from("lawyer_chat_messages").insert({
+      const requestId = consultationRequestIdsRef.current[selectedLawyer.user_id] || crypto.randomUUID();
+      consultationRequestIdsRef.current[selectedLawyer.user_id] = requestId;
+      const question = requestMessage.trim() ||
+        "Нужна первичная консультация по моей ситуации с призывом.";
+      const messageText = [
+        "Запрос на консультацию",
+        "",
+        "Ситуация или вопрос:",
+        question,
+        "",
+        "Ожидаемый результат:",
+        "Первичная оценка позиции и понятный следующий шаг.",
+      ].join("\n");
+      const { error: messageError } = await supabase.from("lawyer_chat_messages").insert({
+        id: requestId,
         lawyer_client_id: lawyerClientId,
         sender_id: session.user.id,
         content: messageText,
         message_type: "text",
       });
+      if (messageError && messageError.code !== "23505") throw messageError;
 
       toast({
         title: "Запрос отправлен",
@@ -237,6 +254,7 @@ const LawyersDirectoryPage = () => {
 
       setSelectedLawyer(null);
       setRequestMessage("");
+      delete consultationRequestIdsRef.current[selectedLawyer.user_id];
       // Ведём клиента в его «Сообщения» в кабинете
       navigate("/client/messages");
     } catch (error: any) {
@@ -246,6 +264,7 @@ const LawyersDirectoryPage = () => {
         variant: "destructive",
       });
     } finally {
+      requestInFlightRef.current = false;
       setRequesting(false);
     }
   };
@@ -369,8 +388,7 @@ const LawyersDirectoryPage = () => {
                         isPro ? "border-gold text-gold-deep" : "border-ink/30 text-ink"
                       }`}>
                         {l.photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={l.photo_url} alt={l.full_name} className="h-full w-full object-cover" />
+                    <img src={l.photo_url} alt={l.full_name} className="h-full w-full object-cover" />
                         ) : (
                           l.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")
                         )}
@@ -475,7 +493,6 @@ const LawyersDirectoryPage = () => {
                 <div className="flex items-center gap-4 p-5 bg-gradient-to-br from-gold/10 to-paper-deep/30 border-b border-border">
                   <div className="h-16 w-16 rounded-full overflow-hidden border border-ink/20 flex items-center justify-center font-serif italic text-2xl text-ink bg-paper flex-shrink-0">
                     {l.photo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={l.photo_url} alt={l.full_name} className="h-full w-full object-cover" />
                     ) : (
                       l.full_name.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("")
@@ -565,7 +582,25 @@ const LawyersDirectoryPage = () => {
                     </div>
                   </div>
 
-                  {/* Написать в чат */}
+                  {/* Структурированный запрос: юрист сразу понимает контекст и ожидаемый результат. */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="consultation-request" className="text-sm font-medium text-ink">
+                      Кратко опишите ситуацию
+                    </label>
+                    <textarea
+                      id="consultation-request"
+                      value={requestMessage}
+                      onChange={(event) => setRequestMessage(event.target.value)}
+                      maxLength={1500}
+                      rows={4}
+                      placeholder="Например: диагноз, какие документы уже есть, ближайшая повестка или решение комиссии"
+                      className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-ink placeholder:text-ink/40 focus:outline-none focus:ring-2 focus:ring-gold/40"
+                    />
+                    <p className="text-[11px] text-ink/50">
+                      Юрист получит это как отдельный запрос на консультацию.
+                    </p>
+                  </div>
+
                   <Button
                     onClick={requestConsultation}
                     disabled={requesting}
@@ -575,7 +610,7 @@ const LawyersDirectoryPage = () => {
                     {requesting ? (
                       <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Отправляем...</>
                     ) : (
-                      <><MessageCircle className="h-4 w-4 mr-2" /> Написать в чат</>
+                      <><MessageCircle className="h-4 w-4 mr-2" /> Отправить запрос</>
                     )}
                   </Button>
                   <p className="text-[11px] text-ink/50 text-center">

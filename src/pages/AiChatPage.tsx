@@ -9,7 +9,8 @@ import SEOHead from "@/components/SEOHead";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { supabase } from "@/integrations/supabase/client";
-import { readOpenAICompatibleStream } from "@/lib/openaiSse";
+import { readOpenAICompatibleStream, type ChatResponseMetadata } from "@/lib/openaiSse";
+import { ChatSourcesDisclosure } from "@/components/chat/ChatSourcesDisclosure";
 
 // Публичный ИИ-чат БЕЗ регистрации — главный «вход в ценность» для холодного трафика.
 // Раньше любой клик по «ИИ» вёл незалогиненного на /auth; из анонимной воронки было
@@ -20,11 +21,14 @@ const FREE_LIMIT = 3;                       // бесплатных вопрос
 const COUNT_KEY = "nepriziv_ai_public_count";
 
 interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  metadata?: ChatResponseMetadata;
 }
 
 const WELCOME: Message = {
+  id: "welcome",
   role: "assistant",
   content:
     "Здравствуйте! Я ИИ-помощник nepriziv.ru. Спросите про ваш диагноз, категорию годности или Расписание болезней — отвечу бесплатно на основе базы знаний.\n\nНапример: «Возьмут ли в армию с плоскостопием 3 степени?»",
@@ -37,11 +41,14 @@ const AiChatPage = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
   const [asked, setAsked] = useState<number>(() => Number(localStorage.getItem(COUNT_KEY) || 0));
   const [isAuthed, setIsAuthed] = useState(false);
 
   const messagesRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
+  const loadingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) =>
@@ -59,43 +66,95 @@ const AiChatPage = () => {
   const gateShown = !isAuthed && asked >= FREE_LIMIT;
 
   const send = useCallback(
-    async (raw: string) => {
+    async (raw: string, retry = false) => {
       const text = raw.trim();
-      if (!text || loading || gateShown) return;
+      if (!text || loadingRef.current || gateShown) return;
+
+      loadingRef.current = true;
       setInput("");
       setError(null);
-      const updated: Message[] = [...messages, { role: "user", content: text }];
+      setFailedPrompt(null);
+
+      const existingRetryMessage = retry &&
+        messages[messages.length - 1]?.role === "user" &&
+        messages[messages.length - 1]?.content === text;
+      const updated: Message[] = existingRetryMessage
+        ? messages
+        : [...messages, { id: crypto.randomUUID(), role: "user", content: text }];
       setMessages(updated);
       setLoading(true);
+
       const history = updated.slice(1, -1).map((m) => ({ role: m.role, content: m.content }));
+      const assistantMessageId = crypto.randomUUID();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const timeoutId = window.setTimeout(() => abortController.abort(), 60_000);
       trackEvent("ai_public_question");
+
       try {
         const res = await fetch(EDGE_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, history }),
+          signal: abortController.signal,
         });
         if (!res.ok || !res.body) {
           const d = await res.json().catch(() => ({}));
           throw new Error(d.error || `Ошибка сервера: ${res.status}`);
         }
-        setMessages((p) => [...p, { role: "assistant", content: "" }]);
+
         let acc = "";
+        let responseMetadata: ChatResponseMetadata | undefined;
         await readOpenAICompatibleStream(res.body, (delta) => {
           acc += delta;
-          setMessages((p) => [...p.slice(0, -1), { role: "assistant", content: acc }]);
+          setMessages((previous) => {
+            const assistantIndex = previous.findIndex((item) => item.id === assistantMessageId);
+            if (assistantIndex < 0) {
+              return [...previous, {
+                id: assistantMessageId,
+                role: "assistant",
+                content: acc,
+                metadata: responseMetadata,
+              }];
+            }
+            return previous.map((item, index) =>
+              index === assistantIndex
+                ? { ...item, content: acc, metadata: responseMetadata }
+                : item
+            );
+          });
+        }, (metadata) => {
+          responseMetadata = metadata;
+          setMessages((previous) => previous.map((item) =>
+            item.id === assistantMessageId ? { ...item, metadata } : item
+          ));
         });
+
+        if (!acc.trim()) throw new Error("ИИ вернул пустой ответ. Попробуйте ещё раз.");
+
         const next = asked + 1;
         setAsked(next);
         localStorage.setItem(COUNT_KEY, String(next));
         if (!isAuthed && next >= FREE_LIMIT) trackEvent("ai_public_gate_shown");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Ошибка соединения");
+        setMessages((previous) => previous.filter((item) => item.id !== assistantMessageId));
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        setError(
+          isAbort
+            ? "ИИ не успел ответить. Попробуйте ещё раз через минуту."
+            : err instanceof Error
+            ? err.message
+            : "Ошибка соединения",
+        );
+        setFailedPrompt(text);
       } finally {
+        window.clearTimeout(timeoutId);
+        if (abortControllerRef.current === abortController) abortControllerRef.current = null;
+        loadingRef.current = false;
         setLoading(false);
       }
     },
-    [messages, loading, asked, isAuthed, gateShown],
+    [messages, asked, isAuthed, gateShown],
   );
 
   // Автозапуск вопроса из ?q= (поле «Спросить ИИ» на главной ведёт сюда).
@@ -105,8 +164,9 @@ const AiChatPage = () => {
       startedRef.current = true;
       send(q);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [params, send]);
+
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -149,8 +209,8 @@ const AiChatPage = () => {
           ref={messagesRef}
           className="h-[56dvh] min-h-[320px] max-h-[560px] flex-none overscroll-contain rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto ym-hide-content"
         >
-          {messages.map((m, i) => (
-            <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+          {messages.map((m) => (
+            <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div
                 className={cn(
                   "max-w-[88%] rounded-2xl px-4 py-2.5 leading-relaxed break-words text-sm",
@@ -159,7 +219,7 @@ const AiChatPage = () => {
                     : "border border-border bg-card text-card-foreground shadow-sm rounded-tl-sm",
                 )}
               >
-                {m.content ? (
+                {m.content && (
                   <div
                     className={cn(
                       "prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0",
@@ -178,18 +238,34 @@ const AiChatPage = () => {
                     >
                       {m.content}
                     </ReactMarkdown>
+                    {m.role === "assistant" && <ChatSourcesDisclosure metadata={m.metadata} />}
                   </div>
-                ) : (
-                  <span className="flex items-center gap-1.5 opacity-60">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Печатает…
-                  </span>
                 )}
               </div>
             </div>
           ))}
+          {loading && messages[messages.length - 1]?.role === "user" && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-2.5 text-sm text-card-foreground shadow-sm">
+                <span className="flex items-center gap-1.5 opacity-60">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> ИИ думает…
+                </span>
+              </div>
+            </div>
+          )}
           {error && (
-            <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-xl px-3 py-2">
-              {error}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <span>{error}</span>
+              {failedPrompt && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => send(failedPrompt, true)}
+                  className="flex-shrink-0 rounded-lg border border-destructive/30 bg-background px-2.5 py-1.5 font-medium hover:bg-destructive/5 disabled:opacity-50"
+                >
+                  Повторить
+                </button>
+              )}
             </div>
           )}
         </div>

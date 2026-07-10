@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, FileText, ChevronRight, BookOpen, FileCheck, Search, AlertCircle, CheckCircle2, ClipboardList, Download, Printer, Pencil, Check, Stethoscope, ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getSignedDocumentUrl } from "@/lib/storage";
 import { toast } from "sonner";
 import RbArticleView from "@/components/RbArticleView";
@@ -901,21 +900,6 @@ export default function MedicalHistoryPage() {
     printWindow.print();
   };
 
-  // Pie chart data
-  const pieChartData = useMemo(() => {
-    if (!chanceData) return [];
-
-    if (chanceData.noData === 100) {
-      return [{ name: "Нет данных", value: 100, color: "#94a3b8" }];
-    }
-
-    return [
-      { name: "Категория В", value: chanceData.categoryB, color: "#10b981" },
-      { name: "Категория А/Б", value: chanceData.categoryA, color: "#f59e0b" },
-      { name: "Недостаточно данных", value: chanceData.noData, color: "#94a3b8" },
-    ].filter((item) => item.value > 0);
-  }, [chanceData]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -1168,11 +1152,12 @@ export default function MedicalHistoryPage() {
                   </CardContent>
                 </Card>
 
-                {/* Category B Chances Chart - Dynamic */}
+                {/* Document evidence score for the selected article. */}
                 <Card>
                   <CardHeader className="px-3 sm:px-6">
                     <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                      📊 Вероятность категории «В»
+                      📊 Сила подтверждений по статье
+                      <TermHint term="chanceB" />
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-3 sm:px-6">
@@ -1181,79 +1166,54 @@ export default function MedicalHistoryPage() {
                         <AlertCircle className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-muted-foreground" />
                         <h3 className="text-base sm:text-lg font-medium mb-2">Нет данных для анализа</h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          Загрузите документы для расчёта вероятности
+                          Загрузите документы, чтобы проверить соответствие критериям этой статьи
                         </p>
                         <Button size="sm" onClick={() => navigate("/medical-documents")}>
                           Загрузить документы
                         </Button>
                       </div>
                     ) : (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                          <div className="h-[200px] sm:h-[250px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={pieChartData}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={40}
-                                  outerRadius={70}
-                                  paddingAngle={3}
-                                  dataKey="value"
-                                  animationBegin={0}
-                                  animationDuration={800}
-                                >
-                                  {pieChartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                  ))}
-                                </Pie>
-                                <Tooltip formatter={(value: number) => [`${value}%`, "Вероятность"]} />
-                                <Legend wrapperStyle={{ fontSize: "12px" }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-
-                          <div className="space-y-3 sm:space-y-4">
-                            <div className="p-3 sm:p-4 rounded-lg bg-muted/50">
-                              <div className="flex items-center gap-3 mb-2">
-                                {chanceData && chanceData.categoryB >= 50 ? (
-                                  <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
-                                ) : (
-                                  <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
-                                )}
-                                <span className="text-xl sm:text-2xl font-bold">{chanceData?.categoryB || 0}%</span>
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 sm:p-5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              {chanceData && chanceData.categoryB >= 50 ? (
+                                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
+                              ) : (
+                                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
+                              )}
+                              <div>
+                                <p className="text-xs text-muted-foreground">Документальные подтверждения</p>
+                                <p className="text-2xl font-bold">{chanceData?.categoryB || 0}/100</p>
                               </div>
-                              <p className="text-xs sm:text-sm text-muted-foreground">
-                                Вероятность категории «В» на основе документов
-                              </p>
                             </div>
-
-                            <div className="space-y-2 text-sm">
-                              <p className="flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-primary" />
-                                <span>
-                                  Найдено релевантных документов: <strong>{chanceData?.relevantDocsCount || 0}</strong>
-                                </span>
-                              </p>
-
-                              {chanceData && chanceData.categoryB > 0 && (
-                                <p className="text-muted-foreground text-xs mt-4">
-                                  * Для повышения шансов рекомендуется:
-                                </p>
-                              )}
-
-                              {chanceData && chanceData.categoryB < 70 && chanceData.categoryB > 0 && (
-                                <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
-                                  <li>Добавить документы с давностью диагноза более 6 месяцев</li>
-                                  <li>Загрузить выписки из стационаров</li>
-                                  <li>Добавить результаты обследований и анализов</li>
-                                </ul>
-                              )}
-                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {chanceData?.relevantDocsCount || 0} док.
+                            </span>
                           </div>
+                          <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                            <div
+                              className="h-full rounded-full bg-primary transition-[width]"
+                              style={{ width: `${chanceData?.categoryB || 0}%` }}
+                            />
+                          </div>
+                          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                            Оценка показывает, насколько загруженные материалы подтверждают критерии выбранной статьи.
+                            Это не вероятность категории и не прогноз решения комиссии.
+                          </p>
                         </div>
-                      </>
+
+                        {chanceData && chanceData.categoryB < 70 && chanceData.categoryB > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-foreground">Что может усилить подтверждения:</p>
+                            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                              <li>свежие документы с динамикой диагноза и жалоб;</li>
+                              <li>выписки из стационара и профильных специалистов;</li>
+                              <li>результаты обследований с описанием функциональных нарушений.</li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -1323,7 +1283,7 @@ export default function MedicalHistoryPage() {
                                   {new Date(doc.uploaded_at).toLocaleDateString("ru-RU")}
                                   {link.ai_category_chance !== null && (
                                     <span className="ml-2 text-primary font-medium">
-                                      • {link.ai_category_chance}% шанс В
+                                      • подтверждения {link.ai_category_chance}/100
                                     </span>
                                   )}
                                 </p>

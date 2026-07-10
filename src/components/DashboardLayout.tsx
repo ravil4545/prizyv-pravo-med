@@ -49,6 +49,8 @@ export default function DashboardLayout() {
   // ввода прижато к низу — табы бы его перекрыли).
   const chat = isChatThread(location.pathname);
   const chatViewportHeight = useVisualViewportHeight(chat);
+  const unbrandedPath = location.pathname.replace(/^\/u\/[^/]+/, "") || "/";
+  const showEmergencyAudit = /^\/dashboard\/(medical-documents|case-tracking|calendar)(\/|$)/.test(unbrandedPath);
 
   const resolve = (item: Pick<CabinetNavItem, "to" | "external">) =>
     item.external ? item.to : withBrandPath(location.pathname, item.to);
@@ -310,9 +312,9 @@ export default function DashboardLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* Сквозная плавающая кнопка экстренного аудита (на чат-тредах прячем —
-          перекрывала бы поле ввода). */}
-      {!chat && <EmergencyAuditButton />}
+      {/* Экстренная загрузка нужна рядом с документами и сроками, а не на
+          каждом экране кабинета. Так она не перекрывает главную и чаты. */}
+      {!chat && showEmergencyAudit && <EmergencyAuditButton />}
       <CabinetChooserDialog open={cabinetChooserOpen} onOpenChange={setCabinetChooserOpen} />
     </div>
   );

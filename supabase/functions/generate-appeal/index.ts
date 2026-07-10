@@ -133,18 +133,22 @@ serve(async (req) => {
     const { data: docs } = await supabase
       .from("medical_documents_v2")
       .select(
-        "title, document_date, ai_fitness_category, ai_category_chance, ai_explanation, document_types(name)",
+        "id, title, document_date, ai_fitness_category, ai_category_chance, ai_explanation, document_types(name)",
       )
       .eq("user_id", userId)
       .order("document_date", { ascending: false })
       .limit(20);
 
     // Ссылки на статьи
-    const { data: links } = await supabase
-      .from("document_article_links")
-      .select(
-        "ai_category_chance, ai_explanation, disease_articles_565(article_number, title)",
-      );
+    const documentIds = (docs || []).map((document) => document.id);
+    const links = documentIds.length > 0
+      ? (await supabase
+        .from("document_article_links")
+        .select(
+          "document_id, ai_category_chance, ai_explanation, disease_articles_565(article_number, title)",
+        )
+        .in("document_id", documentIds)).data || []
+      : [];
 
     // Формируем контекст
     let context = "=== ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ===\n";
@@ -178,10 +182,10 @@ serve(async (req) => {
         .slice(0, 3);
       context += "\n=== ОСНОВНЫЕ СТАТЬИ РБ-565 ===\n";
       for (const l of top) {
-        const a = (l as { disease_articles_565?: { article_number: string; title: string } | null })
-          .disease_articles_565;
+        const relation = l.disease_articles_565;
+        const a = Array.isArray(relation) ? relation[0] : relation;
         if (!a) continue;
-        context += `- Ст. ${a.article_number} (${a.title}) — шанс кат. В: ${l.ai_category_chance || 0}%\n`;
+        context += `- Ст. ${a.article_number} (${a.title}) — сила документальных подтверждений: ${l.ai_category_chance || 0}/100 (не вероятность исхода)\n`;
         if (l.ai_explanation) context += `  ${l.ai_explanation}\n`;
       }
     }

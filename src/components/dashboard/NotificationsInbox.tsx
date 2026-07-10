@@ -122,7 +122,7 @@ export default function NotificationsInbox() {
               id: "ai-fresh",
               kind: "ai-ready",
               title: `ИИ закончил анализ ${freshAnalyses.length} ${freshAnalyses.length === 1 ? "документа" : "документов"}`,
-              description: `Лучший результат: кат. ${freshAnalyses[0].ai_fitness_category || "—"}, шанс В: ${freshAnalyses[0].ai_category_chance || 0}%`,
+              description: `Предварительный ориентир: кат. ${freshAnalyses[0].ai_fitness_category || "—"}; сила подтверждений ${freshAnalyses[0].ai_category_chance || 0}/100`,
               ctaPath: "/dashboard/medical-documents",
               ctaLabel: "Посмотреть",
               urgency: "medium",

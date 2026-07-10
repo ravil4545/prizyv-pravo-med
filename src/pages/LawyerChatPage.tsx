@@ -46,13 +46,71 @@ interface AISuggestion {
   text: string;
 }
 
+interface GroundingSource {
+  title: string;
+  section?: string | null;
+  articles?: string[];
+}
+
+type GroundingConfidence = "low" | "medium" | "high";
+
 interface SuggestionSet {
   id: string;          // client message id that triggered this
   clientMessage: string; // preview of client's question
   summary: string;
   suggestions: AISuggestion[];
   collapsed: boolean;
+  sources?: GroundingSource[];
+  confidence?: GroundingConfidence;
+  groundingNotice?: string | null;
 }
+
+const GROUNDING_LABEL: Record<GroundingConfidence, string> = {
+  high: "Опора высокая",
+  medium: "Опора средняя",
+  low: "Нужна проверка",
+};
+
+const GroundingMeta = ({
+  sources,
+  confidence,
+  notice,
+}: {
+  sources?: GroundingSource[];
+  confidence?: GroundingConfidence;
+  notice?: string | null;
+}) => {
+  if (!confidence && !sources?.length && !notice) return null;
+  return (
+    <div className={cn(
+      "rounded-lg border px-3 py-2 text-[11px]",
+      confidence === "low"
+        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+        : "border-border bg-muted/30 text-muted-foreground",
+    )}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+        <span className="font-semibold">
+          {confidence ? GROUNDING_LABEL[confidence] : "Опорные материалы"}
+        </span>
+      </div>
+      {notice && <p className="mb-1.5 leading-relaxed">{notice}</p>}
+      {sources && sources.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {sources.slice(0, 4).map((source, index) => {
+            const articleLabel = source.articles?.length ? ` · ст. ${source.articles.join(", ")}` : "";
+            const label = `${source.title}${source.section ? ` — ${source.section}` : ""}${articleLabel}`;
+            return (
+              <span key={`${source.title}-${source.section || index}`} title={label} className="max-w-full truncate rounded-md border bg-background/70 px-1.5 py-0.5">
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SUGGEST_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/lawyer-chat-suggest";
 const SUGGESTION_CACHE_PREFIX = "lawyer-chat-suggestions";
@@ -138,6 +196,7 @@ const LawyerChatPage = () => {
   const [reviewResult, setReviewResult] = useState<{
     tone?: number; completeness?: number; legal_accuracy?: number; clarity?: number;
     warnings?: string[]; improved?: string; verdict?: string;
+    sources?: GroundingSource[]; confidence?: GroundingConfidence; groundingNotice?: string | null;
   } | null>(null);
 
   const reviewDraft = async () => {
@@ -473,6 +532,9 @@ const LawyerChatPage = () => {
         summary: data.summary || "",
         suggestions: data.suggestions || [],
         collapsed: false,
+        sources: data.sources || [],
+        confidence: data.confidence,
+        groundingNotice: data.groundingNotice || null,
       };
       upsertSuggestionSet(newSet);
       autoSuggestRef.current = cacheKey;
@@ -659,6 +721,11 @@ const LawyerChatPage = () => {
                     {set.summary}
                   </p>
                 )}
+                <GroundingMeta
+                  sources={set.sources}
+                  confidence={set.confidence}
+                  notice={set.groundingNotice}
+                />
                 {set.suggestions.map((s, i) => (
                   <div key={i} className="border rounded-xl p-2.5 space-y-1.5 bg-card">
                     <div className="flex items-center justify-between gap-1">
@@ -718,6 +785,11 @@ const LawyerChatPage = () => {
                   {currentItem.summary}
                 </p>
               )}
+              <GroundingMeta
+                sources={currentItem.sources}
+                confidence={currentItem.confidence}
+                notice={currentItem.groundingNotice}
+              />
               {currentItem.suggestions.map((s, i) => (
                 <div
                   key={i}
@@ -1256,6 +1328,11 @@ const LawyerChatPage = () => {
               {reviewResult.verdict && (
                 <p className="text-sm bg-muted/40 rounded-lg px-3 py-2">{reviewResult.verdict}</p>
               )}
+              <GroundingMeta
+                sources={reviewResult.sources}
+                confidence={reviewResult.confidence}
+                notice={reviewResult.groundingNotice}
+              />
               {/* Оценки */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[

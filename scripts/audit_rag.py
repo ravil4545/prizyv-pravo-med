@@ -18,6 +18,19 @@ except Exception:
     pass
 
 
+AUTHORITATIVE_CATEGORIES = {
+    "legal_procedure",
+    "document_guide",
+    "schedule_rb",
+    "rb_official",
+    "reference",
+}
+
+
+def _has_any(meta: dict, *keys: str) -> bool:
+    return any(meta.get(key) not in (None, "", []) for key in keys)
+
+
 def explicit_metadata_stats() -> dict[str, int]:
     stats: collections.Counter[str] = collections.Counter()
     for path in sorted(ing.RAG_BASE.rglob("*.md")):
@@ -30,6 +43,7 @@ def explicit_metadata_stats() -> dict[str, int]:
         meta.update({key: value for key, value in second.items() if value is not None})
         if not body.strip():
             continue
+        category = ing.category_for(rel, meta)
         stats["files"] += 1
         if meta.get("title") or ing.first_h1(body):
             stats["with_title"] += 1
@@ -39,10 +53,27 @@ def explicit_metadata_stats() -> dict[str, int]:
             stats["with_tags"] += 1
         if meta.get("schedule_articles"):
             stats["with_file_articles"] += 1
+        if _has_any(meta, "source_url", "official_url", "source"):
+            stats["with_source_reference"] += 1
+        if _has_any(meta, "valid_from", "valid_to", "effective_from", "effective_to"):
+            stats["with_validity_window"] += 1
+        if _has_any(meta, "reviewer", "verified_by", "checked_by"):
+            stats["with_reviewer"] += 1
+        if _has_any(meta, "confidence", "trust_level"):
+            stats["with_confidence"] += 1
+
+        if category in AUTHORITATIVE_CATEGORIES:
+            stats["authoritative_files"] += 1
+            if meta.get("last_refined") or meta.get("дата"):
+                stats["authoritative_with_explicit_freshness"] += 1
+            if _has_any(meta, "source_url", "official_url", "source"):
+                stats["authoritative_with_source_reference"] += 1
+            if _has_any(meta, "reviewer", "verified_by", "checked_by"):
+                stats["authoritative_with_reviewer"] += 1
     return dict(stats)
 
 
-def local_audit() -> tuple[dict, list[str], list[str]]:
+def local_audit(strict_metadata: bool = False) -> tuple[dict, list[str], list[str]]:
     chunks, files = ing.prepare_corpus()
     errors: list[str] = []
     warnings: list[str] = []
@@ -114,6 +145,38 @@ def local_audit() -> tuple[dict, list[str], list[str]]:
             f"{metadata.get('with_explicit_freshness', 0)}/{metadata.get('files', 0)} "
             "файлов; для остальных индекс использует mtime"
         )
+    authoritative = metadata.get("authoritative_files", 0)
+    authoritative_fresh = metadata.get("authoritative_with_explicit_freshness", 0)
+    authoritative_sources = metadata.get("authoritative_with_source_reference", 0)
+    authoritative_reviewers = metadata.get("authoritative_with_reviewer", 0)
+    if authoritative and authoritative_fresh < authoritative:
+        warnings.append(
+            "Явная актуальность нормативных/справочных материалов: "
+            f"{authoritative_fresh}/{authoritative}"
+        )
+    if authoritative and authoritative_sources < authoritative:
+        warnings.append(
+            "Ссылка или название первичного источника у нормативных/справочных "
+            f"материалов: {authoritative_sources}/{authoritative}"
+        )
+    if authoritative and authoritative_reviewers < authoritative:
+        warnings.append(
+            "Ответственный за проверку нормативных/справочных материалов: "
+            f"{authoritative_reviewers}/{authoritative}"
+        )
+    if strict_metadata and authoritative:
+        missing = []
+        if authoritative_fresh < authoritative:
+            missing.append("last_refined/дата")
+        if authoritative_sources < authoritative:
+            missing.append("source_url/official_url/source")
+        if authoritative_reviewers < authoritative:
+            missing.append("reviewer/verified_by")
+        if missing:
+            errors.append(
+                "Строгий metadata-gate: нормативным/справочным материалам не хватает "
+                + ", ".join(missing)
+            )
 
     policy_path = (
         ing.RAG_BASE
@@ -188,9 +251,17 @@ def main() -> None:
         help="Read-only compare of local expected ids/hashes with Supabase.",
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser.add_argument(
+        "--strict-metadata",
+        action="store_true",
+        help=(
+            "Fail when authoritative notes do not have explicit freshness, "
+            "source reference and reviewer metadata."
+        ),
+    )
     args = parser.parse_args()
 
-    report, errors, warnings = local_audit()
+    report, errors, warnings = local_audit(strict_metadata=args.strict_metadata)
     if args.compare_prod:
         compare_production(report)
 

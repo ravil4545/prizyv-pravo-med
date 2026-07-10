@@ -34,6 +34,10 @@ const MobileBottomNav = () => {
   const hiddenRoutes = ["/auth", "/login", "/register", "/reset-password"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
+  // Публичный AI-чат использует нижнюю область под собственный composer.
+  // Фиксированная навигация перекрывала поле ввода и кнопку отправки.
+  if (location.pathname === "/ai") return null;
+
   // В кабинетах (клиент/юрист) нижнюю навигацию даёт соответствующий Layout
   // (единый конфиг с сайдбаром). Здесь не дублируем — иначе было бы два бара.
   // На полноэкранных чат-тредах баров нет вовсе (поле ввода прижато к низу).

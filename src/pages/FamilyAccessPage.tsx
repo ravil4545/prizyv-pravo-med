@@ -63,7 +63,7 @@ interface FamilyInvite {
 
 const SCOPE_LABELS: Record<string, string> = {
   documents: "Медицинские документы",
-  ai_analysis: "AI-анализ и шансы по статьям",
+  ai_analysis: "AI-анализ и подтверждения по статьям",
   case_events: "События дела (комиссии, суды)",
   chat_with_lawyer: "Переписка с юристом",
 };

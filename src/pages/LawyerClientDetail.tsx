@@ -55,10 +55,18 @@ interface MedDoc {
   file_url: string; created_at: string;
 }
 interface CaseNote { id: string; content: string; note_type: string; created_at: string; }
+interface BriefDocument { id: string; title: string | null; created_at: string; }
 interface AIAnalysis {
   overall_category?: string; category_basis?: string; strong_points?: string[];
   weak_points?: string[]; examination_plan?: { type: string; name: string; reason: string }[];
   missing_documents?: string[]; risks?: string[]; lawyer_recommendations?: string[]; raw?: string;
+  _brief_meta?: {
+    version: number;
+    analyzed_at: string;
+    document_ids: string[];
+    document_titles: string[];
+    document_count: number;
+  };
 }
 
 const LawyerClientDetail = () => {
@@ -110,6 +118,8 @@ const LawyerClientDetail = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [lastAnalysisAt, setLastAnalysisAt] = useState<string | null>(null);
+  const [analysisVersion, setAnalysisVersion] = useState(0);
+  const [lawyerDocuments, setLawyerDocuments] = useState<BriefDocument[]>([]);
   const [newDocsDetected, setNewDocsDetected] = useState(false);
 
   // Ready-check: оценка готовности пакета к военкомату (% + чек-лист)
@@ -316,6 +326,7 @@ const LawyerClientDetail = () => {
       .select("id, title, created_at")
       .eq("lawyer_client_id", clientId)
       .order("created_at", { ascending: false });
+    setLawyerDocuments((lawyerDocs as BriefDocument[]) || []);
 
     const docNotes: CaseNote[] = (lawyerDocs || []).map((d: any) => ({
       id: `doc-${d.id}`,
@@ -344,34 +355,67 @@ const LawyerClientDetail = () => {
     setNotes(all);
 
     // Restore the most recent AI analysis so it persists across tab switches / page reloads
-    const lastAiNote = baseNotes.find(n => n.note_type === "ai_analysis");
+    const aiNotes = baseNotes.filter(n => n.note_type === "ai_analysis");
+    const storedVersions = aiNotes.flatMap((note) => {
+      try {
+        const parsed = JSON.parse(note.content) as AIAnalysis;
+        return parsed._brief_meta?.version ? [parsed._brief_meta.version] : [];
+      } catch {
+        return [];
+      }
+    });
+    setAnalysisVersion(Math.max(aiNotes.length, ...storedVersions, 0));
+    const lastAiNote = aiNotes[0];
     if (lastAiNote) {
       try {
         setAiAnalysis(JSON.parse(lastAiNote.content));
         setLastAnalysisAt(lastAiNote.created_at);
       } catch { /* ignore malformed */ }
+    } else {
+      setAiAnalysis(null);
+      setLastAnalysisAt(null);
     }
   };
 
-  // Detect docs uploaded after the last analysis
+  // Анализ считается устаревшим, если набор документов изменился. Для новых
+  // версий сравниваем точные id; для старых заметок — время загрузки.
   useEffect(() => {
-    if (!lastAnalysisAt || !aiAnalysis || medDocs.length === 0) {
+    if (!lastAnalysisAt || !aiAnalysis) {
       setNewDocsDetected(false);
       return;
     }
-    setNewDocsDetected(medDocs.some(doc => doc.created_at > lastAnalysisAt));
-  }, [medDocs, lastAnalysisAt, aiAnalysis]);
+    const currentDocs = hasDocAccess && medDocs.length > 0 ? medDocs : lawyerDocuments;
+    const capturedIds = aiAnalysis._brief_meta?.document_ids;
+    if (capturedIds) {
+      const currentIds = currentDocs.map((doc) => doc.id).sort();
+      const previousIds = [...capturedIds].sort();
+      setNewDocsDetected(currentIds.join("|") !== previousIds.join("|"));
+      return;
+    }
+    setNewDocsDetected(currentDocs.some(doc => doc.created_at > lastAnalysisAt));
+  }, [medDocs, lawyerDocuments, hasDocAccess, lastAnalysisAt, aiAnalysis]);
 
-  // Live updates: new client documents while the tab is open
+  // Live updates: изменение набора документов сразу пересчитывает stale-маркер.
   useEffect(() => {
     if (!client?.client_user_id || !hasDocAccess) return;
     const uid = client.client_user_id;
     const channel = supabase.channel(`medDocs-${uid}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "medical_documents_v2", filter: `user_id=eq.${uid}` },
-        (payload) => { setMedDocs(prev => [payload.new as MedDoc, ...prev]); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "medical_documents_v2", filter: `user_id=eq.${uid}` },
+        () => { loadMedDocs(uid); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.client_user_id, hasDocAccess]);
+
+  useEffect(() => {
+    if (!clientId) return;
+    const channel = supabase.channel(`lawyerDocs-${clientId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lawyer_client_med_docs", filter: `lawyer_client_id=eq.${clientId}` },
+        () => { loadNotes(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
 
   // Realtime: клиент включил/выключил доступ из своего кабинета.
   // Юристу сразу всплывает toast, перезагружается hasDocAccess и (если открыл)
@@ -529,17 +573,34 @@ const LawyerClientDetail = () => {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
       if (res.error) throw new Error(await extractFnError(res.error));
-      const analysis: AIAnalysis = res.data.analysis;
-      setAiAnalysis(analysis);
-      // Auto-save to case_notes so it persists across tab switches
-      await supabase.from("case_notes").insert({
+      const sourceAnalysis: AIAnalysis = res.data.analysis;
+      const analysisDocs = hasDocAccess && medDocs.length > 0 ? medDocs : lawyerDocuments;
+      const analyzedAt = new Date().toISOString();
+      const analysis: AIAnalysis = {
+        ...sourceAnalysis,
+        _brief_meta: {
+          version: analysisVersion + 1,
+          analyzed_at: analyzedAt,
+          document_ids: analysisDocs.map((doc) => doc.id),
+          document_titles: analysisDocs.map((doc) => doc.title || "Документ без названия"),
+          document_count: analysisDocs.length,
+        },
+      };
+      // Auto-save to case_notes so it persists across tab switches. В JSON
+      // фиксируем точный набор документов — это версия брифа без новой таблицы.
+      const { data: savedNote, error: saveError } = await supabase.from("case_notes").insert({
         lawyer_client_id: clientId,
         author_id: user!.id,
         content: JSON.stringify(analysis),
         note_type: "ai_analysis",
-      });
+      }).select("created_at").single();
+      if (saveError) throw saveError;
+      setAiAnalysis(analysis);
+      setLastAnalysisAt(savedNote.created_at || analyzedAt);
+      setAnalysisVersion((version) => version + 1);
+      setNewDocsDetected(false);
       loadNotes();
-      toast({ title: "ИИ-анализ сохранён в заметках" });
+      toast({ title: `Бриф дела v${analysisVersion + 1} сохранён` });
     } catch (e) { setAiError(e instanceof Error ? e.message : "Ошибка анализа"); }
     setAiLoading(false);
   };
@@ -555,6 +616,7 @@ const LawyerClientDetail = () => {
     if (error) { toast({ title: "Не удалось очистить", description: error.message, variant: "destructive" }); return; }
     setAiAnalysis(null);
     setLastAnalysisAt(null);
+    setAnalysisVersion(0);
     setNewDocsDetected(false);
     setAiError("");
     loadNotes();
@@ -593,6 +655,38 @@ const LawyerClientDetail = () => {
     !form.conscription_date ? "Поставьте ближайшую дату комиссии, суда или призыва." : null,
     form.priority === "urgent" || urgentByDate ? "Зафиксируйте срочный план: что сделать сегодня, завтра и до комиссии." : null,
   ].filter((item): item is string => Boolean(item));
+  const activeBriefDocuments = hasDocAccess && medDocs.length > 0 ? medDocs : lawyerDocuments;
+  const briefEvidence = (aiAnalysis?.strong_points?.length
+    ? aiAnalysis.strong_points
+    : activeBriefDocuments
+      .flatMap((doc) => "ai_fitness_category" in doc && doc.ai_fitness_category
+        ? [`${doc.title || "Документ"}: категория ${doc.ai_fitness_category}`]
+        : [])
+      .slice(0, 3)
+  ).slice(0, 4);
+  if (briefEvidence.length === 0 && form.diagnosis) briefEvidence.push(`Диагноз в CRM: ${form.diagnosis}`);
+
+  const briefGaps = Array.from(new Set([
+    ...(aiAnalysis?.weak_points || []),
+    ...(aiAnalysis?.missing_documents || []),
+    ...(aiAnalysis?.risks || []),
+    ...(!client?.client_user_id ? ["Клиент ещё не привязал кабинет"] : []),
+    ...(client?.client_user_id && !hasDocAccess ? ["Нет доступа к документам клиента"] : []),
+    ...(activeBriefDocuments.length === 0 ? ["В деле нет доступных медицинских документов"] : []),
+    ...(!form.conscription_date ? ["Не указан ближайший юридически значимый срок"] : []),
+  ])).slice(0, 4);
+  const briefPlan = Array.from(new Set([
+    ...(aiAnalysis?.lawyer_recommendations || []),
+    ...lawyerNextActions,
+  ])).slice(0, 4);
+  const briefGeneratedAt = aiAnalysis?._brief_meta?.analyzed_at || lastAnalysisAt;
+  const briefVersion = aiAnalysis?._brief_meta?.version || analysisVersion;
+  const briefDocumentCount = aiAnalysis?._brief_meta?.document_count ?? activeBriefDocuments.length;
+  const briefConclusion = aiAnalysis?.overall_category
+    ? `${aiAnalysis.overall_category}${aiAnalysis.category_basis ? ` — ${stripMarkdown(aiAnalysis.category_basis)}` : ""}`
+    : bestDocument?.ai_fitness_category
+    ? `По текущим документам есть основание проверить категорию ${bestDocument.ai_fitness_category}. Итог требует сопоставления всего дела.`
+    : "Итоговый вывод пока не сформирован: сначала соберите доказательства и обновите анализ дела.";
 
   // Продублировать данные клиента из его профиля (+ ожидаемую категорию из лучшего
   // меддокумента) в карточку CRM. Заполняем только ПУСТЫЕ поля и сразу сохраняем.
@@ -923,79 +1017,78 @@ const LawyerClientDetail = () => {
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="section-number mb-1">CRM · рабочая сводка</p>
-                <CardTitle className="text-lg font-serif">Что делать с этим клиентом дальше</CardTitle>
+                <p className="section-number mb-1">Единая рабочая сводка</p>
+                <CardTitle className="flex flex-wrap items-center gap-2 text-lg font-serif">
+                  Бриф дела
+                  {briefVersion > 0 ? <Badge variant="outline">v{briefVersion}</Badge> : <Badge variant="secondary">Черновик CRM</Badge>}
+                  {newDocsDetected && <Badge variant="destructive">Устарел</Badge>}
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {briefGeneratedAt
+                    ? `Обновлён ${new Date(briefGeneratedAt).toLocaleString("ru-RU")}`
+                    : "AI-анализ ещё не запускался"}
+                  {` · набор: ${briefDocumentCount} док.`}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant={urgentByDate || form.priority === "urgent" ? "destructive" : "outline"}>
                   {urgentByDate
                     ? `Срок: ${daysUntilConscription} дн.`
                     : form.conscription_date
-                      ? "Дата указана"
-                      : "Нет дедлайна"}
+                    ? "Дата указана"
+                    : "Нет дедлайна"}
                 </Badge>
-                <Badge variant={hasDocAccess ? "outline" : "secondary"}>
-                  {hasDocAccess ? `${medDocs.length} док.` : "Доступ закрыт"}
-                </Badge>
-                <Badge variant="outline">
-                  {bestDocument?.ai_fitness_category ? `Кат. ${bestDocument.ai_fitness_category}` : "AI без вывода"}
+                <Badge variant={hasDocAccess || lawyerDocuments.length > 0 ? "outline" : "secondary"}>
+                  {hasDocAccess ? "Доступ открыт" : lawyerDocuments.length > 0 ? "Сканы юриста" : "Нет документов"}
                 </Badge>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {newDocsDetected && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                Набор документов изменился после последнего анализа. Не используйте старый вывод как актуальный — обновите бриф.
+              </div>
+            )}
+
+            <div className="rounded-lg border bg-background/80 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
+              <p className="mt-1 text-sm font-medium leading-relaxed">{briefConclusion}</p>
+            </div>
+
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Позиция</p>
-                <p className="mt-1 text-sm font-semibold">
-                  {bestDocument
-                    ? `${bestDocument.ai_category_chance ?? 0}% по лучшему документу`
-                    : "Недостаточно данных"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                  {bestDocument?.title || "Нужны документы клиента или полный анализ дела."}
-                </p>
+                <p className="mb-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Опорные доказательства</p>
+                {briefEvidence.length > 0
+                  ? <ul className="space-y-1 text-xs text-muted-foreground">{briefEvidence.map((item) => <li key={item}>• {stripMarkdown(item)}</li>)}</ul>
+                  : <p className="text-xs text-muted-foreground">Подтверждённые опоры пока не выделены.</p>}
               </div>
               <div className="rounded-lg border bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Связь</p>
-                <p className="mt-1 text-sm font-semibold">
-                  {client?.client_user_id ? "Кабинет привязан" : "Клиент еще вне кабинета"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {hasDocAccess
-                    ? "Можно смотреть документы и готовить позицию."
-                    : "Доступ к документам нужно получить отдельно."}
-                </p>
+                <p className="mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300">Пробелы и риски</p>
+                {briefGaps.length > 0
+                  ? <ul className="space-y-1 text-xs text-muted-foreground">{briefGaps.map((item) => <li key={item}>• {stripMarkdown(item)}</li>)}</ul>
+                  : <p className="text-xs text-muted-foreground">Явные пробелы не отмечены; нужна проверка юриста.</p>}
               </div>
               <div className="rounded-lg border bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
-                <p className="mt-1 text-sm font-semibold">
-                  {lawyerNextActions[0] || "Можно переходить к документам"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Сводка помогает не открывать все вкладки перед каждым ответом клиенту.
-                </p>
+                <p className="mb-2 text-xs font-semibold text-primary">Текущий план</p>
+                {briefPlan.length > 0
+                  ? <ol className="space-y-1 text-xs text-muted-foreground">{briefPlan.map((item, index) => <li key={item}>{index + 1}. {stripMarkdown(item)}</li>)}</ol>
+                  : <p className="text-xs text-muted-foreground">План ещё не сформирован.</p>}
               </div>
             </div>
 
-            {lawyerNextActions.length > 0 && (
-              <div className="rounded-lg border border-border bg-background/70 p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <ListChecks className="h-4 w-4 text-gold-deep" />
-                  <p className="text-sm font-semibold">Короткий план</p>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {lawyerNextActions.slice(0, 4).map((action, index) => (
-                    <div key={action} className="flex gap-2 text-sm text-muted-foreground">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold-deep">
-                        {index + 1}
-                      </span>
-                      <span>{action}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="rounded-lg border border-dashed bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Набор анализа: </span>
+              {aiAnalysis?._brief_meta?.document_titles?.length
+                ? aiAnalysis._brief_meta.document_titles.slice(0, 5).join(" · ")
+                : briefDocumentCount > 0
+                ? "историческая версия — точные id документов не были зафиксированы"
+                : "без документов"}
+              {aiAnalysis?._brief_meta?.document_titles && aiAnalysis._brief_meta.document_titles.length > 5
+                ? ` · ещё ${aiAnalysis._brief_meta.document_titles.length - 5}`
+                : ""}
+            </div>
 
             <div className="flex flex-wrap gap-2">
               {client?.client_user_id && !hasDocAccess && (
@@ -1010,7 +1103,7 @@ const LawyerClientDetail = () => {
               </Button>
               <Button size="sm" variant="outline" onClick={runAiAnalysis} disabled={aiLoading || !isPro}>
                 {aiLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Brain className="mr-1.5 h-4 w-4" />}
-                Полный анализ
+                {aiAnalysis ? "Обновить бриф" : "Сформировать бриф"}
               </Button>
               <Button size="sm" variant="outline" onClick={() => navigate(`/lawyer/templates?client=${clientId}`)}>
                 Документ по шаблону
@@ -1021,19 +1114,13 @@ const LawyerClientDetail = () => {
         </Card>
 
         <Tabs defaultValue="overview">
-          {/* На мобиле 5 вкладок не влезают — горизонтальный скролл вместо сжатия */}
+          {/* Четыре рабочих зоны вместо отдельных разрозненных вкладок AI и стратегии. */}
           <TabsList className="mb-4 flex w-full justify-start overflow-x-auto scrollbar-hide sm:w-auto">
-            <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Обзор</TabsTrigger>
+            <TabsTrigger value="overview"><User className="h-4 w-4 mr-1.5" />Данные</TabsTrigger>
             <TabsTrigger value="documents"><FileText className="h-4 w-4 mr-1.5" />Документы</TabsTrigger>
-            <TabsTrigger value="analysis"><Brain className="h-4 w-4 mr-1.5" />ИИ-анализ</TabsTrigger>
-            <TabsTrigger value="strategy"><ListChecks className="h-4 w-4 mr-1.5" />Стратегия</TabsTrigger>
+            <TabsTrigger value="analysis"><Brain className="h-4 w-4 mr-1.5" />План и AI</TabsTrigger>
             <TabsTrigger value="timeline"><ClipboardList className="h-4 w-4 mr-1.5" />История</TabsTrigger>
           </TabsList>
-
-          {/* ── TAB: Strategy (планировщик A3 + ассистент дела) ──────────── */}
-          <TabsContent value="strategy" className="space-y-4">
-            <LawyerCaseStrategyFlow lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
-          </TabsContent>
 
           {/* ── TAB: Overview ────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-4">
@@ -1237,6 +1324,7 @@ const LawyerClientDetail = () => {
 
           {/* ── TAB: AI Analysis ─────────────────────────────────────────── */}
           <TabsContent value="analysis" className="space-y-4">
+            <LawyerCaseStrategyFlow lawyerClientId={clientId!} isPro={isPro} onUpgrade={() => setUpgradeOpen(true)} />
             {!isPro && (
               <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
                 <CardContent className="p-4 flex items-center gap-3">
@@ -1251,17 +1339,6 @@ const LawyerClientDetail = () => {
                   >
                     Upgrade
                   </Button>
-                </CardContent>
-              </Card>
-            )}
-            {newDocsDetected && (
-              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Новые документы с момента последнего анализа</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Клиент загрузил новые документы. Рекомендуем запустить повторный анализ.</p>
-                  </div>
                 </CardContent>
               </Card>
             )}

@@ -31,11 +31,14 @@ import LimitReachedDialog from "@/components/LimitReachedDialog";
 import { buildAIContext } from "@/lib/buildAIContext";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseConfig";
 import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
-import { readOpenAICompatibleStream } from "@/lib/openaiSse";
+import { readOpenAICompatibleStream, type ChatResponseMetadata } from "@/lib/openaiSse";
+import { ChatSourcesDisclosure } from "@/components/chat/ChatSourcesDisclosure";
 
 interface Message {
+  id?: string;
   role: "user" | "assistant";
   content: string;
+  metadata?: ChatResponseMetadata;
 }
 
 interface Conversation {
@@ -85,16 +88,23 @@ const AIChatDashboardPage = () => {
   const [renamingSaving, setRenamingSaving] = useState(false);
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [showScrollJump, setShowScrollJump] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
   const [medicalContext, setMedicalContext] = useState<string>("");
   const [medicalContextLoading, setMedicalContextLoading] = useState(false);
   const medicalContextRef = useRef<string>("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const sendingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const failedAssistantIdRef = useRef<{ prompt: string; id: string } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const chatViewportHeight = useVisualViewportHeight(isMobile);
+
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
   const currentConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === currentConversationId) || null,
     [conversations, currentConversationId],
@@ -323,7 +333,10 @@ const AIChatDashboardPage = () => {
   };
 
   useEffect(() => {
-    if (currentConversationId) {
+    setSendError(null);
+    setFailedPrompt(null);
+    failedAssistantIdRef.current = null;
+    if (currentConversationId && !sendingRef.current) {
       loadMessages();
     }
   }, [currentConversationId]);
@@ -371,24 +384,26 @@ const AIChatDashboardPage = () => {
 
     if (!error && data) {
       setMessages(data.map(msg => ({
+        id: msg.id,
         role: msg.role as "user" | "assistant",
         content: msg.content
       })));
     }
   };
 
-  const createNewConversation = async () => {
+  const createNewConversation = async (): Promise<string> => {
     const { data, error } = await supabase
       .from("chat_conversations")
       .insert({ user_id: user.id })
       .select()
       .single();
 
-    if (!error && data) {
-      setConversations([data, ...conversations]);
-      setCurrentConversationId(data.id);
-      setMessages([]);
-    }
+    if (error || !data) throw error || new Error("Не удалось создать диалог");
+
+    setConversations((prev) => [data, ...prev]);
+    setCurrentConversationId(data.id);
+    setMessages([]);
+    return data.id;
   };
 
   const deleteConversation = async (id: string) => {
@@ -479,38 +494,44 @@ const AIChatDashboardPage = () => {
     }
   };
 
-  const saveMessage = async (message: Message) => {
-    if (!currentConversationId) return;
-
-    await supabase
+  const saveMessage = async (
+    message: Message,
+    conversationId: string,
+    isFirstUserMessage = false,
+  ) => {
+    const { error: insertError } = await supabase
       .from("chat_messages")
       .insert({
-        conversation_id: currentConversationId,
+        ...(message.id ? { id: message.id } : {}),
+        conversation_id: conversationId,
         role: message.role,
         content: message.content,
       });
+    if (insertError && insertError.code !== "23505") throw insertError;
 
     // Update conversation title from first user message
-    if (messages.length === 0 && message.role === "user") {
+    if (isFirstUserMessage && message.role === "user") {
       const title = message.content.substring(0, 50);
-      await supabase
+      const { error: updateError } = await supabase
         .from("chat_conversations")
         .update({ title, updated_at: new Date().toISOString() })
-        .eq("id", currentConversationId);
-      loadConversations();
+        .eq("id", conversationId);
+      if (updateError) console.warn("Не удалось обновить заголовок диалога", updateError);
+      await loadConversations();
     } else {
-      await supabase
+      const { error: updateError } = await supabase
         .from("chat_conversations")
         .update({ updated_at: new Date().toISOString() })
-        .eq("id", currentConversationId);
+        .eq("id", conversationId);
+      if (updateError) console.warn("Не удалось обновить время диалога", updateError);
     }
   };
 
-  const sendMessage = async (overrideText?: string) => {
+  const sendMessage = async (overrideText?: string, retry = false) => {
     // overrideText — клик по подсказке (Модуль 3): отправляем сразу, не дожидаясь
     // асинхронного setInput. Если не передан — берём из поля ввода.
     const text = (typeof overrideText === "string" ? overrideText : input).trim();
-    if (!text || sending) return;
+    if (!text || sendingRef.current) return;
 
     // Check limits based on mode
     const canAsk = isDemoMode ? canAskAIDemo() : canAskAISub();
@@ -520,19 +541,48 @@ const AIChatDashboardPage = () => {
     }
 
 
-    if (!isDemoMode && !currentConversationId) {
-      await createNewConversation();
-    }
-
-    const userMessage: Message = { role: "user", content: text };
-    shouldAutoScrollRef.current = true;
-    setMessages((prev) => [...prev, userMessage]);
-    if (!isDemoMode) await saveMessage(userMessage);
-    setInput("");
-    if (inputRef.current) inputRef.current.style.height = "44px";
+    sendingRef.current = true;
     setSending(true);
+    setSendError(null);
+    setFailedPrompt(null);
+    if (!retry) failedAssistantIdRef.current = null;
+
+    const existingRetryMessage = retry &&
+      messages[messages.length - 1]?.role === "user" &&
+      messages[messages.length - 1]?.content === text
+      ? messages[messages.length - 1]
+      : null;
+    const userMessage: Message = existingRetryMessage || {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+    };
+    const assistantMessageId = retry && failedAssistantIdRef.current?.prompt === text
+      ? failedAssistantIdRef.current.id
+      : crypto.randomUUID();
+    let assistantContent = "";
 
     try {
+      let conversationId = currentConversationId;
+      if (!isDemoMode && !conversationId) {
+        conversationId = await createNewConversation();
+      }
+
+      shouldAutoScrollRef.current = true;
+      const requestMessages = existingRetryMessage ? messages : [...messages, userMessage];
+      if (!existingRetryMessage) {
+        setMessages((prev) => [...prev, userMessage]);
+      }
+      if (!isDemoMode && conversationId) {
+        await saveMessage(
+          userMessage,
+          conversationId,
+          existingRetryMessage ? messages.length === 1 : messages.length === 0,
+        );
+      }
+      setInput("");
+      if (inputRef.current) inputRef.current.style.height = "44px";
+
       const contextToSend = medicalContextRef.current;
       console.log("[Chat] Sending message with medicalContext:", contextToSend ? contextToSend.length + " chars" : "NONE");
 
@@ -547,12 +597,13 @@ const AIChatDashboardPage = () => {
       // Timeout 60 сек на сам запрос. Сервер успевает вызвать основную модель
       // и при пустом ответе переключиться на быструю резервную.
       const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       const timeoutId = setTimeout(() => {
         console.warn("[Chat] Timeout 60 сек — прерываю запрос");
         abortController.abort();
       }, 60_000);
 
-      let assistantContent = "";
+      let responseMetadata: ChatResponseMetadata | undefined;
 
       // ВАЖНО: НЕ добавляем placeholder отдельным setMessages — React 18
       // батчит обновления, и первый чанк стрима мог прийти раньше, чем
@@ -570,7 +621,7 @@ const AIChatDashboardPage = () => {
             "apikey": SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
-            messages: [...messages, userMessage],
+            messages: requestMessages,
             ...(contextToSend ? { medicalContext: contextToSend } : {}),
           }),
           signal: abortController.signal,
@@ -596,46 +647,49 @@ const AIChatDashboardPage = () => {
           assistantContent += content;
           setMessages((prev) => {
             const next = [...prev];
-            const last = next[next.length - 1];
-            // Если последний — assistant: апдейтим его. Иначе — добавляем новый.
-            // Это безопасно при любом порядке batched-обновлений React.
-            if (last && last.role === "assistant") {
-              next[next.length - 1] = { role: "assistant", content: assistantContent };
+            const assistantIndex = next.findIndex((item) => item.id === assistantMessageId);
+            if (assistantIndex >= 0) {
+              next[assistantIndex] = {
+                ...next[assistantIndex],
+                content: assistantContent,
+                metadata: responseMetadata,
+              };
             } else {
-              next.push({ role: "assistant", content: assistantContent });
+              next.push({
+                id: assistantMessageId,
+                role: "assistant",
+                content: assistantContent,
+                metadata: responseMetadata,
+              });
             }
             return next;
           });
+        }, (metadata) => {
+          responseMetadata = metadata;
+          setMessages((prev) => prev.map((item) =>
+            item.id === assistantMessageId ? { ...item, metadata } : item
+          ));
         });
       } finally {
         clearTimeout(timeoutId);
+        if (abortControllerRef.current === abortController) abortControllerRef.current = null;
       }
 
       // Если стрим завершился, но контент пустой — это тихий сбой
       // (rate-limit, сетевая ошибка, обрыв SSE). Подменяем пустой пузырь
       // на явное сообщение об ошибке, чтобы пользователь не видел тишины.
       if (!assistantContent.trim()) {
-        const fallback = "⚠ ИИ не ответил. Возможно, превышен лимит запросов к бесплатной модели. Попробуйте через 30–60 секунд или переформулируйте вопрос.";
-        setMessages((prev) => {
-          const next = [...prev];
-          // Заменяем последний (пустой) assistant-пузырь
-          if (next.length && next[next.length - 1].role === "assistant") {
-            next[next.length - 1] = { role: "assistant", content: fallback };
-          } else {
-            next.push({ role: "assistant", content: fallback });
-          }
-          return next;
-        });
-        toast({
-          title: "ИИ не ответил",
-          description: "Пустой ответ от модели. Попробуйте ещё раз.",
-          variant: "destructive",
-        });
-        return;
+        throw new Error("ИИ вернул пустой ответ. Попробуйте ещё раз через несколько секунд.");
       }
 
-      const assistantMessage: Message = { role: "assistant", content: assistantContent };
-      if (!isDemoMode) await saveMessage(assistantMessage);
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: assistantContent,
+        metadata: responseMetadata,
+      };
+      if (!isDemoMode && conversationId) await saveMessage(assistantMessage, conversationId);
+      failedAssistantIdRef.current = null;
       if (isDemoMode) {
         incrementDemoAIQuestions();
       } else {
@@ -647,27 +701,18 @@ const AIChatDashboardPage = () => {
       const isAbort = error instanceof Error && (error.name === "AbortError" || error.message.includes("aborted"));
       const errorTitle = isAbort ? "Таймаут" : "Ошибка";
       const errorBody = isAbort
-        ? "ИИ не успел ответить за 45 секунд. Все бесплатные модели могут быть перегружены. Попробуйте через минуту."
+        ? "ИИ не успел ответить за 60 секунд. Сервис может быть перегружен. Попробуйте через минуту."
         : error instanceof Error
           ? error.message
           : "Не удалось отправить сообщение";
 
       toast({ title: errorTitle, description: errorBody, variant: "destructive" });
-
-      // Вместо удаления — показываем сообщение об ошибке прямо в чате,
-      // чтобы пользователь видел причину, а не пустоту/тишину.
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        const errMsg = `⚠ ${errorTitle}: ${errorBody}`;
-        if (last && last.role === "assistant") {
-          next[next.length - 1] = { role: "assistant", content: errMsg };
-        } else {
-          next.push({ role: "assistant", content: errMsg });
-        }
-        return next;
-      });
+      setMessages((prev) => prev.filter((message) => message.id !== assistantMessageId));
+      setSendError(`${errorTitle}: ${errorBody}`);
+      setFailedPrompt(text);
+      failedAssistantIdRef.current = { prompt: text, id: assistantMessageId };
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -689,7 +734,13 @@ const AIChatDashboardPage = () => {
         size="sm"
         className="mb-3 w-full min-w-0 flex-shrink-0"
         onClick={() => {
-          createNewConversation();
+          void createNewConversation().catch((error) => {
+            toast({
+              title: "Не удалось создать диалог",
+              description: error instanceof Error ? error.message : "Попробуйте ещё раз",
+              variant: "destructive",
+            });
+          });
           setMobileSidebarOpen(false);
         }}
       >
@@ -1046,44 +1097,36 @@ const AIChatDashboardPage = () => {
                     </div>
                   )}
                   {messages.map((message, index) => {
-                    // Split assistant messages by "---" into multiple bubbles (messenger style)
-                    const bubbles = message.role === "assistant" && message.content
-                      ? message.content.split(/\n\s*---\s*\n/).filter(b => b.trim())
-                      : [message.content];
+                    const messageKey = message.id || String(index);
+                    const isUserMessage = message.role === "user";
+                    const copied = copiedMessageKey === messageKey;
 
-                    return bubbles.map((bubble, bubbleIdx) => {
-                      const messageKey = `${index}-${bubbleIdx}`;
-                      const isUserMessage = message.role === "user";
-                      const copied = copiedMessageKey === messageKey;
-
-                      return (
+                    return (
+                      <div
+                        key={messageKey}
+                        className={`flex ${isUserMessage ? "justify-end" : "justify-start"}`}
+                      >
                         <div
-                          key={messageKey}
-                          className={`flex ${
-                            isUserMessage ? "justify-end" : "justify-start"
+                          className={`max-w-[88vw] overflow-hidden rounded-2xl p-3 sm:p-4 ${
+                            isUserMessage
+                              ? "sm:max-w-[420px] bg-primary text-primary-foreground rounded-br-md"
+                              : "w-full sm:max-w-[680px] border border-border bg-card text-card-foreground shadow-sm rounded-bl-md"
                           }`}
+                          style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
                         >
-                          <div
-                            className={`sm:max-w-[420px] max-w-[85vw] p-3 sm:p-4 rounded-2xl overflow-hidden ${
-                              isUserMessage
-                                ? "bg-primary text-primary-foreground rounded-br-md"
-                                : "border border-border bg-card text-card-foreground shadow-sm rounded-bl-md"
-                            }`}
-                            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                          >
-                            {message.role === "assistant" ? (
-                              <div className="prose prose-sm max-w-none text-card-foreground text-[13.5px] sm:text-[14.5px] leading-[1.65] prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:hidden [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-primary [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
+                          {message.role === "assistant" ? (
+                            <>
+                              <div className="prose prose-sm max-w-none text-card-foreground text-[13.5px] sm:text-[14.5px] leading-[1.65] prose-p:text-card-foreground prose-li:text-card-foreground prose-strong:text-card-foreground prose-headings:text-card-foreground [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_hr]:my-3 [&_hr]:border-border [&_p]:break-words [&_li]:break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:pl-5 [&_strong]:font-semibold [&_a]:text-primary [&_a]:font-semibold [&_a]:no-underline hover:[&_a]:underline">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
                                     a: ({ href, children }) => {
-                                      // Внутренние ссылки на статьи Расписания болезней — react-router
                                       if (href?.startsWith("/")) {
                                         return (
                                           <button
                                             type="button"
                                             onClick={() => navigate(href)}
-                                            className="text-primary font-semibold hover:underline inline"
+                                            className="inline font-semibold text-primary hover:underline"
                                           >
                                             {children}
                                           </button>
@@ -1097,30 +1140,33 @@ const AIChatDashboardPage = () => {
                                     },
                                   }}
                                 >
-                                  {linkifyDiseaseArticles(enhanceTypography(bubble.trim()))}
+                                  {linkifyDiseaseArticles(enhanceTypography(message.content.trim()))}
                                 </ReactMarkdown>
                               </div>
-                            ) : (
-                              <p className="whitespace-pre-wrap text-[13.5px] sm:text-[14.5px] leading-[1.65] break-words">{enhanceTypography(bubble)}</p>
-                            )}
-                            <div className="mt-2 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => copyMessage(bubble.trim(), messageKey)}
-                                className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors ${
-                                  isUserMessage
-                                    ? "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
-                                }`}
-                              >
-                                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                                {copied ? "Скопировано" : "Копировать"}
-                              </button>
-                            </div>
+                              <ChatSourcesDisclosure metadata={message.metadata} />
+                            </>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words text-[13.5px] leading-[1.65] sm:text-[14.5px]">
+                              {enhanceTypography(message.content)}
+                            </p>
+                          )}
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => copyMessage(message.content.trim(), messageKey)}
+                              className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors ${
+                                isUserMessage
+                                  ? "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                              }`}
+                            >
+                              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                              {copied ? "Скопировано" : "Копировать"}
+                            </button>
                           </div>
                         </div>
-                      );
-                    });
+                      </div>
+                    );
                   })}
                   {sending && messages.length > 0 && messages[messages.length - 1].role === "user" && (
                     <div className="flex justify-start">
@@ -1210,6 +1256,21 @@ const AIChatDashboardPage = () => {
                 )}
 
               <div className="shrink-0 border-t border-border bg-background pt-2">
+                {sendError && failedPrompt && (
+                  <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+                    <span className="min-w-0 text-destructive">{sendError}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-shrink-0"
+                      disabled={sending}
+                      onClick={() => sendMessage(failedPrompt, true)}
+                    >
+                      Повторить
+                    </Button>
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <Textarea
                     ref={inputRef}

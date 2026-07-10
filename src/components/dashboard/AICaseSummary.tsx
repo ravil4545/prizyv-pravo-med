@@ -51,7 +51,7 @@ const EMPTY: CaseSummaryData = {
 /**
  * AI-сводка «Где я сейчас» — главный блок дашборда.
  * Агрегирует данные из medical_documents_v2 + document_article_links
- * и показывает лучший шанс категории В, рекомендации и быстрые действия.
+ * и показывает силу документальных подтверждений, рекомендации и быстрые действия.
  */
 export default function AICaseSummary() {
   const [data, setData] = useState<CaseSummaryData>(EMPTY);
@@ -96,7 +96,7 @@ export default function AICaseSummary() {
           (d) => (d.meta as Record<string, unknown> | null)?.is_questionnaire === true,
         );
 
-        // Aggregate best chance per article
+        // Aggregate the strongest document-evidence score per article.
         const articleMap = new Map<string, ArticleAggregate>();
         const recsSet = new Set<string>();
 
@@ -202,9 +202,9 @@ export default function AICaseSummary() {
   }
 
   const best = data.bestArticle;
-  const chance = best?.best_chance || 0;
-  const chanceColor =
-    chance >= 60 ? "text-emerald-700" : chance >= 30 ? "text-gold-deep" : "text-muted-foreground";
+  const evidenceScore = best?.best_chance || 0;
+  const evidenceColor =
+    evidenceScore >= 60 ? "text-emerald-700" : evidenceScore >= 30 ? "text-gold-deep" : "text-muted-foreground";
 
   return (
     <Card className="border-gold/40 bg-gradient-to-br from-paper via-card to-paper-deep/20 overflow-hidden">
@@ -227,13 +227,18 @@ export default function AICaseSummary() {
         {/* Главная цифра */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
           <div className="md:col-span-1">
-            <div className={cn("text-4xl md:text-5xl font-serif font-bold", chanceColor)}>
-              {chance}
-              <span className="text-2xl">%</span>
+            <div className={cn("text-4xl md:text-5xl font-serif font-bold", evidenceColor)}>
+              {evidenceScore}
+              <span className="text-xl md:text-2xl">/100</span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              шанс категории В по&nbsp;лучшей статье
+              сила документальных подтверждений по&nbsp;лучшей статье
             </p>
+            {best && (
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Это не вероятность решения призывной комиссии.
+              </p>
+            )}
           </div>
 
           <div className="md:col-span-2 space-y-2">
@@ -270,7 +275,7 @@ export default function AICaseSummary() {
                   className="text-xs px-2.5 py-1 rounded-md bg-muted/50 hover:bg-muted text-foreground transition-colors flex items-center gap-1.5"
                 >
                   <BookOpen className="h-3 w-3 text-gold-deep" />
-                  Ст. {a.article_number} · {a.best_chance}%
+                  Ст. {a.article_number} · {a.best_chance}/100
                 </button>
               ))}
             </div>
@@ -326,10 +331,10 @@ export default function AICaseSummary() {
                 {data.topArticles.length > 0 && ` (Ст. ${data.topArticles.map((a) => a.article_number).join(", ")})`}.
               </li>
               <li>
-                По каждому документу ИИ извлекает диагноз и сравнивает с критериями статьи —
-                итоговый шанс рассчитывается как максимум по подтверждающим документам.
+                По каждому документу ИИ извлекает диагноз и сравнивает его с критериями статьи.
+                Показан наиболее сильный документальный результат, а не математическая вероятность исхода.
               </li>
-              <li>Оценка не является юридическим заключением — финальное решение принимает врачебная комиссия.</li>
+              <li>Оценка не подтверждает готовность дела и не является юридическим заключением.</li>
             </ul>
           </div>
         )}
