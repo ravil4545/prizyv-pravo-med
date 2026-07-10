@@ -80,6 +80,8 @@ const ClientChatPage = () => {
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendInFlightRef = useRef(false);
+  const pendingTextMessageRef = useRef<{ content: string; id: string } | null>(null);
 
   const scrollToBottom = useCallback((force = false) => {
     setTimeout(() => {
@@ -283,44 +285,79 @@ const ClientChatPage = () => {
     }
   };
 
-  const sendMessage = async (content: string, type = "text", fileUrl?: string, fileName?: string, fileSize?: number) => {
+  const sendMessage = async (
+    content: string,
+    type = "text",
+    fileUrl?: string,
+    fileName?: string,
+    fileSize?: number,
+    clientMessageId: string = crypto.randomUUID(),
+  ): Promise<boolean> => {
+    if (sendInFlightRef.current) return false;
+    sendInFlightRef.current = true;
     setSending(true);
-
-    // Защита: блокируем обмен внешними контактами в чате до подписания договора
-    let safeContent = content;
-    if (content && type === "text") {
-      const check = sanitizeChatMessage(content);
-      if (check.hasReplacements) {
-        safeContent = check.sanitized;
-        toast({
-          title: "Контакты скрыты",
-          description: `Мы скрыли ${describeDetected(check.detected)} в вашем сообщении. До договора общение только в чате сайта.`,
-        });
+    try {
+      // Защита: блокируем обмен внешними контактами в чате до подписания договора
+      let safeContent = content;
+      if (content && type === "text") {
+        const check = sanitizeChatMessage(content);
+        if (check.hasReplacements) {
+          safeContent = check.sanitized;
+          toast({
+            title: "Контакты скрыты",
+            description: `Мы скрыли ${describeDetected(check.detected)} в вашем сообщении. До договора общение только в чате сайта.`,
+          });
+        }
       }
-    }
 
-    const { data, error } = await supabase.from("lawyer_chat_messages").insert({
-      lawyer_client_id: lawyerClientId, sender_id: user!.id,
-      content: safeContent || null, message_type: type,
-      file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
-    }).select().single();
-    if (error) {
-      toast({ title: "Ошибка отправки", description: error.message, variant: "destructive" });
-    } else if (data) {
-      setMessages((prev) => {
-        if (prev.find((m) => m.id === (data as Message).id)) return prev;
-        return [...prev, data as Message];
-      });
-      resolveAttachments([data as Message]);
+      const { data, error } = await supabase.from("lawyer_chat_messages").insert({
+        id: clientMessageId,
+        lawyer_client_id: lawyerClientId, sender_id: user!.id,
+        content: safeContent || null, message_type: type,
+        file_url: fileUrl || null, file_name: fileName || null, file_size: fileSize || null,
+      }).select().single();
+      if (error) {
+        if (error.code === "23505") {
+          const { data: existing } = await supabase
+            .from("lawyer_chat_messages")
+            .select("*")
+            .eq("id", clientMessageId)
+            .maybeSingle();
+          if (existing) {
+            setMessages((prev) => prev.some((message) => message.id === existing.id)
+              ? prev
+              : [...prev, existing as Message]);
+          }
+          return true;
+        }
+        toast({ title: "Ошибка отправки", description: error.message, variant: "destructive" });
+        return false;
+      }
+      if (data) {
+        setMessages((prev) => {
+          if (prev.find((m) => m.id === (data as Message).id)) return prev;
+          return [...prev, data as Message];
+        });
+        resolveAttachments([data as Message]);
+      }
+      return true;
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
-    setSending(false);
   };
 
   const handleSend = async () => {
-    if (!text.trim() || sending) return;
+    if (!text.trim() || sendInFlightRef.current) return;
     const t = text.trim(); setText("");
     if (textareaRef.current) { textareaRef.current.style.height = "40px"; }
-    await sendMessage(t);
+    const pending = pendingTextMessageRef.current?.content === t
+      ? pendingTextMessageRef.current
+      : { content: t, id: crypto.randomUUID() };
+    pendingTextMessageRef.current = pending;
+    const sent = await sendMessage(t, "text", undefined, undefined, undefined, pending.id);
+    if (sent) pendingTextMessageRef.current = null;
+    else setText(t);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -329,7 +366,7 @@ const ClientChatPage = () => {
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || sendInFlightRef.current) return;
     if (file.size > 10 * 1024 * 1024) { toast({ title: "Файл больше 10 МБ", variant: "destructive" }); return; }
     setUploading(true);
     const ext = file.name.split(".").pop();
@@ -563,6 +600,7 @@ const ClientChatPage = () => {
                                 <Button variant="ghost" size="icon"
                                   className="h-6 w-6 flex-shrink-0"
                                   onClick={() => { setEditingId(m.id); setEditText(m.content || ""); }}
+                                  aria-label="Редактировать сообщение"
                                   title="Редактировать">
                                   <Pencil className="h-3 w-3" />
                                 </Button>
@@ -572,6 +610,7 @@ const ClientChatPage = () => {
                                 size="icon"
                                 className="h-6 w-6 flex-shrink-0"
                                 onClick={() => copyMessage(copyContent, m.id)}
+                                aria-label={copied ? "Сообщение скопировано" : "Копировать сообщение"}
                                 title={copied ? "Скопировано" : "Копировать"}
                               >
                                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -684,7 +723,7 @@ const ClientChatPage = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-11 w-11 flex-shrink-0 sm:hidden"
-                      disabled={uploading} title="Прикрепить">
+                      disabled={uploading || sending} aria-label="Прикрепить файл или фото" title="Прикрепить">
                       {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                     </Button>
                   </DropdownMenuTrigger>
@@ -698,11 +737,11 @@ const ClientChatPage = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
-                  onClick={() => imageRef.current?.click()} disabled={uploading} title="Отправить фото">
+                  onClick={() => imageRef.current?.click()} disabled={uploading || sending} aria-label="Отправить фото" title="Отправить фото">
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                 </Button>
                 <Button variant="ghost" size="icon" className="hidden h-9 w-9 flex-shrink-0 sm:inline-flex"
-                  onClick={() => fileRef.current?.click()} disabled={uploading} title="Прикрепить файл">
+                  onClick={() => fileRef.current?.click()} disabled={uploading || sending} aria-label="Прикрепить файл" title="Прикрепить файл">
                   <Paperclip className="h-4 w-4" />
                 </Button>
                 <textarea
@@ -719,6 +758,7 @@ const ClientChatPage = () => {
                   style={{ maxHeight: "120px" }}
                 />
                 <Button size="icon" onClick={handleSend} disabled={!text.trim() || sending}
+                  aria-label="Отправить сообщение"
                   className="h-11 w-11 flex-shrink-0 rounded-xl sm:h-9 sm:w-9">
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>

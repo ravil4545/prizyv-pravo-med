@@ -1,10 +1,28 @@
 type DeltaHandler = (delta: string) => void;
 
+export type ChatConfidence = "high" | "medium" | "low";
+
+export interface ChatSourceMetadata {
+  title: string;
+  path: string | null;
+  category: string | null;
+  articles: string[];
+}
+
+export interface ChatResponseMetadata {
+  sources: ChatSourceMetadata[];
+  confidence: ChatConfidence;
+  generatedAt: string;
+}
+
+type MetadataHandler = (metadata: ChatResponseMetadata) => void;
+
 const DATA_PREFIX = "data:";
 
 export async function readOpenAICompatibleStream(
   body: ReadableStream<Uint8Array>,
   onDelta: DeltaHandler,
+  onMetadata?: MetadataHandler,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -23,6 +41,10 @@ export async function readOpenAICompatibleStream(
 
     try {
       const parsed = JSON.parse(data);
+      if (parsed?.type === "metadata" && parsed.metadata) {
+        onMetadata?.(parsed.metadata as ChatResponseMetadata);
+        return;
+      }
       const delta = parsed?.choices?.[0]?.delta?.content;
       if (typeof delta === "string" && delta.length > 0) onDelta(delta);
     } catch (error) {

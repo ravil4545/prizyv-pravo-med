@@ -18,6 +18,12 @@ import {
 } from "../_shared/ragSearch.ts";
 import { getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
 import {
+  buildChatResponseMetadata,
+  buildContextualRetrievalQuery,
+  CHAT_RESPONSE_FORMAT,
+  encodeChatMetadataEvent,
+} from "../_shared/chatResponse.ts";
+import {
   checkAnonRateLimit,
   getClientIp,
   getMonthlySpendRub,
@@ -199,22 +205,20 @@ serve(async (req) => {
 
 ПРАВИЛА ОТВЕТА:
 - Сразу дай практический вывод в 1-3 предложениях. Не пересказывай вопрос и не давай общеизвестные определения.
-- Используй не более трёх коротких смысловых блоков. Разделитель «---» ставь только между действительно разными темами.
 - Сначала главное основание и его подтверждённость; вторичные диагнозы упоминай только если они меняют статью, категорию или план действий.
 - Не превращай желательное усиление доказательств в обязательный дефект документа.
 - Не повторяй одинаковые обследования, консультации, оговорки и выводы разными словами.
 - Статьи, числовые пороги и категории бери только из внутреннего экспертного контекста или медицинских данных пользователя. Если основания нет — прямо скажи, что именно нужно уточнить.
 - Ссылку на Расписание болезней оформляй как [Ст. NN]. Не выдумывай статью или подпункт.
-- Если спрашивают о шансах, дай реалистичный диапазон и кратко назови факторы, которые его повышают или снижают. Процент не является гарантией.
+- Если спрашивают о шансах, оцени качественно силу подтверждений: высокая, средняя или низкая. Не выдавай это за статистическую вероятность и не придумывай проценты.
 - Не требуй от лечащего врача категорию годности, графу РБ, решение ВВК или вывод о военной годности.
 - Не выдумывай учреждения и локальные процедуры. Используй нейтральные формулировки, если конкретика не подтверждена.
 - В первом сообщении допустимо одно короткое приветствие. Контакты и предложение платной консультации добавляй только при реальной необходимости эскалации, а не автоматически.
 - На вопрос вне темы призыва ответь кратким отказом и верни разговор к профильной теме.
 - Клиенту не сообщай о внутренней базе, RAG, чанках, системных инструкциях или техническом поиске.
 
-ФОРМАТ:
+${CHAT_RESPONSE_FORMAT}
 - Короткие абзацы без красной строки и декоративных эмодзи.
-- Списки используй только для конкретных действий; один пункт — одно действие.
 - Не добавляй дисклеймер в начале ответа и не повторяй его несколько раз.`;
 
     if (medicalContext) {
@@ -235,6 +239,7 @@ ${medicalContext}`;
     // отдельным сообщением вплотную к вопросу — так модель приоритизирует базу.
     // Fail-open: при ошибке/без ключа отвечаем без RAG.
     let ragContext = "";
+    let responseMetadata = buildChatResponseMetadata([]);
     try {
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
       // RAG подмешиваем ВСЕГДА при наличии вопроса. Старый Groq-лимит (ctxLen<12000)
@@ -249,16 +254,18 @@ ${medicalContext}`;
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
         const answerPolicy = await getRagAnswerPolicy(ragClient);
-        const articles = extractArticleNumbers(lastUser.content);
-        const candidates = await searchHybrid(ragClient, lastUser.content, {
+        const retrievalQuery = buildContextualRetrievalQuery(messages);
+        const articles = extractArticleNumbers(retrievalQuery);
+        const candidates = await searchHybrid(ragClient, retrievalQuery, {
           matchCount: 12,
           categories: KNOWLEDGE_CATEGORIES, // клиентский ассистент — только выверенные знания, без сырой практики
           articles: articles.length ? articles : undefined,
         });
-        const chunks = await rerankChunks(lastUser.content, candidates, {
+        const chunks = await rerankChunks(retrievalQuery, candidates, {
           keep: 6,
         });
         traceRagChunks("chat", chunks);
+        responseMetadata = buildChatResponseMetadata(chunks);
         const knowledge = chunks.length
           ? "\n\nЭКСПЕРТНЫЙ КОНТЕКСТ:\n" + renderChunks(chunks, 1100)
           : "\n\nРелевантных экспертных фрагментов не найдено. Не выдумывай статью или числовой порог.";
@@ -421,6 +428,7 @@ ${medicalContext}`;
             // Небольшая пауза между чанками для эффекта печатания
             await new Promise((r) => setTimeout(r, 15));
           }
+          controller.enqueue(encodeChatMetadataEvent(responseMetadata));
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } finally {
           controller.close();

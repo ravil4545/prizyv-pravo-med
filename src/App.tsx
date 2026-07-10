@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { lazy, Suspense, Component, ReactNode, useEffect } from "react";
 import MobileBottomNav from "./components/MobileBottomNav";
-import QuickActionFAB from "./components/QuickActionFAB";
 import DeferredExitIntentDialog from "./components/DeferredExitIntentDialog";
 import DeferredRagChat from "./components/DeferredRagChat";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -277,7 +276,6 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
-            <QuickActionFAB />
             <DeferredRagChat />
             <MobileBottomNav />
             <DeferredExitIntentDialog />

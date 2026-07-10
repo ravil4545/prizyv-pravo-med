@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Users, User, AlertTriangle, Trophy, TrendingUp,
+  Users, User, AlertTriangle, Trophy,
   Plus, ChevronRight, Crown, Briefcase, MessageSquare, FileText, BookOpen,
-  LogOut, Settings, Palette, CalendarClock, Flag, ListChecks, Stethoscope, BellRing,
+  LogOut, Settings, CalendarClock, Flag, ListChecks, Stethoscope, BellRing,
+  Files, CircleCheckBig,
 } from "lucide-react";
 import { loadAgendaItems, type AgendaItem, type AgendaKind } from "@/lib/lawyerAgendaData";
 import { deadlineBucket, deadlineToneClass, formatDueLabel } from "@/lib/deadlines";
@@ -33,6 +34,15 @@ interface RecentClient {
   id: string; client_name: string; client_phone: string | null;
   crm_stage: string; priority: string; updated_at: string;
 }
+interface EscalatedClient { id: string; client_name: string; escalated_at: string | null }
+interface DocumentAttention {
+  clientId: string;
+  clientName: string;
+  title: string;
+  count: number;
+  newestAt: string;
+  reason: string;
+}
 
 const KIND_ICON: Record<AgendaKind, typeof Flag> = {
   conscription: Flag,
@@ -52,6 +62,8 @@ const LawyerDashboard = () => {
   const [urgentCount, setUrgentCount] = useState(0);
   const [wonCount, setWonCount] = useState(0);
   const [escalationCount, setEscalationCount] = useState(0);
+  const [escalatedClients, setEscalatedClients] = useState<EscalatedClient[]>([]);
+  const [documentAttention, setDocumentAttention] = useState<DocumentAttention[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [deadlines, setDeadlines] = useState<AgendaItem[]>([]);
@@ -67,11 +79,99 @@ const LawyerDashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, profileLoading, isLawyer]);
 
-  // Ближайшие сроки по всем делам (P4): просроченные/скорые сверху, топ-5.
+  // Все активные сроки нужны action-first очереди; в UI показываем только первые.
   const loadDeadlines = async () => {
     const items = await loadAgendaItems(user!.id);
     items.sort((a, b) => a.date.localeCompare(b.date));
-    setDeadlines(items.slice(0, 5));
+    setDeadlines(items);
+  };
+
+  const loadDocumentAttention = async (rows: Array<{
+    id: string;
+    client_name: string;
+    client_user_id: string | null;
+  }>) => {
+    if (rows.length === 0) { setDocumentAttention([]); return; }
+
+    const clientIds = rows.map((row) => row.id);
+    const userIds = rows.flatMap((row) => row.client_user_id ? [row.client_user_id] : []);
+    const clientById = new Map(rows.map((row) => [row.id, row]));
+    const clientByUser = new Map(rows.flatMap((row) => row.client_user_id ? [[row.client_user_id, row] as const] : []));
+
+    const [{ data: analysisNotes }, { data: lawyerDocs }] = await Promise.all([
+      supabase
+        .from("case_notes")
+        .select("lawyer_client_id, created_at")
+        .in("lawyer_client_id", clientIds)
+        .eq("note_type", "ai_analysis")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("lawyer_client_med_docs")
+        .select("id, lawyer_client_id, title, created_at, ai_fitness_category")
+        .in("lawyer_client_id", clientIds),
+    ]);
+
+    const latestAnalysis = new Map<string, string>();
+    for (const note of analysisNotes || []) {
+      if (!latestAnalysis.has(note.lawyer_client_id)) latestAnalysis.set(note.lawyer_client_id, note.created_at);
+    }
+
+    const docsByClient = new Map<string, Array<{
+      title: string;
+      createdAt: string;
+      analyzed: boolean;
+    }>>();
+    const addDoc = (clientId: string, title: string | null, createdAt: string | null, analyzed: boolean) => {
+      if (!createdAt) return;
+      const docs = docsByClient.get(clientId) || [];
+      docs.push({ title: title || "Документ без названия", createdAt, analyzed });
+      docsByClient.set(clientId, docs);
+    };
+
+    for (const doc of lawyerDocs || []) {
+      addDoc(doc.lawyer_client_id, doc.title, doc.created_at, Boolean(doc.ai_fitness_category));
+    }
+
+    if (userIds.length > 0) {
+      const { data: accountDocs } = await supabase
+        .from("medical_documents_v2")
+        .select("id, user_id, title, created_at, uploaded_at, ai_fitness_category")
+        .in("user_id", userIds);
+      for (const doc of accountDocs || []) {
+        const owner = clientByUser.get(doc.user_id);
+        if (!owner) continue;
+        addDoc(owner.id, doc.title, doc.created_at || doc.uploaded_at, Boolean(doc.ai_fitness_category));
+      }
+    }
+
+    const attention: DocumentAttention[] = [];
+    for (const [clientId, docs] of docsByClient) {
+      const client = clientById.get(clientId);
+      if (!client || docs.length === 0) continue;
+      const lastAnalysis = latestAnalysis.get(clientId);
+      const sorted = [...docs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const newer = lastAnalysis ? sorted.filter((doc) => doc.createdAt > lastAnalysis) : sorted;
+      const withoutAnalysis = sorted.filter((doc) => !doc.analyzed);
+      if (newer.length === 0 && withoutAnalysis.length === 0) continue;
+
+      const affected = new Map([...newer, ...withoutAnalysis].map((doc) => [`${doc.title}:${doc.createdAt}`, doc]));
+      const reason = !lastAnalysis
+        ? "Нет сохранённого брифа по документам"
+        : newer.length > 0
+        ? "Документы новее последнего брифа"
+        : "Есть документы без AI-разбора";
+      attention.push({
+        clientId,
+        clientName: client.client_name,
+        title: sorted[0].title,
+        count: affected.size,
+        newestAt: sorted[0].createdAt,
+        reason,
+      });
+    }
+
+    attention.sort((a, b) => b.newestAt.localeCompare(a.newestAt));
+    setDocumentAttention(attention);
   };
 
   // Один GET всех клиентов юриста → агрегаты считаем на клиенте. Раньше тут
@@ -83,7 +183,7 @@ const LawyerDashboard = () => {
   const loadStats = async () => {
     const { data } = await supabase
       .from("lawyer_clients")
-      .select("id, client_name, client_phone, crm_stage, priority, case_won, escalation_requested, updated_at")
+      .select("id, client_name, client_phone, client_user_id, crm_stage, priority, case_won, escalation_requested, escalated_at, updated_at")
       .eq("lawyer_id", user!.id);
     const rows = data ?? [];
 
@@ -91,6 +191,11 @@ const LawyerDashboard = () => {
     setUrgentCount(rows.filter((r) => r.priority === "urgent").length);
     setWonCount(rows.filter((r) => r.case_won === true).length);
     setEscalationCount(rows.filter((r) => r.escalation_requested === true).length);
+    setEscalatedClients(rows
+      .filter((row) => row.escalation_requested === true)
+      .sort((a, b) => (b.escalated_at || b.updated_at || "").localeCompare(a.escalated_at || a.updated_at || ""))
+      .map((row) => ({ id: row.id, client_name: row.client_name, escalated_at: row.escalated_at })));
+    await loadDocumentAttention(rows);
 
     // «Последняя активность» — топ-6 по updated_at (сортируем на клиенте).
     const recent = [...rows]
@@ -125,6 +230,15 @@ const LawyerDashboard = () => {
   const usedClients = totalClients;
   const clientLimit = profile?.clients_limit ?? 5;
   const limitPercent = Math.min(100, Math.round((usedClients / clientLimit) * 100));
+  const now = new Date();
+  const todayKey = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const overdueDeadlines = deadlines.filter((item) => item.date < todayKey);
+  const upcomingDeadlines = deadlines.filter((item) => item.date >= todayKey);
+  const attentionCount = unreadCount + escalationCount + overdueDeadlines.length + documentAttention.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,81 +319,169 @@ const LawyerDashboard = () => {
           </Card>
         )}
 
-        {/* Stats. «Ждут юриста» — эскалации из ИИ-чата клиентов: это очередь
-            горячих обращений, клик ведёт в CRM с готовым фильтром. */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Action-first: сначала то, что требует решения сегодня, статистика — ниже. */}
+        <Card className="mb-8 border-primary/25">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BellRing className="h-5 w-5 text-primary" />
+                  Требует внимания
+                  {!dataLoading && attentionCount > 0 && <Badge variant="destructive">{attentionCount}</Badge>}
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Очередь сообщений, сроков, документов и AI-эскалаций</p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/lawyer/agenda">Открыть календарь <ChevronRight className="ml-1 h-4 w-4" /></Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              {([
+                {
+                  label: "Непрочитанные",
+                  value: unreadCount,
+                  detail: unreadCount > 0 ? "Ответить клиентам" : "Новых сообщений нет",
+                  icon: MessageSquare,
+                  color: "text-emerald-600",
+                  to: "/lawyer/chats",
+                  active: unreadCount > 0,
+                },
+                {
+                  label: "Просроченные сроки",
+                  value: overdueDeadlines.length,
+                  detail: upcomingDeadlines.length > 0 ? `Ещё ${upcomingDeadlines.length} впереди` : "Активных сроков нет",
+                  icon: CalendarClock,
+                  color: "text-red-600",
+                  to: "/lawyer/agenda",
+                  active: overdueDeadlines.length > 0,
+                },
+                {
+                  label: "Документы к проверке",
+                  value: documentAttention.length,
+                  detail: documentAttention.length > 0 ? "Обновить брифы дел" : "Новых документов нет",
+                  icon: Files,
+                  color: "text-amber-600",
+                  to: documentAttention[0] ? `/lawyer/clients/${documentAttention[0].clientId}` : "/lawyer/clients",
+                  active: documentAttention.length > 0,
+                },
+                {
+                  label: "AI-эскалации",
+                  value: escalationCount,
+                  detail: escalationCount > 0 ? "Клиенты ждут юриста" : "Запросов нет",
+                  icon: BellRing,
+                  color: "text-rose-600",
+                  to: "/lawyer/clients?escalated=1",
+                  active: escalationCount > 0,
+                },
+              ] as const).map(({ label, value, detail, icon: Icon, color, to, active }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => navigate(to)}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition-colors hover:bg-muted/60",
+                    active && "border-primary/30 bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <Icon className={cn("h-4 w-4", color)} />
+                    <span className="text-xl font-bold">{dataLoading ? "—" : value}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold">{label}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{detail}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Сроки по приоритету</p>
+                  <Link to="/lawyer/agenda" className="text-xs text-primary hover:underline">Все сроки</Link>
+                </div>
+                <div className="space-y-1">
+                  {dataLoading
+                    ? Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-12 w-full" />)
+                    : deadlines.length === 0
+                    ? <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Активных сроков нет.</p>
+                    : deadlines.slice(0, 5).map((item) => {
+                        const bucket = deadlineBucket(item.date);
+                        const tone = bucket ? deadlineToneClass(bucket) : "text-muted-foreground";
+                        const Icon = KIND_ICON[item.kind];
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => navigate(`/lawyer/clients/${item.clientId}`)}
+                            className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted"
+                          >
+                            <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{item.title}</p>
+                              <p className="truncate text-xs text-muted-foreground">{item.clientName}</p>
+                            </div>
+                            <span className={cn("flex-shrink-0 text-xs font-medium", tone)}>{formatDueLabel(item.date)}</span>
+                          </button>
+                        );
+                      })}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-semibold">Дела для проверки</p>
+                <div className="space-y-1">
+                  {escalatedClients.slice(0, 3).map((item) => (
+                    <button key={`escalation-${item.id}`} type="button" onClick={() => navigate(`/lawyer/clients/${item.id}`)} className="flex w-full items-center gap-3 rounded-lg bg-rose-50 p-2 text-left transition-colors hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/30">
+                      <BellRing className="h-4 w-4 flex-shrink-0 text-rose-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.client_name}</p>
+                        <p className="text-xs text-rose-700 dark:text-rose-300">Запросил живого юриста</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  ))}
+                  {documentAttention.slice(0, Math.max(2, 5 - escalatedClients.length)).map((item) => (
+                    <button key={`doc-${item.clientId}`} type="button" onClick={() => navigate(`/lawyer/clients/${item.clientId}`)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted">
+                      <Files className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.clientName} · {item.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">{item.reason}{item.count > 1 ? ` · ${item.count} док.` : ""}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  ))}
+                  {!dataLoading && escalatedClients.length === 0 && documentAttention.length === 0 && (
+                    <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                      <CircleCheckBig className="h-4 w-4 text-emerald-600" /> Новых документов и эскалаций нет.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Полезная статистика остаётся, но не оттесняет рабочую очередь. */}
+        <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {([
             { label: "Всего клиентов", value: totalClients, icon: Users, color: "text-blue-500" },
-            {
-              label: "Ждут юриста", value: escalationCount, icon: BellRing, color: "text-rose-500",
-              onClick: () => navigate("/lawyer/clients?escalated=1"),
-              highlight: !dataLoading && escalationCount > 0,
-            },
             { label: "Срочных дел", value: urgentCount, icon: AlertTriangle, color: "text-red-500" },
             { label: "Выигранных дел", value: wonCount, icon: Trophy, color: "text-green-500" },
-          ] as Array<{
-            label: string; value: number; icon: typeof Users; color: string;
-            onClick?: () => void; highlight?: boolean;
-          }>).map(({ label, value, icon: Icon, color, onClick, highlight }) => (
-            <Card
-              key={label}
-              className={cn(
-                onClick && "cursor-pointer hover:shadow-md transition-shadow",
-                highlight && "border-rose-300 bg-rose-50/60 dark:bg-rose-950/20",
-              )}
-              onClick={onClick}
-            >
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-muted ${color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
+            { label: "Активных этапов", value: stageCounts.length, icon: ListChecks, color: "text-violet-500" },
+          ] as const).map(({ label, value, icon: Icon, color }) => (
+            <Card key={label}>
+              <CardContent className="flex items-center gap-3 p-3">
+                <div className={cn("rounded-lg bg-muted p-2", color)}><Icon className="h-4 w-4" /></div>
                 <div>
-                  <p className="text-2xl font-bold">{dataLoading ? "—" : value}</p>
+                  <p className="text-xl font-bold">{dataLoading ? "—" : value}</p>
                   <p className="text-xs text-muted-foreground">{label}</p>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-
-        {/* Ближайшие сроки — сводка дедлайнов по всем делам (P4). Виден, только
-            если есть хотя бы один срок; полная картина — на /lawyer/agenda. */}
-        {!dataLoading && deadlines.length > 0 && (
-          <Card className="mb-8 border-primary/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarClock className="h-4 w-4 text-primary" />
-                Ближайшие сроки
-              </CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs" asChild>
-                <Link to="/lawyer/agenda">Все сроки <ChevronRight className="ml-0.5 h-3.5 w-3.5" /></Link>
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {deadlines.map((item) => {
-                const bucket = deadlineBucket(item.date);
-                const tone = bucket ? deadlineToneClass(bucket) : "text-muted-foreground";
-                const Icon = KIND_ICON[item.kind];
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => navigate(`/lawyer/clients/${item.clientId}`)}
-                    className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted"
-                  >
-                    <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{item.clientName}</p>
-                    </div>
-                    <span className={cn("flex-shrink-0 text-xs font-medium", tone)}>
-                      {formatDueLabel(item.date)}
-                    </span>
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Pipeline — горизонтальные прогресс-бары, чтобы было видно «куда уходят клиенты» */}
@@ -369,33 +571,6 @@ const LawyerDashboard = () => {
                     ))}
             </CardContent>
           </Card>
-        </div>
-
-        {/* Quick nav — 5 равноценных карточек, на десктопе в одну строку.
-            Цвет иконки/тинта подсказывает раздел (для быстрого распознавания «куда я иду»). */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
-          {[
-            { to: "/lawyer/clients",   icon: Users,         label: "CRM — Клиенты", desc: "Ведение дел",            badge: 0,            color: "text-blue-600 dark:text-blue-400",     bg: "bg-blue-50 dark:bg-blue-950/30" },
-            { to: "/lawyer/templates", icon: FileText,      label: "Шаблоны",       desc: "DOCX / PDF",             badge: 0,            color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/30" },
-            { to: "/lawyer/chats",     icon: MessageSquare, label: "Чаты",          desc: "Переписка с клиентами",  badge: unreadCount,  color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
-            { to: "/lawyer/analytics", icon: TrendingUp,    label: "Аналитика",     desc: "Статистика дел",         badge: 0,            color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30" },
-            { to: "/lawyer/branding",  icon: Palette,       label: "Мой бренд",     desc: "Личное приложение и QR", badge: 0,            color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30" },
-          ].map(({ to, icon: Icon, label, desc, badge, color, bg }) => (
-            <Card key={label} className="cursor-pointer hover:shadow-md transition-shadow relative" onClick={() => navigate(to)}>
-              <CardContent className="p-4 text-center">
-                {badge > 0 && (
-                  <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5">
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-                <div className={cn("inline-flex items-center justify-center h-12 w-12 rounded-2xl mb-2", bg)}>
-                  <Icon className={cn("h-6 w-6", color)} />
-                </div>
-                <p className="font-semibold text-sm">{label}</p>
-                <p className="text-xs text-muted-foreground">{desc}</p>
-              </CardContent>
-            </Card>
-          ))}
         </div>
 
         {/* Подсказки юристу — что упростит работу */}

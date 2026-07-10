@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { BookOpen, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isAdminPath, isCabinetPath } from "@/lib/cabinetNav";
+import { isLawyerPath } from "@/lib/lawyerNav";
 
 const RagChat = lazy(() => import("./RagChat"));
 
@@ -17,7 +19,9 @@ const LOADING_LABEL = "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430";
 
 const isHiddenRoute = (pathname: string) =>
   HIDDEN_ROUTES.some((route) => pathname.startsWith(route)) ||
-  /\/(dashboard|client|lawyer)(\/|$)/.test(pathname);
+  isCabinetPath(pathname) ||
+  isLawyerPath(pathname) ||
+  isAdminPath(pathname);
 
 const scheduleIdle = (callback: () => void) => {
   if ("requestIdleCallback" in window) {
@@ -42,10 +46,9 @@ function LauncherButton({
       onClick={onClick}
       disabled={loading}
       className={cn(
-        "fixed z-40 flex items-center gap-2 rounded-full shadow-xl transition-shadow duration-200",
+        "fixed z-40 hidden items-center gap-2 rounded-full shadow-xl transition-shadow duration-200 md:flex",
         "bg-gradient-to-br from-primary to-accent text-white",
-        "left-4 bottom-20 h-12 w-12 justify-center",
-        "md:left-auto md:right-6 md:bottom-6 md:h-14 md:w-auto md:px-5 md:gap-2.5",
+        "right-6 bottom-6 h-14 w-auto justify-center px-5 gap-2.5",
         loading ? "cursor-wait opacity-90" : "hover:shadow-2xl",
       )}
       aria-label={ASK_AI_ARIA_LABEL}

@@ -148,7 +148,7 @@ export async function buildAIContext(): Promise<string> {
             .disease_articles_565;
           if (!article) continue;
           const chance = link.ai_category_chance || 0;
-          context += `  Статья ${article.article_number} (${article.title}) — шанс кат. В: ${chance}%\n`;
+          context += `  Статья ${article.article_number} (${article.title}) — сила документальных подтверждений: ${chance}/100 (не вероятность решения комиссии)\n`;
           if (link.ai_explanation) {
             context += `    Обоснование: ${String(link.ai_explanation).slice(0, 300)}\n`;
           }

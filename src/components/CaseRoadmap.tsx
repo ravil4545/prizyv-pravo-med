@@ -50,7 +50,7 @@ const STAGES: Stage[] = [
     no: "03",
     key: "hasAiAnalysis",
     title: "ИИ-анализ",
-    hint: "ИИ извлечёт диагнозы, привяжет к статьям Расписания болезней, оценит шансы.",
+    hint: "ИИ извлечёт диагнозы, привяжет их к статьям Расписания болезней и оценит полноту подтверждений.",
     doneHint: "Анализ готов. Запустите заново после загрузки новых документов.",
     ctaLabel: "Запустить анализ",
     doneLabel: "Заново",
@@ -84,9 +84,8 @@ const STAGES: Stage[] = [
  * Будущие этапы сопровождения (Модуль 2 — удержание).
  *
  * Показываются заблокированными (greyed out) после основного роадмапа, чтобы
- * пользователь видел: сервис ведёт его не только до сбора документов, а через
- * весь призыв — есть ради чего оставаться в подписке. Разблокируются по мере
- * развития дела (пока — после оформления подписки, этап 05).
+ * пользователь видел возможные этапы сопровождения. Это не автоматический
+ * юридический маршрут: порядок и необходимость этапов зависят от ситуации.
  */
 const FUTURE_STAGES: { title: string; hint: string }[] = [
   {
@@ -161,7 +160,7 @@ const CaseRoadmap = () => {
       <header className="px-5 sm:px-7 py-5 border-b border-ink/10">
         <div className="flex items-center gap-3 mb-2">
           <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
-            Ваше досье
+            Настройка кабинета
           </span>
           <span className="h-px flex-1 bg-ink/15" />
           <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-ink/60">
@@ -172,11 +171,16 @@ const CaseRoadmap = () => {
           id="roadmap-heading"
           className="font-serif text-2xl sm:text-3xl text-ink leading-tight"
         >
-          {nextStage ? "Дорожная карта дела" : "Дело собрано — пора в военкомат."}
+          {nextStage ? "Подготовьте кабинет к работе" : "Кабинет настроен"}
         </h2>
-        {nextStage && (
+        {nextStage ? (
           <p className="text-sm text-ink-soft mt-1.5">
             Следующий шаг — <span className="text-ink font-medium">{nextStage.title}</span>. {nextStage.hint}
+          </p>
+        ) : (
+          <p className="text-sm text-ink-soft mt-1.5 max-w-2xl">
+            Основные сервисы подключены. Это не означает юридическую готовность дела:
+            перед обращением в военкомат проверьте актуальность документов, сроки и план действий с юристом.
           </p>
         )}
       </header>
@@ -247,7 +251,7 @@ const CaseRoadmap = () => {
                   )}
                   {s.done && (
                     <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gold-deep border border-gold/40 px-1.5 py-0.5">
-                      в работе
+                      настроено
                     </span>
                   )}
                 </div>
@@ -286,10 +290,14 @@ const CaseRoadmap = () => {
       <div className="px-5 sm:px-7 pb-6 -mt-1">
         <div className="flex items-center gap-3 mb-3">
           <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-ink/40">
-            Дальше с вами
+            Возможные этапы дела
           </span>
           <span className="h-px flex-1 bg-ink/10" />
         </div>
+        <p className="mb-4 text-xs sm:text-sm text-ink-soft leading-relaxed">
+          Они не начинаются автоматически: состав и порядок определяются событиями дела,
+          документами и рекомендацией юриста.
+        </p>
         <ul className="space-y-2.5">
           {FUTURE_STAGES.map((f) => (
             <li
@@ -305,7 +313,7 @@ const CaseRoadmap = () => {
                     {f.title}
                   </h3>
                   <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-ink/40 border border-ink/15 px-1.5 py-0.5">
-                    скоро
+                    по ситуации
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-ink-soft mt-1 leading-relaxed">

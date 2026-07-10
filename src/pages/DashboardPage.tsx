@@ -14,11 +14,9 @@ import {
   BarChart3,
   FileHeart,
   ChevronRight,
-  ClipboardList,
   Calendar,
   Trophy,
   Building2,
-  Briefcase,
   Users,
   Search,
   User,
@@ -124,32 +122,27 @@ const DashboardPage = () => {
     );
   }
 
-  // Основные рабочие сценарии — 4 ключевые точки входа.
+  // Три рабочих раздела без дублирования «досье / истории болезни / РБ».
+  // Конкретное следующее действие выше определяет CasePlanCard.
   const primaryCards: DashboardCard[] = [
     {
+      title: "Медицинская картина",
+      description: "Документы, диагнозы, опросник и подтверждения по статьям РБ-565",
+      icon: FileHeart,
+      path: "/dashboard/medical-documents",
+      featured: true,
+      tag: "Досье",
+    },
+    {
       title: "ИИ-консультант",
-      description: "Чат, анализ документов и оценка по Расписанию болезней",
+      description: "Разберите ситуацию и уточните, какие сведения или документы нужны",
       icon: MessageSquare,
       path: "/dashboard/ai-chat",
-      featured: true,
       tag: "AI",
     },
     {
-      title: "Моё досье",
-      description: "Документы, опросник, диагнозы — всё, что видит ИИ и юрист",
-      icon: FileHeart,
-      path: "/dashboard/medical-documents",
-    },
-    {
-      title: "ИИ-История болезни",
-      description: "Статьи Расписания, категории годности и подсказки по диагнозам",
-      icon: BookOpen,
-      path: "/medical-history",
-      tag: "565",
-    },
-    {
-      title: "Дело",
-      description: "Этапы, комиссии, обжалования, суды — таймлайн вашего дела",
+      title: "Дело и сроки",
+      description: "Повестки, комиссии, обследования, обжалования и ближайшие дедлайны",
       icon: Calendar,
       path: "/dashboard/case-tracking",
     },
@@ -159,15 +152,9 @@ const DashboardPage = () => {
   const toolsCards: DashboardCard[] = [
     {
       title: "Расписание болезней",
-      description: "88 статей с AI-оценкой шансов категории годности",
+      description: "88 статей и требования к медицинским подтверждениям",
       icon: BookOpen,
       path: "/medical-history",
-    },
-    {
-      title: "Опросник для ИИ",
-      description: "Заполните жалобы, которые не вошли в справки",
-      icon: ClipboardList,
-      path: "/medical-questionnaire",
     },
     {
       title: "Шаблоны заявлений",
@@ -230,13 +217,23 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* ── 3 главных сценария — первичные действия сразу под приветствием ── */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="section-number">Что делать</span>
+          {/* ── Сначала срочное и следующий шаг, затем навигация по разделам. ── */}
+          <section className="mb-7 space-y-4" aria-labelledby="dashboard-now-heading">
+            <div className="flex items-center gap-2">
+              <span id="dashboard-now-heading" className="section-number">Сейчас</span>
               <span className="flex-1 h-px bg-border/50" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {!isDemoMode && <NotificationsInbox />}
+            <CasePlanCard />
+          </section>
+
+          {/* ── Три понятных раздела вместо четырёх пересекающихся карточек. ── */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="section-number">Разделы</span>
+              <span className="flex-1 h-px bg-border/50" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {primaryCards.map((card) => {
                 const Icon = card.icon;
                 const isFeatured = card.featured;
@@ -244,6 +241,14 @@ const DashboardPage = () => {
                   <Card
                     key={card.path}
                     onClick={() => navigate(cabinetPath(card.path))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(cabinetPath(card.path));
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
                     className={cn(
                       "group cursor-pointer transition-all duration-300 hover:-translate-y-0.5 overflow-hidden relative h-full",
                       isFeatured
@@ -251,11 +256,11 @@ const DashboardPage = () => {
                         : "border-border bg-card hover:shadow-medium",
                     )}
                   >
-                    <CardContent className="p-5 h-full flex flex-col">
-                      <div className="flex items-start justify-between mb-3">
+                    <CardContent className="p-3.5 sm:p-5 h-full flex items-center sm:items-stretch gap-3 sm:gap-0 sm:flex-col">
+                      <div className="flex items-start justify-between sm:mb-3">
                         <div
                           className={cn(
-                            "h-11 w-11 rounded-xl flex items-center justify-center transition-colors",
+                            "h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center transition-colors",
                             isFeatured
                               ? "bg-gold-deep text-paper shadow-sm"
                               : "bg-muted text-foreground group-hover:bg-gold/15 group-hover:text-gold-deep",
@@ -264,17 +269,20 @@ const DashboardPage = () => {
                           <Icon className="h-5 w-5" />
                         </div>
                         {card.tag && (
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-gold-deep bg-gold/10 px-1.5 py-0.5 rounded">
+                          <span className="hidden sm:inline-flex text-[10px] font-mono uppercase tracking-wider text-gold-deep bg-gold/10 px-1.5 py-0.5 rounded">
                             {card.tag}
                           </span>
                         )}
                       </div>
-                      <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
-                        {card.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                        {card.description}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground mb-0.5 sm:mb-1">
+                          {card.title}
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 sm:line-clamp-3">
+                          {card.description}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/50 sm:hidden" />
                     </CardContent>
                   </Card>
                 );
@@ -282,22 +290,35 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* ════ ЗОНА 1: МОЁ ДЕЛО — статус, план, события (ядро, всегда видно) ═══ */}
+          {/* ════ Картина дела: детали после конкретного следующего шага. ═══ */}
           <div className="mb-8 space-y-5">
             <div className="flex items-center gap-2">
-              <span className="section-number">Моё дело</span>
+              <span className="section-number">Картина дела</span>
               <span className="flex-1 h-px bg-border/50" />
             </div>
 
-            {!isDemoMode && <NotificationsInbox />}
-            <CasePlanCard />
             {!isDemoMode && !isLawyer && <ClientCaseStatusCard />}
             {!isDemoMode && <AICaseSummary />}
-            {!isDemoMode && <CaseRoadmap />}
+            {!isDemoMode && (
+              <Collapsible>
+                <CollapsibleTrigger className="group/setup flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left hover:border-gold/40">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-foreground">Настройка кабинета</p>
+                    <p className="text-xs text-muted-foreground">
+                      Профиль, документы, AI-анализ, юрист и подписка
+                    </p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-data-[state=open]/setup:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3">
+                  <CaseRoadmap />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </div>
 
           {/* ════ ЗОНА 2: ПОДПИСКА И ДОСТУП ════════════════════════════════════ */}
-          <Collapsible defaultOpen className="mb-8">
+          <Collapsible className="mb-8">
             <CollapsibleTrigger className="group/sec flex w-full items-center gap-2 mb-3">
               <span className="section-number">Подписка и доступ</span>
               <span className="flex-1 h-px bg-border/50" />

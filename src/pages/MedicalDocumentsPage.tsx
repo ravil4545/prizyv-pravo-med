@@ -543,7 +543,7 @@ export default function MedicalDocumentsPage() {
       } else {
         toast({
           title: "Анализ завершён",
-          description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+          description: `Предварительный ориентир: ${data.fitnessCategory}; сила подтверждений ${data.categoryBChance}/100`,
         });
       }
 
@@ -1208,7 +1208,7 @@ export default function MedicalDocumentsPage() {
         } else {
           toast({
             title: "Анализ завершён",
-            description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+            description: `Предварительный ориентир: ${data.fitnessCategory}; сила подтверждений ${data.categoryBChance}/100`,
           });
         }
 
@@ -1265,7 +1265,7 @@ export default function MedicalDocumentsPage() {
       } else {
         toast({
           title: "Анализ завершён",
-          description: `Категория: ${data.fitnessCategory}, шанс категории В: ${data.categoryBChance}%`,
+          description: `Предварительный ориентир: ${data.fitnessCategory}; сила подтверждений ${data.categoryBChance}/100`,
         });
       }
 
@@ -2012,8 +2012,8 @@ export default function MedicalDocumentsPage() {
                     </Badge>
                     <Badge variant="outline" className="rounded-md px-2.5 py-1.5">
                       {bestDocument?.ai_category_chance !== null && bestDocument?.ai_category_chance !== undefined
-                        ? `${bestDocument.ai_category_chance}% шанс В`
-                        : "Шанс не рассчитан"}
+                        ? `Подтверждения ${bestDocument.ai_category_chance}/100`
+                        : "Подтверждения не оценены"}
                     </Badge>
                   </div>
                 </div>
@@ -2046,8 +2046,8 @@ export default function MedicalDocumentsPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Документы загружены. Когда анализ завершится, здесь появится категория,
-                        шанс и объяснение, что можно использовать для позиции.
+                        Документы загружены. Когда анализ завершится, здесь появятся предварительный
+                        ориентир, сила подтверждений и объяснение, что можно использовать для позиции.
                       </p>
                     )}
                   </div>
@@ -2206,7 +2206,7 @@ export default function MedicalDocumentsPage() {
                           <span className="inline-flex items-center gap-1">Категория<TermHint term="category" /></span>
                         </TableHead>
                         <TableHead className="hidden md:table-cell">
-                          <span className="inline-flex items-center gap-1">Шанс В<TermHint term="chanceB" /></span>
+                          <span className="inline-flex items-center gap-1">Подтверждения<TermHint term="chanceB" /></span>
                         </TableHead>
                         <TableHead className="hidden md:table-cell">Статус</TableHead>
                         <TableHead className="text-right">Действия</TableHead>
@@ -2301,7 +2301,7 @@ export default function MedicalDocumentsPage() {
                             {doc.ai_category_chance !== null ? (
                               <div className="flex items-center gap-2">
                                 <Progress value={doc.ai_category_chance} className="w-16 h-2" />
-                                <span className="text-sm font-medium">{doc.ai_category_chance}%</span>
+                                <span className="text-sm font-medium">{doc.ai_category_chance}/100</span>
                               </div>
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -2370,7 +2370,9 @@ export default function MedicalDocumentsPage() {
                                             </Card>
                                             <Card>
                                               <CardHeader className="pb-2 px-3 sm:px-6">
-                                                <CardTitle className="text-xs sm:text-sm">Шанс категории В</CardTitle>
+                                                <CardTitle className="text-xs sm:text-sm flex items-center gap-1">
+                                                  Сила подтверждений<TermHint term="chanceB" />
+                                                </CardTitle>
                                               </CardHeader>
                                               <CardContent className="px-3 sm:px-6">
                                                 <div className="flex items-center gap-2 sm:gap-3">
@@ -2379,7 +2381,7 @@ export default function MedicalDocumentsPage() {
                                                     className="flex-1 h-3 sm:h-4"
                                                   />
                                                   <span className="text-xl sm:text-2xl font-bold whitespace-nowrap">
-                                                    {doc.ai_category_chance || 0}%
+                                                    {doc.ai_category_chance || 0}/100
                                                   </span>
                                                 </div>
                                               </CardContent>

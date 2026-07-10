@@ -33,7 +33,7 @@ type PlanState = {
   loading: boolean;
   docCount: number;
   analyzedCount: number;
-  bestChance: number | null;
+  evidenceScore: number | null;
   bestCategory: string | null;
   nextEvent: { title: string; event_date: string } | null;
   activeLawyers: number;
@@ -44,19 +44,19 @@ const INITIAL_STATE: PlanState = {
   loading: true,
   docCount: 0,
   analyzedCount: 0,
-  bestChance: null,
+  evidenceScore: null,
   bestCategory: null,
   nextEvent: null,
   activeLawyers: 0,
   familyViewers: 0,
 };
 
-const getRiskLabel = (chance: number | null, docCount: number) => {
-  if (docCount === 0) return { label: "Риск не оценен", tone: "muted" as const };
-  if (chance === null) return { label: "Нужен анализ", tone: "medium" as const };
-  if (chance >= 65) return { label: "Есть сильная база", tone: "good" as const };
-  if (chance >= 35) return { label: "Нужны доказательства", tone: "medium" as const };
-  return { label: "Высокий риск призыва", tone: "high" as const };
+const getEvidenceLabel = (score: number | null, docCount: number) => {
+  if (docCount === 0) return { label: "Нет документов", tone: "muted" as const };
+  if (score === null) return { label: "Нужен анализ", tone: "medium" as const };
+  if (score >= 65) return { label: "Подтверждения сильные", tone: "good" as const };
+  if (score >= 35) return { label: "Нужно усилить подтверждения", tone: "medium" as const };
+  return { label: "Подтверждений мало", tone: "high" as const };
 };
 
 export default function CasePlanCard() {
@@ -120,7 +120,7 @@ export default function CasePlanCard() {
             loading: false,
             docCount: docs.length,
             analyzedCount: analyzedDocs.length,
-            bestChance: bestDoc?.ai_category_chance ?? null,
+            evidenceScore: bestDoc?.ai_category_chance ?? null,
             bestCategory: bestDoc?.ai_fitness_category ?? null,
             nextEvent: eventsRes.data?.[0] ?? null,
             activeLawyers: lawyersRes.count ?? 0,
@@ -176,7 +176,7 @@ export default function CasePlanCard() {
         description: "Юрист увидит досье только после вашего явного согласия.",
         path: "/lawyers",
         icon: ShieldCheck,
-        priority: state.bestChance !== null && state.bestChance < 50 ? "high" : "medium",
+        priority: state.evidenceScore !== null && state.evidenceScore < 50 ? "high" : "medium",
         preserveBrand: false,
       });
     } else {
@@ -210,7 +210,7 @@ export default function CasePlanCard() {
     return next.slice(0, 4);
   }, [state]);
 
-  const risk = getRiskLabel(state.bestChance, state.docCount);
+  const evidence = getEvidenceLabel(state.evidenceScore, state.docCount);
   const eventDays =
     state.nextEvent?.event_date ? differenceInDays(new Date(state.nextEvent.event_date), new Date()) : null;
 
@@ -248,13 +248,13 @@ export default function CasePlanCard() {
               variant="outline"
               className={cn(
                 "justify-center gap-1.5 rounded-md px-2.5 py-1.5",
-                risk.tone === "good" && "border-emerald-300 text-emerald-700",
-                risk.tone === "medium" && "border-amber-300 text-amber-700",
-                risk.tone === "high" && "border-red-300 text-red-700",
+                evidence.tone === "good" && "border-emerald-300 text-emerald-700",
+                evidence.tone === "medium" && "border-amber-300 text-amber-700",
+                evidence.tone === "high" && "border-red-300 text-red-700",
               )}
             >
-              {risk.tone === "good" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-              {risk.label}
+              {evidence.tone === "good" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+              {evidence.label}
             </Badge>
             <Badge variant="outline" className="justify-center rounded-md px-2.5 py-1.5">
               {state.docCount} док. · {state.analyzedCount} AI
@@ -274,13 +274,18 @@ export default function CasePlanCard() {
             <div className="mt-3 space-y-3">
               <div>
                 <p className="text-2xl font-semibold text-foreground">
-                  {state.bestChance !== null ? `${state.bestChance}%` : "—"}
+                  {state.evidenceScore !== null ? `${state.evidenceScore}/100` : "—"}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {state.bestCategory
-                    ? `лучшая оценка: категория ${state.bestCategory}`
-                    : "загрузите документы, чтобы появилась оценка категории"}
+                    ? `сила подтверждений для ориентира «категория ${state.bestCategory}»`
+                    : "загрузите документы, чтобы появилась предварительная оценка"}
                 </p>
+                {state.evidenceScore !== null && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Это оценка полноты документов, а не вероятность решения комиссии.
+                  </p>
+                )}
               </div>
               <div className="border-t pt-3">
                 <p className="text-sm font-medium text-foreground">

@@ -11,6 +11,12 @@ import {
 } from "../_shared/ragSearch.ts";
 import { getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
 import {
+  appendChatMetadataToStream,
+  buildChatResponseMetadata,
+  buildContextualRetrievalQuery,
+  CHAT_RESPONSE_FORMAT,
+} from "../_shared/chatResponse.ts";
+import {
   captureStreamUsageAndRecord,
   checkAnonRateLimit,
   getClientIp,
@@ -122,15 +128,17 @@ Deno.serve(async (req) => {
     // Чанки обрезаются (1600), чтобы таблицы степеней/порогов не резались на половине.
     // Над-извлечение (12) + LLM-реранк до 6: гибрид даёт кандидатов, реранкер
     // отсекает поверхностно похожие, чтобы модель не отвлекалась на нерелевантное.
-    const articles = extractArticleNumbers(message);
-    const candidates = await searchHybrid(supabase, message, {
+    const retrievalQuery = buildContextualRetrievalQuery(history, message);
+    const articles = extractArticleNumbers(retrievalQuery);
+    const candidates = await searchHybrid(supabase, retrievalQuery, {
       matchCount: 12,
       categories: KNOWLEDGE_CATEGORIES, // публичный виджет — только выверенные знания, без сырой практики
       articles: articles.length ? articles : undefined,
     });
-    const chunks = await rerankChunks(message, candidates, { keep: 6 });
+    const chunks = await rerankChunks(retrievalQuery, candidates, { keep: 6 });
     traceRagChunks("chat-rag", chunks);
     const retrievedContext = renderChunks(chunks, 1600);
+    const responseMetadata = buildChatResponseMetadata(chunks);
 
     // 3. Compact canonical answer policy shared by all RAG consumers.
     const sysCtx = await getRagAnswerPolicy(supabase);
@@ -150,16 +158,14 @@ Deno.serve(async (req) => {
 - Язык: русский, понятный призывнику 18 лет, без юридического жаргона
 - Первое сообщение клиента считай первичным обращением, если из истории не видно обратного. Начинай с приличного короткого приветствия: «Здравствуйте!» или «Добрый день!».
 - Давай практичный вывод сразу: какая статья/норма, какая категория или юридический риск возможны, что усиливает позицию, что ослабляет и что делать дальше.
-- Если клиент спрашивает про шанс/перспективу/«берут ли»/«получу ли категорию», дай ориентировочную оценку в процентах диапазоном. Связывай проценты с условиями: подтверждено документами, нужна дофиксация, есть риск занижения.
+- Если клиент спрашивает про шанс/перспективу/«берут ли»/«получу ли категорию», оцени качественно силу подтверждений: высокая, средняя или низкая. Не выдавай это за статистическую вероятность и не придумывай проценты.
 - Не начинай ответ с очевидного дисклеймера «решение принимает ВВК/комиссия». Упоминай комиссию, ВВК или военкомат только там, где это нужно для конкретного действия клиента.
 - Не выдумывай учреждения и процедуры. Если не уверен в конкретном учреждении, пиши нейтрально: «профильный врач», «профильная медицинская организация», «стационар», «юрист по призывному праву».
 - Ты справочный ИИ юридической консультации. Гарантий исхода не давай.
 - Не добавляй одинаковый дисклеймер и контакты в каждый ответ.
 
-ФОРМАТ:
-- Не более трёх коротких смысловых блоков; разделитель --- используй только при необходимости
-- **Жирный** только для: диагнозов, категорий годности, статей расписания
-- Один блок = одна мысль; не повторяй вывод другими словами
+${CHAT_RESPONSE_FORMAT}
+- **Жирный** только для: диагнозов, категорий годности, статей расписания.
 
 --- ЕДИНАЯ ПОЛИТИКА ОТВЕТА ---
 
@@ -213,13 +219,16 @@ ${sysCtx}`;
       model: MODEL_MAIN,
     }));
 
-    return new Response(clientStream, {
+    return new Response(
+      appendChatMetadataToStream(clientStream, responseMetadata),
+      {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
       },
-    });
+      },
+    );
   } catch (err) {
     console.error("[chat-rag] Unexpected error:", err);
     return Response.json(
