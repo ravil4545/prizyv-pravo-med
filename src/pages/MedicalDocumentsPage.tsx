@@ -1987,9 +1987,9 @@ export default function MedicalDocumentsPage() {
           </Card>
 
           {documents.length > 0 && (
-            <Card className="mb-6 border-gold/30 bg-gradient-to-br from-gold/5 via-card to-background">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <Card className="mb-6 min-w-0 max-w-full overflow-hidden border-gold/30 bg-gradient-to-br from-gold/5 via-card to-background">
+              <CardContent className="min-w-0 p-4 sm:p-5 md:p-6">
+                <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="mb-2 flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-gold-deep" />
@@ -2003,14 +2003,14 @@ export default function MedicalDocumentsPage() {
                       чего не хватает и какой следующий шаг принесет больше пользы.
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="rounded-md px-2.5 py-1.5">
+                  <div className="flex min-w-0 max-w-full flex-wrap gap-2">
+                    <Badge variant="outline" className="max-w-full rounded-md px-2.5 py-1.5 text-center whitespace-normal">
                       {analyzedDocuments.length}/{documents.length} проанализировано
                     </Badge>
-                    <Badge variant={getCategoryColor(bestDocument?.ai_fitness_category || null)} className="rounded-md px-2.5 py-1.5">
+                    <Badge variant={getCategoryColor(bestDocument?.ai_fitness_category || null)} className="max-w-full rounded-md px-2.5 py-1.5 text-center whitespace-normal">
                       {bestDocument?.ai_fitness_category ? `Кат. ${bestDocument.ai_fitness_category}` : "Категория не ясна"}
                     </Badge>
-                    <Badge variant="outline" className="rounded-md px-2.5 py-1.5">
+                    <Badge variant="outline" className="max-w-full rounded-md px-2.5 py-1.5 text-center whitespace-normal">
                       {bestDocument?.ai_category_chance !== null && bestDocument?.ai_category_chance !== undefined
                         ? `Подтверждения ${bestDocument.ai_category_chance}/100`
                         : "Подтверждения не оценены"}
@@ -2018,26 +2018,30 @@ export default function MedicalDocumentsPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-                  <div className="rounded-lg border border-border bg-card p-4">
+                <div className="mt-5 grid min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+                  <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-gold-deep" />
                       <p className="text-sm font-semibold text-foreground">Что уже видно</p>
                     </div>
                     {bestDocument ? (
                       <div className="space-y-2">
-                        <p className="text-sm">
+                        <p className="break-words text-sm [overflow-wrap:anywhere]">
                           Самый сильный документ: <span className="font-medium">{bestDocument.title || "документ без названия"}</span>
                         </p>
                         {bestDocument.ai_explanation && (
-                          <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                          <p className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                             {bestDocument.ai_explanation}
                           </p>
                         )}
                         {uniqueRecommendations.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
+                          <div className="flex min-w-0 max-w-full flex-col gap-1.5 pt-1 sm:flex-row sm:flex-wrap">
                             {uniqueRecommendations.slice(0, 3).map((recommendation) => (
-                              <Badge key={recommendation} variant="secondary" className="max-w-full truncate">
+                              <Badge
+                                key={recommendation}
+                                variant="secondary"
+                                className="h-auto min-w-0 max-w-full justify-start whitespace-normal break-words py-1 text-left leading-snug [overflow-wrap:anywhere]"
+                              >
                                 {recommendation}
                               </Badge>
                             ))}
@@ -2052,7 +2056,7 @@ export default function MedicalDocumentsPage() {
                     )}
                   </div>
 
-                  <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <ListChecks className="h-4 w-4 text-gold-deep" />
                       <p className="text-sm font-semibold text-foreground">Следующие действия</p>
@@ -2062,20 +2066,20 @@ export default function MedicalDocumentsPage() {
                         ? documentNextActions.slice(0, 4)
                         : ["Задайте ИИ уточняющий вопрос или передайте досье юристу для проверки позиции."]
                       ).map((action, index) => (
-                        <div key={action} className="flex gap-2 text-sm text-muted-foreground">
+                        <div key={action} className="flex min-w-0 gap-2 text-sm text-muted-foreground">
                           <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold-deep">
                             {index + 1}
                           </span>
-                          <span>{action}</span>
+                          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{action}</span>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => navigate(cabinetPath("/dashboard/ai-chat"))}>
+                    <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button className="w-full sm:w-auto" size="sm" onClick={() => navigate(cabinetPath("/dashboard/ai-chat"))}>
                         <Brain className="mr-1.5 h-4 w-4" />
                         Спросить ИИ
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => navigate("/lawyers")}>
+                      <Button className="w-full sm:w-auto" size="sm" variant="outline" onClick={() => navigate("/lawyers")}>
                         Передать юристу
                         <ArrowRight className="ml-1.5 h-4 w-4" />
                       </Button>
