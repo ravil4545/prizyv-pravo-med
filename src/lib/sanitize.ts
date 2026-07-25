@@ -1,5 +1,9 @@
 import DOMPurify from "dompurify";
 
+// Экранирование для сборки HTML строкой живёт отдельно (@/lib/escapeHtml):
+// оно нужно в модулях, которым незачем тянуть DOMPurify целиком.
+export { escapeHtml } from "./escapeHtml";
+
 export const sanitizeHtml = (html: string): string => {
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [

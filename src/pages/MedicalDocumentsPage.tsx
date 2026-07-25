@@ -58,7 +58,6 @@ import DocumentValidityBadge from "@/components/DocumentValidityBadge";
 import DocumentAnalysisStatusChip from "@/components/DocumentAnalysisStatusChip";
 import DocumentUploadWizard, { type DocumentUploadResult, type UploadAck } from "@/components/DocumentUploadWizard";
 import { fileToPages } from "@/lib/documentMerger";
-import { jsPDF } from "jspdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -76,48 +75,33 @@ import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { getSignedDocumentUrl, extractFilePath } from "@/lib/storage";
+import {
+  documentFileExtension,
+  downloadBlob,
+  downloadExtractedText,
+  openPrintWindow,
+  safeFileName,
+} from "@/lib/documentExport";
 import SendDocToLawyerButton from "@/components/SendDocToLawyerButton";
 import { getOcrQuality, ocrLevelColor } from "@/lib/ocrQuality";
 import { withBrandPath } from "@/lib/brandPath";
 
-interface DocumentType {
-  id: string;
-  code: string;
-  name: string;
-}
-
-interface DocumentPart {
-  name: string;
-  type_id?: string;
-  type_name?: string;
-}
-
-interface DocumentMeta {
-  parts?: DocumentPart[];
-  is_questionnaire?: boolean;
-}
-
-interface MedicalDocument {
-  id: string;
-  title: string | null;
-  file_url: string;
-  document_date: string | null;
-  uploaded_at: string;
-  is_classified: boolean;
-  document_type_id: string | null;
-  raw_text: string | null;
-  ai_fitness_category: string | null;
-  ai_category_chance: number | null;
-  ai_recommendations: string[] | null;
-  ai_explanation: string | null;
-  linked_article_id: string | null;
-  meta: DocumentMeta | null;
-  document_types?: DocumentType | null;
-  disease_articles_565?: { article_number: string; title: string } | null;
-}
-
-type SortField = "uploaded_at" | "document_date" | "title";
-type SortDirection = "asc" | "desc";
+// Типы и вся чистая логика списка живут в отдельных модулях: страница на
+// 2800 строк не давала покрыть тестами ни сортировку, ни обработку снимков.
+import type {
+  DocumentMeta,
+  DocumentPart,
+  DocumentType,
+  MedicalDocument,
+  SortDirection,
+  SortField,
+} from "@/lib/medicalDocumentTypes";
+import {
+  buildDocumentsOverview,
+  categoryBadgeVariant,
+  filterAndSortDocuments,
+  nextSortState,
+} from "@/lib/documentSort";
 
 function SignedDocumentViewer({ fileUrl }: { fileUrl: string }) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
@@ -611,207 +595,7 @@ export default function MedicalDocumentsPage() {
     }
   };
 
-  // Конвертация файла в JPEG с максимальным качеством
-  const convertToJpeg = async (file: File): Promise<{ blob: Blob; base64: string }> => {
-    // Если это PDF, конвертируем первую страницу в JPEG
-    if (file.type === "application/pdf") {
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-
-        // Get original viewport
-        const originalViewport = page.getViewport({ scale: 1.0 });
-
-        // Calculate scale to limit max dimension to 2000px for API compatibility
-        const maxDimension = 2000;
-        const maxOriginal = Math.max(originalViewport.width, originalViewport.height);
-        const scale = maxOriginal > maxDimension ? maxDimension / maxOriginal : 1.5;
-
-        const viewport = page.getViewport({ scale });
-
-        console.log(`PDF page size: ${Math.round(viewport.width)}x${Math.round(viewport.height)}`);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        const context = canvas.getContext("2d")!;
-        context.fillStyle = "#FFFFFF";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-
-        await page.render({
-          canvasContext: context,
-          viewport: viewport,
-          canvas: canvas,
-        }).promise;
-
-        return new Promise((resolve, reject) => {
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const base64 = (reader.result as string).split(",")[1];
-                  resolve({ blob, base64 });
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-              } else {
-                reject(new Error("Failed to convert PDF to JPEG"));
-              }
-            },
-            "image/jpeg",
-            0.95,
-          );
-        });
-      } catch (error) {
-        console.error("PDF conversion error:", error);
-        throw new Error("Не удалось обработать PDF файл");
-      }
-    }
-
-    // Для изображений конвертируем в JPEG
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const result = e.target?.result as string;
-
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext("2d")!;
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const jpegReader = new FileReader();
-                jpegReader.onload = () => {
-                  const base64 = (jpegReader.result as string).split(",")[1];
-                  resolve({ blob, base64 });
-                };
-                jpegReader.readAsDataURL(blob);
-              } else {
-                reject(new Error("Failed to convert image"));
-              }
-            },
-            "image/jpeg",
-            0.95,
-          );
-        };
-        img.onerror = reject;
-        img.src = result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Сжатие изображения для уменьшения размера файла (без изменения содержимого)
-  const compressImage = async (base64: string, maxWidth: number = 2000): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-
-        // Уменьшаем если слишком большое
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Сжимаем с качеством 0.85 для уменьшения размера
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const result = (reader.result as string).split(",")[1];
-                resolve(result);
-              };
-              reader.readAsDataURL(blob);
-            } else {
-              resolve(base64);
-            }
-          },
-          "image/jpeg",
-          0.85,
-        );
-      };
-      img.onerror = () => resolve(base64);
-      img.src = `data:image/jpeg;base64,${base64}`;
-    });
-  };
-
-  // Создание PDF из изображений
-  const createPdfFromImages = async (images: { base64: string; width: number; height: number }[]): Promise<Blob> => {
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "px",
-    });
-
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-
-      // Рассчитываем размер страницы под изображение
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      // Масштабируем изображение под страницу
-      const imgRatio = img.width / img.height;
-      const pageRatio = pageWidth / pageHeight;
-
-      let finalWidth, finalHeight;
-      if (imgRatio > pageRatio) {
-        finalWidth = pageWidth - 20;
-        finalHeight = finalWidth / imgRatio;
-      } else {
-        finalHeight = pageHeight - 20;
-        finalWidth = finalHeight * imgRatio;
-      }
-
-      const x = (pageWidth - finalWidth) / 2;
-      const y = (pageHeight - finalHeight) / 2;
-
-      if (i > 0) {
-        pdf.addPage();
-      }
-
-      pdf.addImage(`data:image/jpeg;base64,${img.base64}`, "JPEG", x, y, finalWidth, finalHeight);
-    }
-
-    return pdf.output("blob");
-  };
-
-  // Получение размеров изображения из base64
-  const getImageDimensions = (base64: string): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        resolve({ width: img.width, height: img.height });
-      };
-      img.onerror = () => {
-        resolve({ width: 800, height: 1100 }); // Дефолтный размер A4
-      };
-      img.src = `data:image/jpeg;base64,${base64}`;
-    });
-  };
+  // Обработка снимков (конвертация, сжатие, сборка PDF) — в @/lib/imagePipeline.
 
   const uploadFiles = async (files: File[], combineIntoOne: boolean = false) => {
     const currentUser = await ensureAuthForUpload();
@@ -1591,14 +1375,7 @@ export default function MedicalDocumentsPage() {
   };
 
   const downloadAsText = (doc: MedicalDocument) => {
-    if (!doc.raw_text) return;
-    const blob = new Blob([doc.raw_text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${doc.title || "document"}_text.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadExtractedText(doc);
   };
 
   const downloadDocument = async (doc: MedicalDocument) => {
@@ -1607,15 +1384,7 @@ export default function MedicalDocumentsPage() {
       if (!signedUrl) throw new Error("Не удалось получить доступ к файлу");
       const response = await fetch(signedUrl);
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const ext = doc.file_url.toLowerCase().endsWith('.docx') ? '.docx' : doc.file_url.toLowerCase().endsWith('.pdf') ? '.pdf' : '.jpg';
-      a.download = `${doc.title || "document"}${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, safeFileName(doc.title, documentFileExtension(doc.file_url)));
     } catch (error) {
       toast({
         title: "Ошибка скачивания",
@@ -1631,68 +1400,19 @@ export default function MedicalDocumentsPage() {
       toast({ title: "Ошибка", description: "Не удалось получить доступ к файлу", variant: "destructive" });
       return;
     }
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
+    if (openPrintWindow(doc, signedUrl) === "popup-blocked") {
       toast({
         title: "Ошибка",
         description: "Разрешите всплывающие окна для печати",
         variant: "destructive",
       });
-      return;
     }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${doc.title || "Медицинский документ"}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; }
-            .container { padding: 20px; }
-            .header { margin-bottom: 20px; text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 15px; }
-            .header h1 { font-size: 16px; margin: 0 0 5px; }
-            .header p { color: #666; font-size: 12px; }
-            .image-container { text-align: center; }
-            img { max-width: 100%; height: auto; }
-            .no-print { margin: 20px; text-align: center; }
-            .no-print button { padding: 10px 30px; font-size: 16px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; margin-right: 10px; }
-            .no-print button:hover { background: #2563eb; }
-            .no-print .close-btn { background: #6b7280; }
-            .no-print .close-btn:hover { background: #4b5563; }
-            @media print {
-              .no-print { display: none; }
-              .container { padding: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="no-print">
-            <button onclick="window.print()">🖨️ Печать</button>
-            <button class="close-btn" onclick="window.close()">Закрыть</button>
-          </div>
-          <div class="container">
-            <div class="header">
-              <h1>${doc.title || "Медицинский документ"}</h1>
-              ${doc.document_date ? `<p>Дата документа: ${format(new Date(doc.document_date), "dd.MM.yyyy", { locale: ru })}</p>` : ""}
-            </div>
-            <div class="image-container">
-              <img src="${signedUrl}" alt="${doc.title || "Документ"}" />
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
-    }
+    const next = nextSortState({ sortField, sortDirection }, field);
+    setSortField(next.sortField);
+    setSortDirection(next.sortDirection);
   };
 
   const getSortIcon = (field: SortField) => {
@@ -1700,84 +1420,21 @@ export default function MedicalDocumentsPage() {
     return sortDirection === "asc" ? <ArrowUp className="h-4 w-4 ml-1" /> : <ArrowDown className="h-4 w-4 ml-1" />;
   };
 
-  const getCategoryColor = (category: string | null) => {
-    if (!category) return "secondary";
-    switch (category.toUpperCase()) {
-      case "А":
-        return "default";
-      case "Б":
-        return "secondary";
-      case "В":
-        return "destructive";
-      case "Г":
-        return "outline";
-      case "Д":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
+  const getCategoryColor = categoryBadgeVariant;
 
-  const filteredDocuments = documents
-    .filter((doc) => {
-      if (filterType !== "all" && doc.document_type_id !== filterType) return false;
-      if (searchQuery && doc.title && !doc.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      // Pin questionnaire documents at the top
-      const aIsQuestionnaire = a.meta?.is_questionnaire === true;
-      const bIsQuestionnaire = b.meta?.is_questionnaire === true;
-      if (aIsQuestionnaire && !bIsQuestionnaire) return -1;
-      if (!aIsQuestionnaire && bIsQuestionnaire) return 1;
-
-      let aVal: string | null = null;
-      let bVal: string | null = null;
-
-      switch (sortField) {
-        case "uploaded_at":
-          aVal = a.uploaded_at;
-          bVal = b.uploaded_at;
-          break;
-        case "document_date":
-          aVal = a.document_date;
-          bVal = b.document_date;
-          break;
-        case "title":
-          aVal = a.title;
-          bVal = b.title;
-          break;
-      }
-
-      if (!aVal && !bVal) return 0;
-      if (!aVal) return 1;
-      if (!bVal) return -1;
-
-      const comparison = aVal.localeCompare(bVal);
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-
-  const analyzedDocuments = documents.filter(
-    (doc) => doc.ai_fitness_category || doc.ai_category_chance !== null || doc.ai_explanation,
+  const filteredDocuments = filterAndSortDocuments(
+    documents,
+    { filterType, searchQuery },
+    { sortField, sortDirection },
   );
-  const bestDocument = [...analyzedDocuments]
-    .filter((doc) => doc.ai_category_chance !== null)
-    .sort((a, b) => (b.ai_category_chance || 0) - (a.ai_category_chance || 0))[0];
-  const hasQuestionnaire = documents.some((doc) => doc.meta?.is_questionnaire === true);
-  const uniqueRecommendations = [
-    ...new Set(documents.flatMap((doc) => doc.ai_recommendations || [])),
-  ].slice(0, 4);
-  const documentNextActions = [
-    documents.length === 0 ? "Загрузите хотя бы одну свежую выписку, заключение или снимок." : null,
-    analyzedDocuments.length === 0 ? "Запустите AI-анализ, чтобы увидеть категорию и привязку к статьям." : null,
-    !hasQuestionnaire ? "Заполните опросник: жалобы и симптомы часто не видны в справках." : null,
-    bestDocument && bestDocument.ai_category_chance !== null && (bestDocument.ai_category_chance || 0) < 50
-      ? "Добавьте более свежие обследования или документы с функциональными нарушениями."
-      : null,
-    uniqueRecommendations.length === 0 && analyzedDocuments.length > 0
-      ? "Задайте ИИ вопрос: какие документы усилят позицию по этому диагнозу."
-      : null,
-  ].filter((item): item is string => Boolean(item));
+
+  const {
+    analyzedDocuments,
+    bestDocument,
+    hasQuestionnaire,
+    uniqueRecommendations,
+    nextActions: documentNextActions,
+  } = buildDocumentsOverview(documents);
 
   if (loading) {
     return (

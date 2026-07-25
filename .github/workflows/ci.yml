@@ -70,8 +70,11 @@ jobs:
       - name: Проверка типов edge-функций
         run: deno check supabase/functions/**/index.ts
 
+      # sloppy-imports: тесты покрывают и src/lib — а там импорты без
+      # расширения (.ts дописывает Vite). --allow-env нужен тестам aiGuard,
+      # они подменяют переменные лимитов.
       - name: Тесты
-        run: deno test --allow-net tests/
+        run: deno test --allow-net --allow-env --unstable-sloppy-imports tests/
 
   cors-guard:
     name: Страж CORS
