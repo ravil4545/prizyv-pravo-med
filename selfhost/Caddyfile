@@ -1,0 +1,49 @@
+# =====================================================================
+#  Раздача собранного фронтенда. Положить в E:\web\Caddyfile.
+#
+#  Запуск как службы Windows (один раз, от администратора):
+#    caddy run --config E:\web\Caddyfile
+#  либо через NSSM/планировщик, чтобы поднимался до входа в систему.
+#
+#  TLS здесь НЕ настраивается: сертификат живёт на стороне Cloudflare,
+#  туннель приходит на localhost по HTTP. Caddy слушает только localhost —
+#  наружу порт не смотрит.
+# =====================================================================
+
+:8080 {
+	root * E:/web/dist
+
+	encode gzip zstd
+
+	# SPA-фолбэк ОБЯЗАТЕЛЕН. Без него прямой заход на /diagnoses/68 или
+	# возврат из письма на /dashboard даст 404: на диске таких файлов нет,
+	# маршрут разбирает React Router уже в браузере.
+	try_files {path} /index.html
+	file_server
+
+	# Файлы в /assets/ имеют хеш в имени — при изменении меняется имя,
+	# поэтому их можно кэшировать навсегда.
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	# index.html кэшировать нельзя: в нём ссылки на текущие хеши, и после
+	# выкладки пользователь с закэшированным index тянул бы уже удалённые
+	# файлы и видел белый экран.
+	header /index.html Cache-Control "no-cache"
+	header /sw.js Cache-Control "no-cache"
+
+	# Заголовки безопасности. CSP намеренно НЕ задаётся здесь: приложение
+	# ходит в Supabase, OpenAI и Яндекс.Метрику, и слишком узкая политика
+	# молча ломает часть страниц. Её стоит вводить отдельно и с проверкой.
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	log {
+		output file E:/web/logs/access.log {
+			roll_size 20mb
+			roll_keep 7
+		}
+	}
+}

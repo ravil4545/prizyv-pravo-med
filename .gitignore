@@ -39,3 +39,8 @@ __pycache__/
 *.pyc
 deno.lock
 audit-conversion-*/
+
+
+# Ключи service_role для переноса на свой сервер — НИКОГДА не коммитить.
+selfhost/migrate.secrets.env
+selfhost/*.secrets.env
