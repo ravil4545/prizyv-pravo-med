@@ -21,6 +21,8 @@ import AppealGeneratorDialog from "@/components/AppealGeneratorDialog";
 import CaseTimeline from "@/components/CaseTimeline";
 import { eventTypeMeta } from "@/lib/caseEvents";
 import { getStageDef, getStageIndex, CRM_STAGE_ORDER } from "@/lib/crmStages";
+import CasePathMap from "@/components/dashboard/CasePathMap";
+import { buildCasePath } from "@/lib/casePath";
 
 interface CaseEvent {
   id: string;
@@ -71,6 +73,10 @@ export default function CaseTrackingPage() {
   const [summonsDialogOpen, setSummonsDialogOpen] = useState(false);
   const [appealForEvent, setAppealForEvent] = useState<CaseEvent | null>(null);
   const [stageInfo, setStageInfo] = useState<{ label: string; pct: number; icon: any } | null>(null);
+  // Данные для карты пути (§3): статьи РБ, число документов, дата мероприятий.
+  const [pathFacts, setPathFacts] = useState<{ articles: string[]; documentsTotal: number; conscriptionDate: string | null }>(
+    { articles: [], documentsTotal: 0, conscriptionDate: null },
+  );
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -95,6 +101,54 @@ export default function CaseTrackingPage() {
     setUser(session.user);
     loadEvents(session.user.id);
     loadStage(session.user.id);
+    loadPathFacts(session.user.id);
+  };
+
+  // Факты для карты пути. Всё берётся из уже существующих таблиц — отдельного
+  // хранилища для «прогресса» заводить не нужно, иначе появится второй источник
+  // правды, который неизбежно разъедется с реальными документами.
+  const loadPathFacts = async (userId: string) => {
+    // Вложенный select не покрыт сгенерированными типами Supabase, поэтому
+    // описываем форму ответа локально и приводим через unknown — это честнее
+    // россыпи `as any` и не глушит проверку остального файла.
+    interface DocWithArticles {
+      id: string;
+      document_article_links: Array<{
+        disease_articles_565: { article_number: string | null } | null;
+      }> | null;
+    }
+
+    const [docsRes, crmRes] = await Promise.all([
+      supabase
+        .from("medical_documents_v2")
+        .select("id, document_article_links(disease_articles_565(article_number))")
+        .eq("user_id", userId),
+      supabase
+        .from("lawyer_clients")
+        .select("conscription_date")
+        .eq("client_user_id", userId)
+        .eq("link_state", "linked_active")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const docs = (docsRes.data ?? []) as unknown as DocWithArticles[];
+    const crm = crmRes.data as { conscription_date: string | null } | null;
+
+    const articles = new Set<string>();
+    for (const doc of docs) {
+      for (const link of doc.document_article_links ?? []) {
+        const num = link?.disease_articles_565?.article_number;
+        if (num) articles.add(String(num));
+      }
+    }
+
+    setPathFacts({
+      articles: [...articles],
+      documentsTotal: docs.length,
+      conscriptionDate: crm?.conscription_date ?? null,
+    });
   };
 
   // Текущая стадия дела глазами клиента — мост между событиями и CRM-этапом
@@ -211,6 +265,25 @@ export default function CaseTrackingPage() {
               </Button>
             </div>
           </div>
+
+          {/* Карта пути (§3): «я на шаге N из 6, следующее действие — вот это».
+              Раньше этого ответа не было нигде — ни на публичной части, ни в
+              кабинете. Считается чистой функцией из уже имеющихся данных. */}
+          <CasePathMap
+            className="mb-5"
+            path={buildCasePath({
+              articles: pathFacts.articles,
+              documentsTotal: pathFacts.documentsTotal,
+              requirementsMet: 0,
+              requirementsTotal: 0,
+              events: events.map((e) => ({
+                event_type: e.event_type,
+                event_date: e.event_date,
+                outcome: e.outcome,
+              })),
+              conscriptionDate: pathFacts.conscriptionDate,
+            })}
+          />
 
           {stageInfo && (
             <Card className="mb-5 border-primary/20">

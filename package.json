@@ -8,6 +8,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "typecheck": "tsc -b --noEmit",
+    "test": "deno test --allow-net tests/",
+    "typecheck:functions": "deno check supabase/functions/**/index.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "telegram:preview": "npm --prefix \"C:/nepriziv Claude project/social-autoposting\" run telegram:preview --",
