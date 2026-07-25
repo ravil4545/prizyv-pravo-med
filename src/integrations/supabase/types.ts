@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       action_plan_items: {
@@ -76,6 +101,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_rate_limit_hits: {
+        Row: {
+          request_count: number
+          rl_key: string
+          window_start: string
+        }
+        Insert: {
+          request_count?: number
+          rl_key: string
+          window_start: string
+        }
+        Update: {
+          request_count?: number
+          rl_key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      ai_usage_events: {
+        Row: {
+          completion_tokens: number
+          cost_rub: number
+          created_at: string
+          function_name: string
+          id: number
+          ip_hash: string | null
+          model: string
+          prompt_tokens: number
+          user_id: string | null
+        }
+        Insert: {
+          completion_tokens?: number
+          cost_rub?: number
+          created_at?: string
+          function_name: string
+          id?: never
+          ip_hash?: string | null
+          model: string
+          prompt_tokens?: number
+          user_id?: string | null
+        }
+        Update: {
+          completion_tokens?: number
+          cost_rub?: number
+          created_at?: string
+          function_name?: string
+          id?: never
+          ip_hash?: string | null
+          model?: string
+          prompt_tokens?: number
+          user_id?: string | null
+        }
+        Relationships: []
       }
       analytics_events: {
         Row: {
@@ -1592,10 +1671,50 @@ export type Database = {
         }
         Relationships: []
       }
+      rag_builds: {
+        Row: {
+          created_at: string
+          error: string | null
+          expected_chunks: number | null
+          id: string
+          mode: string
+          published_at: string | null
+          published_chunks: number | null
+          staged_chunks: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          expected_chunks?: number | null
+          id: string
+          mode: string
+          published_at?: string | null
+          published_chunks?: number | null
+          staged_chunks?: number | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          expected_chunks?: number | null
+          id?: string
+          mode?: string
+          published_at?: string | null
+          published_chunks?: number | null
+          staged_chunks?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
       rag_chunks: {
         Row: {
+          build_id: string | null
           category: string | null
+          chunk_index: number | null
           content: string
+          content_fts: unknown
+          content_hash: string | null
           created_at: string | null
           embedding: string | null
           id: string
@@ -1603,14 +1722,23 @@ export type Database = {
           last_refined: string | null
           priority: string | null
           schedule_articles: string[] | null
+          search_fts: unknown
           section_title: string | null
+          source_modified_at: string | null
+          source_path: string | null
+          source_title: string | null
           tags: string[] | null
           target_category: string | null
           type: string | null
+          updated_at: string
         }
         Insert: {
+          build_id?: string | null
           category?: string | null
+          chunk_index?: number | null
           content: string
+          content_fts?: unknown
+          content_hash?: string | null
           created_at?: string | null
           embedding?: string | null
           id: string
@@ -1618,14 +1746,23 @@ export type Database = {
           last_refined?: string | null
           priority?: string | null
           schedule_articles?: string[] | null
+          search_fts?: unknown
           section_title?: string | null
+          source_modified_at?: string | null
+          source_path?: string | null
+          source_title?: string | null
           tags?: string[] | null
           target_category?: string | null
           type?: string | null
+          updated_at?: string
         }
         Update: {
+          build_id?: string | null
           category?: string | null
+          chunk_index?: number | null
           content?: string
+          content_fts?: unknown
+          content_hash?: string | null
           created_at?: string | null
           embedding?: string | null
           id?: string
@@ -1633,12 +1770,91 @@ export type Database = {
           last_refined?: string | null
           priority?: string | null
           schedule_articles?: string[] | null
+          search_fts?: unknown
           section_title?: string | null
+          source_modified_at?: string | null
+          source_path?: string | null
+          source_title?: string | null
+          tags?: string[] | null
+          target_category?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rag_chunks_staging: {
+        Row: {
+          build_id: string
+          category: string | null
+          chunk_index: number
+          content: string
+          content_hash: string
+          created_at: string
+          embedding: string | null
+          id: string
+          is_foundational: boolean
+          last_refined: string | null
+          priority: string | null
+          schedule_articles: string[] | null
+          section_title: string | null
+          source_modified_at: string
+          source_path: string
+          source_title: string
+          tags: string[] | null
+          target_category: string | null
+          type: string | null
+        }
+        Insert: {
+          build_id: string
+          category?: string | null
+          chunk_index: number
+          content: string
+          content_hash: string
+          created_at?: string
+          embedding?: string | null
+          id: string
+          is_foundational?: boolean
+          last_refined?: string | null
+          priority?: string | null
+          schedule_articles?: string[] | null
+          section_title?: string | null
+          source_modified_at: string
+          source_path: string
+          source_title: string
           tags?: string[] | null
           target_category?: string | null
           type?: string | null
         }
-        Relationships: []
+        Update: {
+          build_id?: string
+          category?: string | null
+          chunk_index?: number
+          content?: string
+          content_hash?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          is_foundational?: boolean
+          last_refined?: string | null
+          priority?: string | null
+          schedule_articles?: string[] | null
+          section_title?: string | null
+          source_modified_at?: string
+          source_path?: string
+          source_title?: string
+          tags?: string[] | null
+          target_category?: string | null
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_chunks_staging_build_id_fkey"
+            columns: ["build_id"]
+            isOneToOne: false
+            referencedRelation: "rag_builds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rag_system_context: {
         Row: {
@@ -1867,6 +2083,51 @@ export type Database = {
         }
         Relationships: []
       }
+      user_templates: {
+        Row: {
+          base_key: string | null
+          body_template: string
+          category: string
+          created_at: string
+          fields: Json
+          format: Json
+          id: string
+          owner_id: string
+          scope: string
+          tables: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          base_key?: string | null
+          body_template?: string
+          category?: string
+          created_at?: string
+          fields?: Json
+          format?: Json
+          id?: string
+          owner_id: string
+          scope?: string
+          tables?: Json
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          base_key?: string | null
+          body_template?: string
+          category?: string
+          created_at?: string
+          fields?: Json
+          format?: Json
+          id?: string
+          owner_id?: string
+          scope?: string
+          tables?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_test_results: {
         Row: {
           ai_summary: string | null
@@ -1955,9 +2216,24 @@ export type Database = {
         }
         Relationships: []
       }
+      rag_index: {
+        Row: {
+          articles: string[] | null
+          category: string | null
+          chars: number | null
+          chunks: number | null
+          file: string | null
+          top_folder: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_family_invite: { Args: { p_token: string }; Returns: Json }
+      bump_ai_rate_limit: {
+        Args: { p_key: string; p_max_requests: number; p_window_start: string }
+        Returns: boolean
+      }
       claim_lawyer_invite: {
         Args: { p_code: string }
         Returns: {
@@ -1972,6 +2248,10 @@ export type Database = {
           lawyer_client_id: string
           lawyer_id: string
         }[]
+      }
+      client_cancel_escalation: {
+        Args: { p_lawyer_client_id: string }
+        Returns: undefined
       }
       client_connect_to_lawyer: {
         Args: { p_grant_access?: boolean; p_lawyer_id: string }
@@ -2028,6 +2308,57 @@ export type Database = {
         }
         Returns: boolean
       }
+      hybrid_rag_chunks: {
+        Args: {
+          filter_articles?: string[]
+          filter_categories?: string[]
+          full_text_weight?: number
+          match_count?: number
+          min_similarity?: number
+          query_embedding?: string
+          query_text: string
+          rrf_k?: number
+          semantic_weight?: number
+        }
+        Returns: {
+          category: string
+          content: string
+          content_hash: string
+          id: string
+          priority: string
+          schedule_articles: string[]
+          section_title: string
+          semantic_similarity: number
+          similarity: number
+          source_path: string
+          source_title: string
+          target_category: string
+        }[]
+      }
+      increment_ai_question_usage: {
+        Args: never
+        Returns: {
+          admin_override: boolean
+          ai_questions_used: number
+          created_at: string
+          document_uploads_used: number
+          free_ai_limit: number
+          free_document_limit: number
+          id: string
+          is_paid: boolean
+          paid_until: string | null
+          payment_link_clicked_at: string | null
+          trial_ends_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "user_subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       lawyer_clear_escalation: {
         Args: { p_lawyer_client_id: string }
         Returns: undefined
@@ -2064,6 +2395,8 @@ export type Database = {
       match_cron_secret: { Args: { p_token: string }; Returns: boolean }
       match_rag_chunks: {
         Args: {
+          filter_articles?: string[]
+          filter_categories?: string[]
           match_count?: number
           min_similarity?: number
           query_embedding: string
@@ -2071,11 +2404,24 @@ export type Database = {
         Returns: {
           category: string
           content: string
+          content_hash: string
           id: string
+          priority: string
           schedule_articles: string[]
+          section_title: string
           similarity: number
+          source_path: string
+          source_title: string
           target_category: string
         }[]
+      }
+      publish_rag_build: {
+        Args: { p_build_id: string; p_expected_count: number }
+        Returns: number
+      }
+      publish_rag_sources: {
+        Args: { p_build_id: string; p_expected_count: number }
+        Returns: number
       }
       regenerate_lawyer_invite: {
         Args: { p_lawyer_client_id: string }
@@ -2216,6 +2562,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],

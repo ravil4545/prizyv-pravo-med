@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- профиль/документы из БД читаются динамически без сгенерированных типов */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,15 @@ import {
   FileText, Search, Sparkles, MapPin, Download, Printer, Plus, Trash2, ArrowLeft,
   Save, Settings2, Loader2, Pencil, FilePlus2, FolderOpen, MoreVertical, RotateCcw, Table as TableIcon,
 } from "lucide-react";
+import {
+  LEGACY_STORAGE_KEYS,
+  listTemplates,
+  migrateLegacyTemplates,
+  saveTemplate as persistTemplate,
+  deleteTemplate as removeTemplate,
+  type StoredTemplate,
+  type TemplateScope,
+} from "@/lib/userTemplates";
 
 // Поля, которые умеет заполнять поиск гос-структур по адресу.
 const GOV_KEYS = new Set([
@@ -68,16 +77,20 @@ interface EditorState {
 }
 interface SavedTemplate extends EditorState { id: string; savedAt: string; }
 
-const loadSaved = (key: string): SavedTemplate[] => {
-  try {
-    const raw = localStorage.getItem(key);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
-};
-const persistSaved = (key: string, list: SavedTemplate[]) => {
-  try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* quota — игнор */ }
-};
+/** Строка из базы -> состояние редактора. */
+const toEditorState = (t: StoredTemplate): SavedTemplate => ({
+  id: t.id,
+  savedId: t.id,
+  baseKey: t.baseKey,
+  title: t.title,
+  category: t.category,
+  fields: t.fields as EditorField[],
+  bodyTemplate: t.bodyTemplate,
+  format: { ...DEFAULT_FORMAT, ...(t.format as Partial<DocFormat>) },
+  tables: t.tables as DocTable[],
+  savedAt: t.savedAt,
+});
+
 const newId = () => `t_${Math.random().toString(36).slice(2, 9)}`;
 
 export interface TemplatesWorkspaceProps {
@@ -121,7 +134,28 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
   const [docsOpen, setDocsOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
 
-  useEffect(() => { setSaved(loadSaved(storageKey)); }, [storageKey]);
+  // Загрузка «Моих шаблонов» из базы + разовый перенос старых записей из
+  // localStorage (см. lib/userTemplates.ts). Раньше список читался прямо из
+  // браузера и терялся вместе с кэшем.
+  const scope: TemplateScope = LEGACY_STORAGE_KEYS[storageKey] ?? "client";
+  const reloadSaved = useCallback(async () => {
+    try {
+      const moved = await migrateLegacyTemplates(storageKey, scope);
+      const list = await listTemplates(scope);
+      setSaved(list.map(toEditorState));
+      if (moved > 0) {
+        toast({
+          title: `Перенесено шаблонов: ${moved}`,
+          description: "Раньше они хранились только в этом браузере — теперь доступны на любом устройстве.",
+        });
+      }
+    } catch (e) {
+      // Не блокируем работу с каталогом: шаблоны — вспомогательная функция.
+      console.error("[TemplatesWorkspace] не удалось загрузить шаблоны:", e);
+    }
+  }, [storageKey, scope, toast]);
+
+  useEffect(() => { void reloadSaved(); }, [reloadSaved]);
 
   // Смена клиента (новый профиль) при ОТКРЫТОМ редакторе: дозаполняем ПУСТЫЕ поля
   // данными выбранного клиента, ручной ввод не затираем. Редактор не пересобирается,
@@ -284,20 +318,52 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
   const updateTable = (idx: number, t: DocTable) => setEd((e) => (e ? { ...e, tables: e.tables.map((x, i) => (i === idx ? t : x)) } : e));
   const removeTable = (idx: number) => setEd((e) => (e ? { ...e, tables: e.tables.filter((_, i) => i !== idx) } : e));
 
-  const saveTemplate = () => {
-    if (!ed) return;
-    const id = ed.savedId || newId();
-    const rec: SavedTemplate = { ...ed, id, savedId: id, savedAt: new Date().toISOString() };
-    const list = [rec, ...saved.filter((s) => s.id !== id)];
-    setSaved(list);
-    persistSaved(storageKey, list);
-    patch({ savedId: id });
-    toast({ title: "Шаблон сохранён", description: "Доступен в «Мои шаблоны» на этом устройстве." });
+  const [savingTpl, setSavingTpl] = useState(false);
+
+  const saveTemplate = async () => {
+    if (!ed || savingTpl) return;
+    setSavingTpl(true);
+    try {
+      const rec = await persistTemplate({
+        id: ed.savedId,
+        scope,
+        title: ed.title,
+        category: ed.category,
+        bodyTemplate: ed.bodyTemplate,
+        fields: ed.fields,
+        tables: ed.tables,
+        format: ed.format as unknown as Record<string, unknown>,
+        baseKey: ed.baseKey,
+      });
+      patch({ savedId: rec.id });
+      await reloadSaved();
+      toast({ title: "Шаблон сохранён", description: "Доступен в «Мои шаблоны» с любого устройства." });
+    } catch (e) {
+      toast({
+        title: "Не удалось сохранить",
+        description: e instanceof Error ? e.message : "Попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingTpl(false);
+    }
   };
-  const deleteSaved = (id: string) => {
-    const list = saved.filter((s) => s.id !== id);
-    setSaved(list);
-    persistSaved(storageKey, list);
+
+  const deleteSaved = async (id: string) => {
+    // Оптимистично убираем из списка, при ошибке возвращаем — иначе исчезнувший
+    // и снова появившийся шаблон выглядит как сбой.
+    const prev = saved;
+    setSaved(saved.filter((s) => s.id !== id));
+    try {
+      await removeTemplate(id);
+    } catch (e) {
+      setSaved(prev);
+      toast({
+        title: "Не удалось удалить",
+        description: e instanceof Error ? e.message : "Попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    }
   };
 
   const exportDocx = async () => {
