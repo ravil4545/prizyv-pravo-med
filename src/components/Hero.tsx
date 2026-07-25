@@ -4,6 +4,7 @@ import { Phone, MessageCircle, Send, Bot, Sparkles, ArrowRight, ShieldCheck, Clo
 import { useBranding } from "@/contexts/BrandingContext";
 import BrandedAvatar from "@/components/BrandedAvatar";
 import { trackEvent } from "@/lib/analytics";
+import { PUBLIC_AI_FREE_LABEL } from "@/lib/aiLimits";
 
 const Hero = () => {
   const navigate = useNavigate();
@@ -130,9 +131,14 @@ const Hero = () => {
               ))}
             </div>
 
-            {/* Прямой бесплатный вход в ИИ — главное действие для холодного трафика.
-                Раньше «ИИ» вёл незалогиненного на /auth; теперь — сразу в чат /ai. */}
-            <form onSubmit={handleAskAI} className="max-w-2xl mb-5">
+            {/* ГЛАВНОЕ ДЕЙСТВИЕ — единственное primary на первом экране.
+                Раньше здесь конкурировали шесть равнозначных действий (поле ИИ,
+                две крупные кнопки и три чипа) — пользователь в стрессе при таком
+                выборе не выбирает ничего. Теперь иерархия явная:
+                  1) поле ИИ            — золотая заливка, primary;
+                  2) «Бесплатный разбор» — обводка, secondary;
+                  3) «ИИ-кабинет»        — текстовая ссылка, tertiary. */}
+            <form onSubmit={handleAskAI} className="max-w-2xl mb-3">
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   value={aiQuestion}
@@ -146,40 +152,29 @@ const Hero = () => {
                   className="group flex items-center justify-center gap-2 px-5 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-gold-deep hover:text-paper transition-all duration-300 whitespace-nowrap"
                 >
                   <Bot className="h-5 w-5 flex-shrink-0" />
-                  Спросить ИИ — бесплатно
+                  Спросить ИИ
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </button>
               </div>
+              {/* Честный лимит сразу, а не сюрпризом после третьего ответа. */}
+              <p className="mt-2 text-[11px] sm:text-xs font-mono tracking-wide text-paper/55">
+                {PUBLIC_AI_FREE_LABEL}
+              </p>
             </form>
 
-            {/* Two equal CTAs — same visual weight */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mb-5">
+            {/* Вторичное действие — звонок. Обводка вместо заливки: остаётся
+                кнопкой, но больше не спорит за внимание с полем ИИ. */}
+            <div className="max-w-2xl mb-4">
               <button
                 onClick={handlePhoneCall}
-                className="group flex items-center justify-between px-5 sm:px-6 py-4 bg-gold text-ink font-semibold text-sm sm:text-base hover:bg-gold-deep hover:text-paper transition-all duration-300"
+                className="group w-full sm:w-auto sm:min-w-[280px] flex items-center justify-between gap-4 px-5 sm:px-6 py-3.5 border border-paper/30 text-paper font-medium text-sm sm:text-base hover:border-gold hover:text-gold transition-all duration-300"
               >
                 <span className="flex items-center gap-2.5">
-                  <Phone className="h-5 w-5 flex-shrink-0" />
+                  <Phone className="h-5 w-5 flex-shrink-0 text-gold" />
                   <span className="text-left leading-tight">
-                    Бесплатный разбор
-                    <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-80 mt-0.5">
+                    Бесплатный разбор с юристом
+                    <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-70 mt-0.5">
                       за 15 минут
-                    </span>
-                  </span>
-                </span>
-                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1 flex-shrink-0" />
-              </button>
-
-              <button
-                onClick={handleTrial}
-                className="group flex items-center justify-between px-5 sm:px-6 py-4 border-2 border-gold text-paper font-semibold text-sm sm:text-base hover:bg-gold hover:text-ink transition-all duration-300"
-              >
-                <span className="flex items-center gap-2.5">
-                  <Sparkles className="h-5 w-5 flex-shrink-0 text-gold group-hover:text-ink" />
-                  <span className="text-left leading-tight">
-                    ИИ-кабинет
-                    <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-wider opacity-80 mt-0.5">
-                      3 дня бесплатно
                     </span>
                   </span>
                 </span>
@@ -188,7 +183,7 @@ const Hero = () => {
             </div>
 
             {/* Microcopy — objection handlers */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] sm:text-xs text-paper/60 mb-6">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] sm:text-xs text-paper/60 mb-4">
               <span className="inline-flex items-center gap-1.5">
                 <ShieldCheck className="h-3.5 w-3.5 text-gold" />
                 Без обязательств
@@ -203,7 +198,20 @@ const Hero = () => {
               </span>
             </div>
 
-            {/* Secondary contact channels — chips, not CTAs */}
+            {/* Третичное — платный продукт. Текстовая ссылка: тем, кто уже понял
+                ценность, она видна; холодному трафику не мешает выбрать главное. */}
+            <button
+              onClick={handleTrial}
+              className="group inline-flex items-center gap-2 text-sm text-paper/75 hover:text-gold transition-colors mb-6 underline-offset-4 hover:underline"
+            >
+              <Sparkles className="h-4 w-4 text-gold" />
+              ИИ-кабинет с надзором юриста — 3 дня бесплатно
+              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+            </button>
+
+            {/* Secondary contact channels — chips, not CTAs.
+                Чип «1 вопрос ИИ — бесплатно» удалён: он дублировал поле выше
+                и называл неверное число (реальный лимит — PUBLIC_AI_FREE_LIMIT). */}
             <div className="flex flex-wrap gap-2 max-w-xl">
               <button
                 onClick={handleTelegram}
@@ -218,13 +226,6 @@ const Hero = () => {
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 WhatsApp
-              </button>
-              <button
-                onClick={() => navigate("/ai")}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 border border-paper/25 text-paper/85 text-xs sm:text-sm font-medium hover:border-gold hover:text-gold transition-colors"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                1 вопрос ИИ — бесплатно
               </button>
             </div>
           </div>

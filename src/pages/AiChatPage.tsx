@@ -11,14 +11,23 @@ import { trackEvent } from "@/lib/analytics";
 import { supabase } from "@/integrations/supabase/client";
 import { readOpenAICompatibleStream, type ChatResponseMetadata } from "@/lib/openaiSse";
 import { ChatSourcesDisclosure } from "@/components/chat/ChatSourcesDisclosure";
+import {
+  PUBLIC_AI_FREE_LIMIT,
+  PUBLIC_AI_COUNT_KEY,
+  PUBLIC_AI_FREE_LABEL,
+  remainingLabel,
+  plural,
+} from "@/lib/aiLimits";
 
 // Публичный ИИ-чат БЕЗ регистрации — главный «вход в ценность» для холодного трафика.
 // Раньше любой клик по «ИИ» вёл незалогиненного на /auth; из анонимной воронки было
 // 0 регистраций (аудит конверсии 2026-06-25). Здесь человек сразу получает ответ, и
 // только после нескольких вопросов — мягкое предложение создать аккаунт.
 const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag";
-const FREE_LIMIT = 3;                       // бесплатных вопросов до предложения регистрации
-const COUNT_KEY = "nepriziv_ai_public_count";
+// Лимит и формулировки — из единого источника (@/lib/aiLimits), иначе обещание
+// на главной, здесь и в плавающем виджете снова разъедется.
+const FREE_LIMIT = PUBLIC_AI_FREE_LIMIT;
+const COUNT_KEY = PUBLIC_AI_COUNT_KEY;
 
 interface Message {
   id: string;
@@ -191,8 +200,10 @@ const AiChatPage = () => {
       <main className="flex-1 container mx-auto px-4 py-6 sm:py-8 w-full max-w-3xl flex flex-col">
         {/* Заголовок */}
         <div className="mb-4 sm:mb-6">
+          {/* Лимит назван сразу: раньше плашка обещала просто «бесплатно», а поле
+              ввода молча исчезало после третьего ответа — это читалось как поломка. */}
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-semibold mb-3">
-            <Sparkles className="h-3.5 w-3.5" /> Бесплатно, без регистрации
+            <Sparkles className="h-3.5 w-3.5" /> {PUBLIC_AI_FREE_LABEL}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Возьмут ли вас в армию? Спросите ИИ
@@ -273,7 +284,9 @@ const AiChatPage = () => {
         {/* Мягкое предложение регистрации после лимита */}
         {gateShown ? (
           <div className="mt-4 rounded-2xl border-2 border-primary/30 bg-primary/5 p-5 text-center">
-            <p className="font-semibold text-base">Вы задали {FREE_LIMIT} бесплатных вопроса</p>
+            <p className="font-semibold text-base">
+              Вы задали {FREE_LIMIT} бесплатных {plural(FREE_LIMIT, "вопрос", "вопроса", "вопросов")}
+            </p>
             <p className="text-sm text-muted-foreground mt-1 mb-4">
               Создайте бесплатный аккаунт, чтобы продолжить без лимита, сохранить переписку и
               загрузить документы для анализа ИИ.
@@ -325,9 +338,17 @@ const AiChatPage = () => {
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
-          <Bot className="h-3 w-3" /> ИИ может ошибаться. Важные решения проверяйте с юристом.
-        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Bot className="h-3 w-3" /> ИИ может ошибаться. Важные решения проверяйте с юристом.
+          </p>
+          {/* Честный счётчик — человек видит, сколько осталось, и гейт не выглядит сбоем. */}
+          {!isAuthed && !gateShown && remainingLabel(asked) && (
+            <p className="text-[11px] font-medium text-muted-foreground/80 tabular-nums">
+              {remainingLabel(asked)}
+            </p>
+          )}
+        </div>
       </main>
 
       <Footer />

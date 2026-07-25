@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useLocation } from "react-router-dom";
-import { X, BookOpen, Send, Loader2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { X, BookOpen, Send, Loader2, Sparkles, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readOpenAICompatibleStream } from "@/lib/openaiSse";
+import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/lib/analytics";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  PUBLIC_AI_FREE_LIMIT,
+  PUBLIC_AI_COUNT_KEY,
+  PUBLIC_AI_FREE_LABEL,
+  remainingLabel,
+  plural,
+} from "@/lib/aiLimits";
 
 interface Message {
   role: "user" | "assistant";
@@ -41,9 +50,23 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
   const didDragRef = useRef(false);
   const dragStartRef = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
 
+  // Счётчик общий с публичной страницей /ai: раньше виджет был обходом лимита —
+  // на /ai гейт после 3 вопросов, а здесь можно было спрашивать бесконечно.
+  const [asked, setAsked] = useState<number>(() => Number(localStorage.getItem(PUBLIC_AI_COUNT_KEY) || 0));
+  const [isAuthed, setIsAuthed] = useState(false);
+
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const gateShown = !isAuthed && asked >= PUBLIC_AI_FREE_LIMIT;
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) =>
+      setIsAuthed(!!session && !session.user.is_anonymous),
+    );
+  }, []);
 
   const isCabinetRoute = /\/(dashboard|client|lawyer)(\/|$)/.test(location.pathname);
   const hidden =
@@ -95,13 +118,19 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
   // ── AI chat ────────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || gateShown) return;
     setInput("");
     setError(null);
     const userMessage: Message = { role: "user", content: text };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setLoading(true);
+    if (!isAuthed) {
+      const next = asked + 1;
+      setAsked(next);
+      try { localStorage.setItem(PUBLIC_AI_COUNT_KEY, String(next)); } catch { /* приватный режим — игнор */ }
+      if (next >= PUBLIC_AI_FREE_LIMIT) trackEvent("ai_public_gate_shown");
+    }
     const history = updatedMessages.slice(1, -1).map((m) => ({ role: m.role, content: m.content }));
     try {
       const res = await fetch(EDGE_URL, {
@@ -125,7 +154,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages]);
+  }, [input, loading, messages, gateShown, isAuthed, asked]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -187,8 +216,10 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
             )}
           >
             <div>
-              <p className="font-semibold text-sm">ИИ-помощник · бесплатно</p>
-              <p className="text-xs opacity-80">Берут ли в армию с вашим диагнозом?</p>
+              <p className="font-semibold text-sm">ИИ-помощник</p>
+              <p className="text-xs opacity-80">
+                {isAuthed ? "Берут ли в армию с вашим диагнозом?" : PUBLIC_AI_FREE_LABEL}
+              </p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -246,40 +277,71 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
             )}
           </div>
 
-          {/* Input */}
-          <div className="shrink-0 p-3 border-t border-gray-100 flex gap-2 items-end">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Спросите о диагнозе или процедуре..."
-              rows={1}
-              disabled={loading}
-              className={cn(
-                "flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm",
-                "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary",
-                "disabled:opacity-50 placeholder:text-gray-400 max-h-24 overflow-y-auto",
-              )}
-              style={{ minHeight: "40px" }}
-              onInput={(e) => {
-                const el = e.currentTarget;
-                el.style.height = "auto";
-                el.style.height = Math.min(el.scrollHeight, 96) + "px";
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              className={cn(
-                "shrink-0 h-10 w-10 rounded-xl flex items-center justify-center bg-primary text-white transition-all",
-                "hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
-              )}
-              aria-label="Отправить"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
-          </div>
+          {/* Input / гейт — тот же лимит и та же формулировка, что и на /ai */}
+          {gateShown ? (
+            <div className="shrink-0 p-4 border-t border-gray-100 text-center">
+              <p className="text-sm font-semibold text-slate-950">
+                Вы задали {PUBLIC_AI_FREE_LIMIT} бесплатных{" "}
+                {plural(PUBLIC_AI_FREE_LIMIT, "вопрос", "вопроса", "вопросов")}
+              </p>
+              <p className="text-xs text-slate-500 mt-1 mb-3">
+                Создайте бесплатный аккаунт, чтобы продолжить без лимита и сохранить переписку.
+              </p>
+              <button
+                onClick={() => {
+                  trackEvent("ai_public_gate_signup_click");
+                  navigate("/auth?mode=signup&next=/dashboard/ai-chat");
+                }}
+                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                <Sparkles className="h-4 w-4" /> Создать бесплатный аккаунт
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="shrink-0 p-3 border-t border-gray-100">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Спросите о диагнозе или процедуре..."
+                  rows={1}
+                  disabled={loading}
+                  className={cn(
+                    "flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm",
+                    "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary",
+                    "disabled:opacity-50 placeholder:text-gray-400 max-h-24 overflow-y-auto",
+                  )}
+                  style={{ minHeight: "40px" }}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = "auto";
+                    el.style.height = Math.min(el.scrollHeight, 96) + "px";
+                  }}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={loading || !input.trim()}
+                  className={cn(
+                    "shrink-0 h-10 w-10 rounded-xl flex items-center justify-center bg-primary text-white transition-all",
+                    "hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
+                  )}
+                  aria-label="Отправить"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
+              {/* Дисклеймер был только на /ai — в виджете его не хватало. */}
+              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                <span>ИИ может ошибаться. Важные решения проверяйте с юристом.</span>
+                {!isAuthed && remainingLabel(asked) && (
+                  <span className="shrink-0 font-medium tabular-nums">{remainingLabel(asked)}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

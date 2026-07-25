@@ -62,12 +62,24 @@ const MobileBottomNav = () => {
         { label: "Аналитика", icon: BarChart3,    path: "/lawyer/analytics" },
         { label: "Кабинет",   icon: User,         path: "/lawyer" },
       ]
-    : [
-        { label: "Главная",   icon: Home,         path: "/" },
-        { label: "Документы", icon: FileHeart,    path: "/dashboard/medical-documents" },
-        { label: "ИИ чат",    icon: MessageSquare, path: isAuthenticated ? "/dashboard/ai-chat" : "/ai", featured: true },
-        { label: "Диагнозы",  icon: BookOpen,     path: "/medical-history" },
-        { label: isAuthenticated ? "Кабинет" : "Войти", icon: User, path: isAuthenticated ? "/dashboard" : "/auth" },
+    : isAuthenticated
+    ? [
+        { label: "Главная",   icon: Home,          path: "/" },
+        { label: "Документы", icon: FileHeart,     path: "/dashboard/medical-documents" },
+        { label: "ИИ чат",    icon: MessageSquare, path: "/dashboard/ai-chat", featured: true },
+        { label: "Диагнозы",  icon: BookOpen,      path: "/diagnoses" },
+        { label: "Кабинет",   icon: User,          path: "/dashboard" },
+      ]
+    : // Аноним: только публичные маршруты. Раньше «Документы» вели в
+      // /dashboard/medical-documents, а «Диагнозы» — в /medical-history; оба
+      // под RoleGuard, поэтому таб из нижней панели молча выкидывал на /auth.
+      // Публичного каталога /diagnoses в панели не было вообще.
+      [
+        { label: "Главная",  icon: Home,          path: "/" },
+        { label: "Диагнозы", icon: BookOpen,      path: "/diagnoses" },
+        { label: "ИИ чат",   icon: MessageSquare, path: "/ai", featured: true },
+        { label: "Услуги",   icon: FileText,      path: "/services" },
+        { label: "Войти",    icon: User,          path: "/auth" },
       ];
 
   const isActive = (path: string) => {

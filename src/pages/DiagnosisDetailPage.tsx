@@ -9,6 +9,7 @@ import { diagnosisSeo } from "@/lib/seoMeta";
 import { getDiagnosisGuide } from "@/content/diagnosisGuides";
 import DiagnosisGuideView from "@/components/DiagnosisGuideView";
 import { ArrowRight, Phone, Loader2, Bot, FileSearch } from "lucide-react";
+import { useBranding } from "@/contexts/BrandingContext";
 
 interface Diagnosis {
   id: string;
@@ -21,10 +22,18 @@ interface Diagnosis {
 const DiagnosisDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const branding = useBranding();
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [related, setRelated] = useState<Diagnosis[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) =>
+      setIsAuthed(!!session && !session.user.is_anonymous),
+    );
+  }, []);
 
   useEffect(() => {
     if (!slug) return;
@@ -76,8 +85,11 @@ const DiagnosisDetailPage = () => {
     };
   }, [slug]);
 
+  // Телефон был захардкожен — на white-label маршрутах /u/:slug это уводило
+  // клиента чужого юриста на основной номер.
   const handleCall = () => {
-    window.location.href = "tel:+79253500533";
+    const digits = (branding.phone || "+79253500533").replace(/\D/g, "");
+    window.location.href = `tel:+${digits}`;
   };
 
   if (loading) {
@@ -206,19 +218,33 @@ const DiagnosisDetailPage = () => {
 
           {/* Action block */}
           <section className="border-y border-ink/15 py-8 my-10 grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Раньше карточка вела анонима в /dashboard/medical-documents —
+                маршрут под RoleGuard. Человек кликал по подписи «Бесплатно» и
+                попадал на форму входа. Теперь аноним идёт в публичный ИИ-чат с
+                уже подставленным вопросом по этой статье, а регистрация
+                предлагается позже — когда он увидел пользу. */}
             <Link
-              to="/dashboard/medical-documents"
+              to={
+                isAuthed
+                  ? `${branding.routePrefix}/dashboard/medical-documents`
+                  : `/ai?q=${encodeURIComponent(
+                      `Подхожу ли я под статью ${diagnosis.article_number} «${diagnosis.title}»? Какие документы нужны, чтобы её подтвердить?`,
+                    )}`
+              }
               className="group flex flex-col p-5 border border-ink/20 hover:border-gold hover:bg-gold/5 transition-colors"
             >
               <Bot className="h-5 w-5 text-gold mb-3" />
               <h3 className="font-serif text-lg text-ink mb-1">
-                Проверить ИИ-помощником
+                {isAuthed ? "Проверить ИИ-помощником" : "Спросить ИИ по этой статье"}
               </h3>
               <p className="text-sm text-ink-soft mb-3 flex-1">
-                Загрузите медицинские документы — ИИ оценит, попадаете ли вы под эту статью.
+                {isAuthed
+                  ? "Загрузите медицинские документы — ИИ оценит, попадаете ли вы под эту статью."
+                  : "ИИ разберёт критерии статьи и подскажет, какие документы её подтверждают."}
               </p>
               <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold-deep inline-flex items-center gap-1">
-                Бесплатно <ArrowRight className="h-3 w-3" />
+                {isAuthed ? "Бесплатно" : "Бесплатно, без регистрации"}{" "}
+                <ArrowRight className="h-3 w-3" />
               </span>
             </Link>
             <button
