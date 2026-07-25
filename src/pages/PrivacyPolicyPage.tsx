@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 const PrivacyPolicyPage = () => {
   return (
@@ -14,7 +15,7 @@ const PrivacyPolicyPage = () => {
       <main className="bg-paper text-ink py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-3xl">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 12</span>
+            <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("privacy")}</span>
             <span className="font-mono text-ink/60 text-xs tracking-[0.25em] uppercase">
               152-ФЗ
             </span>

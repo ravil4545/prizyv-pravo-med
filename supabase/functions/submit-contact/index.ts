@@ -78,6 +78,11 @@ const getLeadMagnet = (source: string | undefined): LeadMagnetInfo | null => {
   return LEAD_MAGNETS[source] ?? null;
 };
 
+// Телефон стал опциональным (был обязательным, min 10 цифр).
+// Из-за этого требования фронтенд подставлял фиктивный "+70000000000" в
+// заявках за лид-магниты и в exit-intent — база заявок засорялась номерами,
+// по которым невозможно перезвонить. Теперь достаточно любого одного канала
+// связи: телефона ИЛИ email.
 const contactFormSchema = z.object({
   name: z.string()
     .trim()
@@ -87,7 +92,9 @@ const contactFormSchema = z.object({
     .trim()
     .regex(/^[\d\s+()-]+$/, { message: "Недопустимый формат телефона" })
     .min(10, { message: "Телефон должен содержать минимум 10 цифр" })
-    .max(18, { message: "Телефон должен содержать максимум 18 символов" }),
+    .max(18, { message: "Телефон должен содержать максимум 18 символов" })
+    .optional()
+    .or(z.literal("")),
   email: z.string()
     .trim()
     .email({ message: "Недопустимый формат email" })
@@ -101,7 +108,10 @@ const contactFormSchema = z.object({
   age: z.enum(AGE_VALUES).optional(),
   stage: z.enum(STAGE_VALUES).optional(),
   source: z.string().max(64).optional(),
-});
+}).refine(
+  (d) => Boolean(d.phone?.trim()) || Boolean(d.email?.trim()),
+  { message: "Укажите телефон или email — иначе мы не сможем ответить", path: ["phone"] },
+);
 
 function checkRateLimit(ipAddress: string): { allowed: boolean; remainingTime?: number } {
   const now = Date.now();
@@ -200,7 +210,8 @@ serve(async (req) => {
       .from('contact_submissions')
       .insert({
         name: validation.data.name,
-        phone: validation.data.phone,
+        // Колонка NOT NULL без дефолта — пустая строка вместо фиктивного номера.
+        phone: validation.data.phone || '',
         email: validation.data.email || '',
         message: validation.data.message,
         age: validation.data.age || null,
@@ -292,7 +303,9 @@ serve(async (req) => {
               <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                 <h2 style="color:#1a1a2e;">Заявка принята!</h2>
                 <p>Здравствуйте, ${validation.data.name}!</p>
-                <p>Мы получили вашу заявку и свяжемся с вами в ближайшее время по телефону <strong>${validation.data.phone}</strong>.</p>
+                <p>${validation.data.phone
+                  ? `Мы получили вашу заявку и свяжемся с вами в ближайшее время по телефону <strong>${validation.data.phone}</strong>.`
+                  : `Мы получили вашу заявку и ответим на этот адрес в ближайшее время.`}</p>
                 <div style="background:#f8f9fa;border-left:4px solid #6366f1;padding:16px;border-radius:4px;margin:16px 0;">
                   <p style="margin:0;font-weight:bold;">Ваше сообщение:</p>
                   <p style="margin:8px 0 0;color:#374151;">${validation.data.message}</p>
@@ -325,7 +338,7 @@ serve(async (req) => {
             <h2>${urgent ? '🔥 СРОЧНАЯ заявка с сайта' : 'Новая заявка с сайта'}</h2>
             <table style="border-collapse:collapse;">
               <tr><td style="padding:4px 12px;font-weight:bold;">Имя:</td><td style="padding:4px 12px;">${validation.data.name}</td></tr>
-              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;"><a href="tel:${validation.data.phone}">${validation.data.phone}</a></td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Телефон:</td><td style="padding:4px 12px;">${validation.data.phone ? `<a href="tel:${validation.data.phone}">${validation.data.phone}</a>` : '—'}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Email:</td><td style="padding:4px 12px;">${validation.data.email || '—'}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Возраст:</td><td style="padding:4px 12px;">${validation.data.age || '—'}</td></tr>
               <tr><td style="padding:4px 12px;font-weight:bold;">Стадия:</td><td style="padding:4px 12px;${urgent ? 'color:#c0392b;font-weight:bold;' : ''}">${stageLabel || '—'}</td></tr>

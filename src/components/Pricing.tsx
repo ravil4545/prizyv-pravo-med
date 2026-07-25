@@ -1,5 +1,6 @@
 import { ArrowRight, Phone } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 interface Plan {
   no: string;
@@ -79,7 +80,7 @@ const Pricing = () => {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-12">
         <div className="flex items-center gap-3 mb-3">
-          <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 06</span>
+          <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("pricing")}</span>
           <span className="h-px flex-1 bg-ink/15 max-w-[80px]" />
           <span className="font-mono text-ink/60 text-xs tracking-[0.25em] uppercase">
             Юридические услуги

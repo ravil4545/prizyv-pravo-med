@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowUpRight, FileText } from "lucide-react";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 interface Case {
   no: string;
@@ -82,7 +83,7 @@ const ComplexCases = () => {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-12">
         <div className="flex items-center gap-3 mb-3">
-          <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 04</span>
+          <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("cases")}</span>
           <span className="h-px flex-1 bg-ink/15 max-w-[80px]" />
           <span className="font-mono text-ink/60 text-xs tracking-[0.25em] uppercase">
             Архив дел

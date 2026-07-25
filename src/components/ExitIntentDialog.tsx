@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/contexts/BrandingContext";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
+import { OUT_OF_SEQUENCE } from "@/lib/sectionNumbers";
 
 const STORAGE_KEY = "exit_intent_shown_v1";
 
@@ -41,6 +42,7 @@ const ExitIntentDialog = () => {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -123,15 +125,27 @@ const ExitIntentDialog = () => {
       });
       return;
     }
+    if (!consent) {
+      toast({
+        variant: "destructive",
+        title: "Нужно согласие",
+        description: "Отметьте согласие на обработку персональных данных.",
+      });
+      return;
+    }
     setSubmitting(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("submit-contact", {
         body: {
           name: "Лид с попапа",
-          phone: cleanedPhone || "+70000000000",
+          // Фиктивный "+70000000000" убран: бэкенд теперь принимает заявку
+          // с одним только email, и в базе не остаётся мёртвых номеров.
+          phone: cleanedPhone || "",
           email: cleanedEmail || "",
-          message: "Запрос чек-листа «5 ошибок призывника» через exit-intent попап.",
+          // В теле уходило название «5 ошибок призывника», а человеку
+          // показывался и отдавался совсем другой материал.
+          message: `Запрос материала «${EXIT_INTENT_PDF.title}» через exit-intent попап.`,
           source: "exit_intent",
         },
       });
@@ -177,7 +191,8 @@ const ExitIntentDialog = () => {
 
         <div className="p-7 sm:p-9">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 00</span>
+            {/* Намеренно вне последовательности: это попап, а не раздел досье. */}
+            <span className="font-mono text-gold text-xs tracking-[0.3em]">{OUT_OF_SEQUENCE}</span>
             <span className="font-mono text-gold/70 text-[10px] tracking-[0.25em] uppercase">
               Подарок при уходе
             </span>
@@ -280,10 +295,31 @@ const ExitIntentDialog = () => {
                   />
                 </div>
 
+                <label className="flex items-start gap-2.5 text-[11px] leading-relaxed text-paper/70 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[hsl(var(--gold))] cursor-pointer"
+                  />
+                  <span>
+                    Согласен на обработку персональных данных —{" "}
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-paper"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      политика конфиденциальности
+                    </a>
+                  </span>
+                </label>
+
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="group inline-flex items-center justify-between w-full gap-3 px-5 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-paper transition-colors disabled:opacity-60"
+                  disabled={submitting || !consent}
+                  className="group inline-flex items-center justify-between w-full gap-3 px-5 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-paper transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <span className="flex items-center gap-2">
                     <FileDown className="h-4 w-4" />
@@ -294,10 +330,6 @@ const ExitIntentDialog = () => {
 
                 <p className="text-[10px] text-paper/55 leading-relaxed">
                   Без спама. Только материал и одно письмо с уточнением вашей ситуации.
-                  Нажимая кнопку, вы соглашаетесь на обработку персональных данных —{" "}
-                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-paper">
-                    политика
-                  </a>.
                 </p>
               </form>
             </>

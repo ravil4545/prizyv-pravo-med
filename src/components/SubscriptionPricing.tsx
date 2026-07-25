@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sectionNumber } from "@/lib/sectionNumbers";
 import {
   ArrowRight,
   Bot,
@@ -174,7 +175,7 @@ const SubscriptionPricing = () => {
       <div className="relative container mx-auto px-4 sm:px-6 lg:px-12">
         {/* Header */}
         <div className="flex items-center gap-3 mb-3">
-          <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 07</span>
+          <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("subscription")}</span>
           <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
           <span className="font-mono text-gold/80 text-xs tracking-[0.25em] uppercase">
             ИИ-кабинет

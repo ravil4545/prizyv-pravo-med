@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { GraduationCap, ScrollText, ZoomIn } from "lucide-react";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 interface Diploma {
   /** Путь к фото в /public/diplomas/. Файл кладётся вручную (см. README в папке). */
@@ -46,8 +47,10 @@ const Credentials = () => {
         <div className="max-w-6xl mx-auto">
           {/* Заголовок секции */}
           <div className="text-center mb-10 sm:mb-12">
+            {/* Секция была единственной на главной без номера — из-за неё
+                последовательность «№ NN» визуально рвалась. */}
             <div className="font-mono text-[10px] sm:text-xs tracking-[0.3em] uppercase text-gold mb-3">
-              Квалификация
+              {sectionNumber("credentials")} · Квалификация
             </div>
             <h2 className="font-serif text-3xl sm:text-4xl text-ink mb-3">
               Дипломы и образование

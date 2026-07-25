@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle, Check, ChevronRight } from "lucide-react";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 interface Station {
   step: string;
@@ -118,7 +119,7 @@ const ConscriptionMap = () => {
 
       <div className="relative container mx-auto px-4 sm:px-6 lg:px-12">
         <div className="flex items-center gap-3 mb-3">
-          <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 03</span>
+          <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("map")}</span>
           <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
           <span className="font-mono text-gold/70 text-xs tracking-[0.25em] uppercase">
             Карта призывных мероприятий

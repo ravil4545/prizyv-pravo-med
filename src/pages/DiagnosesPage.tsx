@@ -8,6 +8,7 @@ import SEOHead from "@/components/SEOHead";
 import { Input } from "@/components/ui/input";
 import { Search, ArrowUpRight, FileSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sectionNumber } from "@/lib/sectionNumbers";
 import {
   CATEGORY_DISPLAY_ORDER,
   categoryInfo,
@@ -114,7 +115,7 @@ const DiagnosesPage = () => {
       <main className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 sm:py-16 pb-24 md:pb-16">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 07</span>
+            <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("diagnoses")}</span>
             <span className="h-px flex-1 bg-ink/15 max-w-[80px]" />
             <span className="font-mono text-ink/60 text-xs tracking-[0.25em] uppercase">
               Справочник

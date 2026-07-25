@@ -8,6 +8,7 @@ import { Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import BlogPostImage from "@/components/BlogPostImage";
+import { sectionNumber } from "@/lib/sectionNumbers";
 import { blogExcerpt, normalizeBlogCategory, normalizeBlogTitle } from "@/lib/blogPresentation";
 
 interface BlogPost {
@@ -68,6 +69,11 @@ const BlogPreview = () => {
     <section className="py-20 bg-muted/30" aria-labelledby="blog-heading">
       <div className="container mx-auto px-4">
         <header className="text-center mb-12">
+          {/* Секция шла без номера, из-за чего после «№ 11» у пользователя
+              появлялся безымянный блок, а следом «№ 10». */}
+          <div className="font-mono text-[10px] sm:text-xs tracking-[0.3em] uppercase text-gold mb-3">
+            {sectionNumber("blog")} · Блог
+          </div>
           <h2 id="blog-heading" className="text-3xl md:text-4xl font-bold mb-4">Последние статьи</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Актуальная информация о призыве и воинском учёте

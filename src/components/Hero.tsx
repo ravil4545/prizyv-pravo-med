@@ -5,6 +5,7 @@ import { useBranding } from "@/contexts/BrandingContext";
 import BrandedAvatar from "@/components/BrandedAvatar";
 import { trackEvent } from "@/lib/analytics";
 import { PUBLIC_AI_FREE_LABEL } from "@/lib/aiLimits";
+import { sectionNumber } from "@/lib/sectionNumbers";
 
 const Hero = () => {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ const Hero = () => {
           <div className="lg:col-span-7">
             {/* Eyebrow — section number + lawyer's name */}
             <div className="flex items-center gap-3 mb-5">
-              <span className="font-mono text-gold text-xs tracking-[0.3em]">№ 01</span>
+              <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("hero")}</span>
               <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
               <span className="font-mono text-gold/80 text-[10px] sm:text-xs tracking-[0.25em] uppercase truncate">
                 {branding.displayName} · {branding.subtitle.toLowerCase()}

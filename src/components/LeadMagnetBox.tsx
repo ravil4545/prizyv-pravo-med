@@ -24,6 +24,7 @@ interface Props {
 const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
+  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -37,13 +38,26 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
       });
       return;
     }
+    // Явное согласие вместо формулировки «нажимая кнопку, вы соглашаетесь»:
+    // в ContactForm чекбокс есть, здесь его не было — непоследовательно для
+    // проекта, который сам объясняет клиентам 152-ФЗ.
+    if (!consent) {
+      toast({
+        variant: "destructive",
+        title: "Нужно согласие",
+        description: "Отметьте согласие на обработку персональных данных.",
+      });
+      return;
+    }
     setSubmitting(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("submit-contact", {
         body: {
           name: `Запрос материала: ${magnet.id}`,
-          phone: "+70000000000",
+          // Раньше здесь уходил фиктивный "+70000000000" — телефон был
+          // обязателен на бэкенде, и база заявок засорялась. Теперь бэкенд
+          // принимает заявку с одним только email.
           email: email.trim(),
           message: `Запрос лид-магнита «${magnet.title}» (id=${magnet.id}).`,
           source: `lead_magnet:${magnet.id}`,
@@ -144,10 +158,35 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
           }`}
         />
 
+        <label
+          className={`flex items-start gap-2.5 text-[11px] leading-relaxed cursor-pointer ${
+            variant === "inline" ? "text-ink/70" : "text-paper/70"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[hsl(var(--gold))] cursor-pointer"
+          />
+          <span>
+            Согласен на обработку персональных данных —{" "}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              политика конфиденциальности
+            </a>
+          </span>
+        </label>
+
         <button
           type="submit"
-          disabled={submitting}
-          className={`group inline-flex items-center justify-between w-full gap-3 px-5 py-3.5 font-semibold text-sm transition-colors disabled:opacity-60 ${
+          disabled={submitting || !consent}
+          className={`group inline-flex items-center justify-between w-full gap-3 px-5 py-3.5 font-semibold text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
             variant === "inline"
               ? "bg-ink text-paper hover:bg-gold hover:text-ink"
               : "bg-gold text-ink hover:bg-paper"
@@ -161,13 +200,6 @@ const LeadMagnetBox = ({ magnet, variant = "card" }: Props) => {
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           )}
         </button>
-
-        <p className={`text-[10px] leading-relaxed ${variant === "inline" ? "text-ink/50" : "text-paper/50"}`}>
-          Нажимая кнопку, вы соглашаетесь на обработку персональных данных —{" "}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
-            политика конфиденциальности
-          </a>.
-        </p>
 
         {magnet.promoText && (
           <p className={`text-[11px] leading-relaxed ${variant === "inline" ? "text-ink/55" : "text-paper/55"}`}>
