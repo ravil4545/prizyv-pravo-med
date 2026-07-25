@@ -4,22 +4,61 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import Pricing from "@/components/Pricing";
 import SubscriptionPricing from "@/components/SubscriptionPricing";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { 
-  Scale, 
-  FileText, 
-  Heart, 
-  Users, 
-  Clock, 
-  Shield, 
-  CheckCircle,
+import {
+  Scale,
+  FileText,
+  Heart,
+  Users,
   Phone,
   BookOpen,
   Gavel,
   FileCheck,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRight,
+  type LucideIcon,
 } from "lucide-react";
+import { sectionNumber } from "@/lib/sectionNumbers";
+
+interface ServiceItem {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  cta: string;
+  to: string;
+}
+
+/** Внутренние маршруты рендерим через Link, tel/hash/файлы — обычной ссылкой. */
+const isExternalHref = (href: string) =>
+  href.startsWith("tel:") || href.startsWith("#") || href.startsWith("http") || href.endsWith(".pdf");
+
+/**
+ * Карточка услуги в editorial-языке: острые углы, тонкая рамка, золотая иконка.
+ * Заменила shadcn-Card с градиентной заливкой и скруглениями — из-за неё
+ * страница выглядела как другой сайт.
+ */
+const ServiceCard = ({ service }: { service: ServiceItem }) => {
+  const Icon = service.icon;
+  const inner = (
+    <>
+      <Icon className="h-5 w-5 text-gold mb-3" />
+      <h3 className="font-serif text-lg text-ink leading-tight mb-1.5">{service.title}</h3>
+      <p className="text-sm text-ink-soft flex-1">{service.description}</p>
+      <span className="mt-4 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-gold-deep">
+        {service.cta}
+        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </>
+  );
+
+  const className =
+    "group flex flex-col h-full bg-background p-5 hover:bg-gold/5 transition-colors";
+
+  return isExternalHref(service.to) ? (
+    <a href={service.to} className={className}>{inner}</a>
+  ) : (
+    <Link to={service.to} className={className}>{inner}</Link>
+  );
+};
 
 const ServicesPage = () => {
   const handleConsultation = () => {
@@ -106,9 +145,6 @@ const ServicesPage = () => {
     },
   ];
 
-  /** Внутренние маршруты рендерим через Link, tel/hash/файлы — обычной ссылкой. */
-  const isExternalHref = (href: string) =>
-    href.startsWith("tel:") || href.startsWith("#") || href.startsWith("http") || href.endsWith(".pdf");
 
   const serviceSteps = [
     {
@@ -146,111 +182,93 @@ const ServicesPage = () => {
       />
       <Header />
       
-      {/* Hero Section */}
-      <section className="py-20 bg-gradient-hero text-primary-foreground">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight">
+      {/* Шапка страницы в editorial-языке (§7.1).
+          Была градиентная «SaaS»-заливка с крупным bold-заголовком — рядом с
+          главной страница читалась как чужой сайт, хотя «Услуги» это прямой
+          пункт главного меню. */}
+      <section className="bg-ink text-paper">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-14 sm:py-20">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="font-mono text-gold text-xs tracking-[0.3em]">{sectionNumber("services")}</span>
+              <span className="h-px flex-1 bg-gold/30 max-w-[80px]" />
+              <span className="font-mono text-gold/80 text-[10px] sm:text-xs tracking-[0.25em] uppercase">
+                Услуги и цены
+              </span>
+            </div>
+
+            <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-[1.05] mb-5">
               Полный спектр услуг
-              <span className="block text-accent-light">для призывников</span>
+              <span className="block italic font-light text-gold mt-1">для призывников.</span>
             </h1>
-            <p className="text-xl md:text-2xl mb-8 text-primary-foreground/90 max-w-3xl mx-auto leading-relaxed">
-              От первичной консультации до итогового решения призывной комиссии —
-              профессиональное сопровождение на каждом этапе
+
+            <p className="text-base sm:text-lg text-paper/85 leading-relaxed max-w-2xl mb-8">
+              От первичной консультации до итогового решения призывной комиссии — сопровождение
+              на каждом этапе. Ниже — что входит в работу и сколько это стоит.
             </p>
-            <Button 
-              variant="hero" 
-              size="lg"
-              onClick={handleConsultation}
-              className="text-lg px-8 py-4"
-            >
-              <Phone className="h-5 w-5" />
-              Получить консультацию
-            </Button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a
+                href="#pricing"
+                className="group inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-gold-deep hover:text-paper transition-colors"
+              >
+                Смотреть тарифы
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </a>
+              <button
+                onClick={handleConsultation}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 border border-paper/30 text-paper font-medium text-sm hover:border-gold hover:text-gold transition-colors"
+              >
+                <Phone className="h-4 w-4 text-gold" />
+                Бесплатная консультация
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Legal Services */}
-      <section className="py-20 bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Юридические услуги
+      {/* Юридические услуги */}
+      <section className="bg-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-16 sm:py-20">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
+                Юридические услуги
+              </span>
+              <span className="h-px flex-1 bg-ink/10" />
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl text-ink mb-10 max-w-2xl">
+              Правовая поддержка на всех этапах призывной процедуры
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Профессиональная правовая поддержка на всех этапах призывной процедуры
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {legalServices.map((service, index) => {
-              const Icon = service.icon;
-              return (
-                <Card key={index} className="shadow-medium hover:shadow-strong transition-shadow duration-300 border-0 bg-gradient-card">
-                  <CardHeader className="pb-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary mb-4">
-                      <Icon className="h-6 w-6 text-primary-foreground" />
-                    </div>
-                    <CardTitle className="text-lg text-foreground">{service.title}</CardTitle>
-                    <CardDescription className="text-muted-foreground">
-                      {service.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button asChild variant="outline" size="sm" className="w-full">
-                      {isExternalHref(service.to) ? (
-                        <a href={service.to}>{service.cta}</a>
-                      ) : (
-                        <Link to={service.to}>{service.cta}</Link>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-ink/10 border border-ink/10">
+              {legalServices.map((service) => (
+                <ServiceCard key={service.title} service={service} />
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Medical Services */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Медицинские консультации
+      <section className="bg-paper-deep/40">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-16 sm:py-20">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
+                Медицинская часть
+              </span>
+              <span className="h-px flex-1 bg-ink/10" />
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl text-ink mb-10 max-w-2xl">
+              Разбор медицинских документов и план обследований
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Экспертный анализ медицинских документов и рекомендации по обследованиям
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {medicalServices.map((service, index) => {
-              const Icon = service.icon;
-              return (
-                <Card key={index} className="shadow-medium hover:shadow-strong transition-shadow duration-300 border-0 bg-background">
-                  <CardHeader className="pb-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 mb-4">
-                      <Icon className="h-6 w-6 text-accent" />
-                    </div>
-                    <CardTitle className="text-lg text-foreground">{service.title}</CardTitle>
-                    <CardDescription className="text-muted-foreground text-sm">
-                      {service.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button asChild variant="outline" size="sm" className="w-full">
-                      {isExternalHref(service.to) ? (
-                        <a href={service.to}>{service.cta}</a>
-                      ) : (
-                        <Link to={service.to}>{service.cta}</Link>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-ink/10 border border-ink/10">
+              {medicalServices.map((service) => (
+                <ServiceCard key={service.title} service={service} />
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -261,55 +279,67 @@ const ServicesPage = () => {
       <Pricing />
       <SubscriptionPricing />
 
-      {/* Process Steps */}
-      <section className="py-20 bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Как мы работаем
+      {/* Порядок работы. Соединительная линия между шагами убрана: она была
+          absolute без relative у родителя и позиционировалась от случайного
+          контейнера. */}
+      <section className="bg-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-16 sm:py-20">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
+                Порядок работы
+              </span>
+              <span className="h-px flex-1 bg-ink/10" />
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl text-ink mb-10 max-w-2xl">
+              Как строится работа по делу
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Пошаговый процесс работы с каждым клиентом
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-            {serviceSteps.map((step, index) => (
-              <div key={index} className="text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-primary mx-auto mb-4">
-                  <span className="text-2xl font-bold text-primary-foreground">{step.step}</span>
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">{step.title}</h3>
-                <p className="text-muted-foreground text-sm">{step.description}</p>
-                {index < serviceSteps.length - 1 && (
-                  <div className="hidden md:block absolute top-8 left-full w-full h-0.5 bg-gradient-to-r from-primary to-transparent transform translate-x-4"></div>
-                )}
-              </div>
-            ))}
+            <ol className="border-y border-ink/15">
+              {serviceSteps.map((step) => (
+                <li
+                  key={step.step}
+                  className="grid grid-cols-[3rem_1fr] sm:grid-cols-[5rem_1fr] gap-4 py-5 border-b border-ink/10 last:border-0"
+                >
+                  <span className="font-mono text-sm text-gold-deep tracking-[0.15em]">{step.step}</span>
+                  <div className="min-w-0">
+                    <h3 className="font-serif text-lg text-ink leading-tight">{step.title}</h3>
+                    <p className="text-sm text-ink-soft mt-1">{step.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-primary text-primary-foreground">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Готовы начать работу?
+      {/* Финальный блок */}
+      <section className="bg-ink text-paper">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-16 sm:py-20">
+          <div className="max-w-3xl">
+            <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl leading-tight mb-4">
+              Разберём вашу ситуацию
+              <span className="block italic font-light text-gold mt-1">за 15 минут, бесплатно.</span>
             </h2>
-            <p className="text-xl mb-8 text-primary-foreground/90">
-              Получите бесплатную консультацию уже сегодня
+            <p className="text-base text-paper/80 mb-8 max-w-xl">
+              Без обязательств: посмотрим документы, назовём подходящие статьи Расписания болезней
+              и скажем, чего не хватает.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button 
-                variant="hero" 
-                size="lg"
-                onClick={handleConsultation}
-                className="w-full sm:w-auto text-lg px-8 py-4 bg-white text-primary hover:bg-gray-100"
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                to="/razbor"
+                className="group inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gold text-ink font-semibold text-sm hover:bg-gold-deep hover:text-paper transition-colors"
               >
-                <Phone className="h-5 w-5" />
-                Бесплатная консультация
-              </Button>
+                Разбор за 3 минуты — бесплатно
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+              <button
+                onClick={handleConsultation}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 border border-paper/30 text-paper font-medium text-sm hover:border-gold hover:text-gold transition-colors"
+              >
+                <Phone className="h-4 w-4 text-gold" />
+                Написать юристу
+              </button>
             </div>
           </div>
         </div>

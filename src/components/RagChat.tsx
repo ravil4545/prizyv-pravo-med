@@ -174,8 +174,11 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
         onPointerUp={onPointerUp}
         style={translateStyle}
         className={cn(
-          "fixed z-40 flex items-center gap-2 rounded-full shadow-xl transition-shadow duration-200",
-          "bg-gradient-to-br from-primary to-accent text-white",
+          // Editorial-язык вместо градиента (§7.1): виджет висит поверх
+          // страниц с острыми углами и палитрой paper/ink/gold, а сам был
+          // из другой системы — градиент, скругление, чистый white.
+          "fixed z-40 flex items-center gap-2 shadow-strong transition-shadow duration-200",
+          "bg-ink text-paper border border-gold/40",
           "hover:shadow-2xl select-none touch-none",
           // Mobile: compact icon-only button on left side
           "left-4 bottom-20 h-12 w-12 justify-center",
@@ -199,7 +202,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
         <div
           style={translateStyle}
           className={cn(
-            "fixed z-40 flex flex-col bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden",
+            "fixed z-40 flex flex-col bg-paper shadow-2xl border border-ink/20 overflow-hidden",
             // Mobile: near full-screen above MobileBottomNav
             "left-2 right-2 bottom-36 top-16",
             // Desktop: fixed panel above the button
@@ -211,7 +214,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
           <div
             className={cn(
               "flex items-center justify-between px-4 py-3",
-              "bg-gradient-to-r from-primary to-accent text-white shrink-0",
+              "bg-ink text-paper shrink-0",
               "md:cursor-grab active:md:cursor-grabbing select-none",
             )}
           >
@@ -223,7 +226,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+              className="p-1.5 hover:bg-paper/15 transition-colors"
               aria-label="Закрыть"
             >
               <X className="h-4 w-4" />
@@ -235,10 +238,10 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
             {messages.map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn(
-                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words shadow-sm",
+                  "max-w-[88%] px-3.5 py-2.5 leading-relaxed break-words shadow-sm",
                   m.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-tr-sm"
-                    : "border border-slate-200 bg-white text-slate-950 rounded-tl-sm",
+                    ? "bg-ink text-paper"
+                    : "border border-ink/15 bg-background text-ink",
                 )}>
                   {m.content
                     ? (
@@ -247,7 +250,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                           "prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0",
                           m.role === "user"
                             ? "text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground prose-strong:text-primary-foreground prose-headings:text-primary-foreground prose-a:text-primary-foreground"
-                            : "text-slate-950 prose-p:text-slate-950 prose-li:text-slate-950 prose-strong:text-slate-950 prose-headings:text-slate-950 prose-a:text-primary",
+                            : "text-ink prose-p:text-ink prose-li:text-ink prose-strong:text-ink prose-headings:text-ink prose-a:text-gold-deep",
                         )}
                       >
                         <ReactMarkdown
@@ -273,18 +276,18 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
               </div>
             ))}
             {error && (
-              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>
+              <div className="text-xs text-seal bg-seal/5 border border-seal/30 px-3 py-2">{error}</div>
             )}
           </div>
 
           {/* Input / гейт — тот же лимит и та же формулировка, что и на /ai */}
           {gateShown ? (
-            <div className="shrink-0 p-4 border-t border-gray-100 text-center">
-              <p className="text-sm font-semibold text-slate-950">
+            <div className="shrink-0 p-4 border-t border-ink/10 text-center">
+              <p className="text-sm font-semibold text-ink">
                 Вы задали {PUBLIC_AI_FREE_LIMIT} бесплатных{" "}
                 {plural(PUBLIC_AI_FREE_LIMIT, "вопрос", "вопроса", "вопросов")}
               </p>
-              <p className="text-xs text-slate-500 mt-1 mb-3">
+              <p className="text-xs text-ink-soft mt-1 mb-3">
                 Создайте бесплатный аккаунт, чтобы продолжить без лимита и сохранить переписку.
               </p>
               <button
@@ -292,14 +295,14 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                   trackEvent("ai_public_gate_signup_click");
                   navigate("/auth?mode=signup&next=/dashboard/ai-chat");
                 }}
-                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gold text-ink text-sm font-semibold hover:bg-gold-deep hover:text-paper transition-colors"
               >
                 <Sparkles className="h-4 w-4" /> Создать бесплатный аккаунт
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           ) : (
-            <div className="shrink-0 p-3 border-t border-gray-100">
+            <div className="shrink-0 p-3 border-t border-ink/10">
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={inputRef}
@@ -310,9 +313,9 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                   rows={1}
                   disabled={loading}
                   className={cn(
-                    "flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm",
-                    "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary",
-                    "disabled:opacity-50 placeholder:text-gray-400 max-h-24 overflow-y-auto",
+                    "flex-1 resize-none border border-ink/20 bg-background px-3 py-2 text-sm text-ink",
+                    "focus:outline-none focus:border-gold",
+                    "disabled:opacity-50 placeholder:text-ink/35 max-h-24 overflow-y-auto",
                   )}
                   style={{ minHeight: "40px" }}
                   onInput={(e) => {
@@ -325,8 +328,8 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                   onClick={handleSend}
                   disabled={loading || !input.trim()}
                   className={cn(
-                    "shrink-0 h-10 w-10 rounded-xl flex items-center justify-center bg-primary text-white transition-all",
-                    "hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
+                    "shrink-0 h-10 w-10 flex items-center justify-center bg-gold text-ink transition-all",
+                    "hover:bg-gold-deep hover:text-paper active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
                   )}
                   aria-label="Отправить"
                 >
@@ -334,7 +337,7 @@ export function RagChat({ initialOpen = false }: RagChatProps) {
                 </button>
               </div>
               {/* Дисклеймер был только на /ai — в виджете его не хватало. */}
-              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-ink/45">
                 <span>ИИ может ошибаться. Важные решения проверяйте с юристом.</span>
                 {!isAuthed && remainingLabel(asked) && (
                   <span className="shrink-0 font-medium tabular-nums">{remainingLabel(asked)}</span>

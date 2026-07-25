@@ -37,6 +37,22 @@ export default {
           deep: "hsl(var(--gold-deep))",
         },
         seal: "hsl(var(--seal-red))",
+        // --success объявлен в index.css для обеих тем, но в конфиг не был
+        // проброшен — класса bg-success физически не существовало, поэтому им
+        // никто и не пользовался.
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        // Статусы дела: ссылаются на семантические цвета палитры, своих
+        // оттенков не заводят (см. комментарий в index.css).
+        status: {
+          todo: "hsl(var(--status-todo))",
+          progress: "hsl(var(--status-progress))",
+          done: "hsl(var(--status-done))",
+          blocked: "hsl(var(--status-blocked))",
+          urgent: "hsl(var(--status-urgent))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -93,8 +109,13 @@ export default {
         'accent': 'var(--shadow-accent)',
       },
       transitionTimingFunction: {
-        'smooth': 'var(--transition-smooth)',
-        'bounce': 'var(--transition-bounce)',
+        // Раньше сюда подставлялись --transition-smooth / --transition-bounce —
+        // а это shorthand «all 0.4s cubic-bezier(...)». В результате утилиты
+        // выдавали `transition-timing-function: all 0.4s ...`, браузер это
+        // молча игнорировал, и ease-smooth / ease-bounce не работали вовсе.
+        // Нужны чистые timing-function.
+        'smooth': 'var(--ease-smooth)',
+        'bounce': 'var(--ease-bounce)',
       },
       borderRadius: {
         lg: "var(--radius)",

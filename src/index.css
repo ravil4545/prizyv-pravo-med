@@ -201,9 +201,23 @@
 
     --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-bounce: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    /* Чистая timing-function (без shorthand `all 0.4s`) — для точечных
-       transition'ов, где var(--transition-smooth) давал бы невалидное значение. */
+    /* Чистые timing-function (без shorthand `all 0.4s`) — для точечных
+       transition'ов и для утилит Tailwind ease-smooth / ease-bounce.
+       В конфиг Tailwind ДОЛЖНЫ попадать именно эти переменные: подстановка
+       shorthand'а давала `transition-timing-function: all 0.4s ...`, что
+       браузер молча игнорирует — утилиты не работали вовсе. */
     --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* ── Статусы дела (§7.2) ──────────────────────────────────────────────
+       Отдельных оттенков намеренно НЕ вводим: статусы ссылаются на уже
+       существующие семантические цвета палитры. Иначе к editorial-палитре из
+       семи цветов добавилось бы ещё пять, и она перестала бы быть системой. */
+    --status-todo:     var(--muted-foreground);  /* не начато */
+    --status-progress: var(--gold);              /* в работе */
+    --status-done:     var(--success);           /* готово */
+    --status-blocked:  var(--seal-red);          /* заблокировано */
+    --status-urgent:   var(--destructive);       /* горит срок */
 
     /* Sharper radii — archival feel */
     --radius: 0.25rem;
@@ -269,6 +283,15 @@
     --sidebar-accent-foreground: 38 38% 95%;
     --sidebar-border:            218 33% 24%;
     --sidebar-ring:              42 75% 60%;
+
+    /* Статусы дела ссылаются на семантические цвета, поэтому в тёмной теме
+       достаточно переобъявить сами ссылки — значения подтянутся из блока
+       выше (--gold, --success, --seal-red и т.д. здесь уже переопределены). */
+    --status-todo:     var(--muted-foreground);
+    --status-progress: var(--gold);
+    --status-done:     var(--success);
+    --status-blocked:  var(--seal-red);
+    --status-urgent:   var(--destructive);
   }
 }
 
