@@ -1,22 +1,16 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
-/**
- * Origin из общего белого списка (_shared/cors.ts).
- * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
- * то есть возвращавший Origin атакующего и обнулявший проверку.
- * "null" = «никому»: браузер не отдаст ответ чужой странице.
- */
-const getAllowedOrigin = (): string => Deno.env.get("ALLOWED_ORIGIN") ?? "null";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": getAllowedOrigin(),
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Заголовки собираются НА ЗАПРОС, а не один раз при загрузке модуля:
+// const-объекту Origin запроса недоступен, и функция отвечала бы одним доменом
+// всем — превью Lovable и localhost перестали бы работать.
+const cors = (req: Request) => corsHeaders(req);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors(req) });
   }
 
   try {
@@ -24,7 +18,7 @@ serve(async (req) => {
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: true, message: "Image base64 is required" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors(req), "Content-Type": "application/json" },
         status: 400,
       });
     }
@@ -104,7 +98,7 @@ serve(async (req) => {
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: true, message: "Слишком много запросов, подождите минуту" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...cors(req), "Content-Type": "application/json" },
           status: 429,
         });
       }
@@ -128,7 +122,7 @@ serve(async (req) => {
           wasEnhanced: false,
           message: "Изображение уже хорошего качества",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { headers: { ...cors(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -140,13 +134,13 @@ serve(async (req) => {
         enhancedBase64: enhancedImageUrl,
         wasEnhanced: true,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { headers: { ...cors(req), "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
     console.error("Enhancement error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: true, message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors(req), "Content-Type": "application/json" },
       status: 500,
     });
   }

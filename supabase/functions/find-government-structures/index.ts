@@ -1,23 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
-/**
- * Origin из общего белого списка (_shared/cors.ts).
- * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
- * то есть возвращавший Origin атакующего и обнулявший проверку.
- * "null" = «никому»: браузер не отдаст ответ чужой странице.
- */
-const getAllowedOrigin = (): string => Deno.env.get("ALLOWED_ORIGIN") ?? "null";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": getAllowedOrigin(),
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Заголовки собираются НА ЗАПРОС, а не один раз при загрузке модуля:
+// const-объекту Origin запроса недоступен, и функция отвечала бы одним доменом
+// всем — превью Lovable и localhost перестали бы работать.
+const cors = (req: Request) => corsHeaders(req);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors(req) });
   }
 
   try {
@@ -123,13 +117,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ suggestions }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors(req), "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error in find-government-structures:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors(req), "Content-Type": "application/json" },
     });
   }
 });
