@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Loader2,
@@ -44,9 +44,22 @@ import {
 //  он уже видит свой план и не хочет его потерять.
 // ════════════════════════════════════════════════════════════════════════
 
+// Замеры на проде: разбор занимает 20–26 секунд (поиск по базе знаний +
+// LLM-реранк + основной запрос). Столько смотреть на один спиннер — это
+// читается как зависание, поэтому показываем, что именно сейчас происходит.
+// Сроки подобраны по фактическому профилю запроса, а не «на глаз».
+const PROGRESS_STEPS = [
+  { at: 0, text: "Разбираем описание…" },
+  { at: 4000, text: "Ищем подходящие статьи Расписания болезней…" },
+  { at: 10000, text: "Сверяем с экспертной базой юриста…" },
+  { at: 17000, text: "Собираем чек-листы: медицинский и юридический…" },
+  { at: 26000, text: "Почти готово — оформляем разбор…" },
+];
+
 const CaseReviewPage = () => {
   const navigate = useNavigate();
   const branding = useBranding();
+  const [progressText, setProgressText] = useState(PROGRESS_STEPS[0].text);
 
   const [stage, setStage] = useState<ReviewStage | null>(null);
   const [complaint, setComplaint] = useState("");
@@ -59,6 +72,17 @@ const CaseReviewPage = () => {
   const resultRef = useRef<HTMLDivElement>(null);
 
   const canSubmit = Boolean(stage && hasDocuments && complaint.trim().length >= 3);
+
+  // Пока идёт запрос — продвигаем подпись по шагам. Таймеры чистятся при
+  // размонтировании и при завершении, чтобы не тикали в фоне.
+  useEffect(() => {
+    if (!loading) return;
+    setProgressText(PROGRESS_STEPS[0].text);
+    const timers = PROGRESS_STEPS.slice(1).map((step) =>
+      window.setTimeout(() => setProgressText(step.text), step.at),
+    );
+    return () => timers.forEach(window.clearTimeout);
+  }, [loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,9 +256,18 @@ const CaseReviewPage = () => {
                 {loading ? "Собираем разбор…" : "Получить разбор"}
                 {!loading && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
               </button>
-              <p className="mt-2.5 text-[11px] font-mono tracking-wide text-ink/50">
-                Бесплатно · без регистрации · ответ за ~30 секунд
-              </p>
+              {loading ? (
+                <p className="mt-2.5 text-xs text-ink-soft" aria-live="polite">
+                  {progressText}
+                  <span className="block mt-0.5 text-[11px] text-ink/45">
+                    Обычно занимает 20–30 секунд — не закрывайте страницу.
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-2.5 text-[11px] font-mono tracking-wide text-ink/50">
+                  Бесплатно · без регистрации · разбор занимает 20–30 секунд
+                </p>
+              )}
             </div>
           </form>
 
