@@ -48,6 +48,22 @@ interface Conversation {
   updated_at: string;
 }
 
+// Должно совпадать с HISTORY_LIMIT_FOR_MODEL и messageSchema в edge-функции chat.
+// В интерфейсе оставляем видимой всю историю, но в запрос отправляем только тот
+// хвост, который сервер всё равно передаёт модели. Иначе длинный диалог (> 50
+// сообщений) не проходит chatRequestSchema и получает 400.
+const CHAT_REQUEST_HISTORY_LIMIT = 16;
+const CHAT_MESSAGE_MAX_CHARS = 10_000;
+
+const buildChatRequestMessages = (items: Message[]) =>
+  items
+    .slice(-CHAT_REQUEST_HISTORY_LIMIT)
+    .map(({ role, content }) => ({
+      role,
+      content: content.slice(0, CHAT_MESSAGE_MAX_CHARS),
+    }))
+    .filter(({ content }) => content.trim().length > 0);
+
 // Стартовые подсказки (пустой чат) — заполняют поле ввода, можно отредактировать.
 const QUICK_REPLIES_START = [
   "Какие диагнозы дают категорию В?",
@@ -96,6 +112,7 @@ const AIChatDashboardPage = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const pendingInitialScrollConversationRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const failedAssistantIdRef = useRef<{ prompt: string; id: string } | null>(null);
@@ -270,14 +287,20 @@ const AIChatDashboardPage = () => {
   }, []);
 
   const scrollToBottom = useCallback((force = false) => {
-    window.requestAnimationFrame(() => {
+    const applyScroll = () => {
       if (!force && !shouldAutoScrollRef.current) return;
       const viewport = getChatViewport();
       if (!viewport) return;
       viewport.scrollTop = viewport.scrollHeight;
       shouldAutoScrollRef.current = true;
       setShowScrollJump(false);
-    });
+    };
+
+    // При первом показе загруженной истории прокручиваем сразу, пока соседний
+    // scroll-listener не успел принять верх страницы за ручную позицию
+    // пользователя. Следующий кадр страхует от позднего перерасчёта высоты.
+    if (force) applyScroll();
+    window.requestAnimationFrame(applyScroll);
   }, [getChatViewport]);
 
   const handleChatScroll = useCallback(() => {
@@ -290,14 +313,20 @@ const AIChatDashboardPage = () => {
   }, [getChatViewport]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, sending, scrollToBottom]);
+    const isInitialConversationLoad =
+      !!currentConversationId &&
+      pendingInitialScrollConversationRef.current === currentConversationId;
+    scrollToBottom(isInitialConversationLoad);
+    if (isInitialConversationLoad) {
+      pendingInitialScrollConversationRef.current = null;
+    }
+  }, [currentConversationId, messages, sending, scrollToBottom]);
 
   useEffect(() => {
+    pendingInitialScrollConversationRef.current = currentConversationId;
     shouldAutoScrollRef.current = true;
     setShowScrollJump(false);
-    scrollToBottom(true);
-  }, [currentConversationId, scrollToBottom]);
+  }, [currentConversationId]);
 
   useEffect(() => {
     const viewport = getChatViewport();
@@ -532,6 +561,14 @@ const AIChatDashboardPage = () => {
     // асинхронного setInput. Если не передан — берём из поля ввода.
     const text = (typeof overrideText === "string" ? overrideText : input).trim();
     if (!text || sendingRef.current) return;
+    if (text.length > CHAT_MESSAGE_MAX_CHARS) {
+      toast({
+        title: "Слишком длинный вопрос",
+        description: `Сократите текст до ${CHAT_MESSAGE_MAX_CHARS.toLocaleString("ru-RU")} символов.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Check limits based on mode
     const canAsk = isDemoMode ? canAskAIDemo() : canAskAISub();
@@ -569,7 +606,9 @@ const AIChatDashboardPage = () => {
       }
 
       shouldAutoScrollRef.current = true;
-      const requestMessages = existingRetryMessage ? messages : [...messages, userMessage];
+      const requestMessages = buildChatRequestMessages(
+        existingRetryMessage ? messages : [...messages, userMessage],
+      );
       if (!existingRetryMessage) {
         setMessages((prev) => [...prev, userMessage]);
       }
@@ -1289,6 +1328,7 @@ const AIChatDashboardPage = () => {
                     }}
                     placeholder="Введите ваш вопрос..."
                     enterKeyHint="send"
+                    maxLength={CHAT_MESSAGE_MAX_CHARS}
                     className="min-h-[44px] flex-1 resize-none overflow-hidden rounded-xl text-[15px] leading-relaxed sm:text-base"
                     rows={1}
                     disabled={sending}
