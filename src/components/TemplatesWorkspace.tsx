@@ -603,6 +603,38 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
                     <p className="mb-2 text-xs text-muted-foreground">
                       Токены вида <code className="rounded bg-muted px-1">{"{{поле}}"}</code> подставляются значениями полей. Текст можно свободно менять.
                     </p>
+                    {/* Без этой шпаргалки о блоках никто не узнает: синтаксис
+                        нигде больше не описан, а именно он избавляет от
+                        заведения отдельного шаблона под каждый вариант. */}
+                    <details className="mb-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+                      <summary className="cursor-pointer font-medium text-foreground">
+                        Условные блоки и списки
+                      </summary>
+                      <div className="mt-2 space-y-2 text-muted-foreground">
+                        <p>
+                          Абзац появится, только если поле заполнено:
+                          <code className="mt-1 block whitespace-pre rounded bg-background px-2 py-1 text-[11px]">
+                            {"{{#if study_org}}\nОбучаюсь в {{study_org}}.\n{{/if}}"}
+                          </code>
+                        </p>
+                        <p>
+                          Наоборот — если поле пустое:
+                          <code className="mt-1 block whitespace-pre rounded bg-background px-2 py-1 text-[11px]">
+                            {"{{#unless docs_list}}\nДокументы будут представлены дополнительно.\n{{/unless}}"}
+                          </code>
+                        </p>
+                        <p>
+                          Нумерованный список из многострочного поля:
+                          <code className="mt-1 block whitespace-pre rounded bg-background px-2 py-1 text-[11px]">
+                            {"{{#each docs_list}}{{@index}}. {{this}}{{/each}}"}
+                          </code>
+                        </p>
+                        <p className="text-[11px]">
+                          Поле считается заполненным, если в нём есть хоть один непробельный символ.
+                          Блоки можно вкладывать друг в друга.
+                        </p>
+                      </div>
+                    </details>
                     <Textarea value={ed.bodyTemplate} onChange={(e) => patch({ bodyTemplate: e.target.value })} rows={14} className="font-mono text-xs leading-relaxed" />
                   </CardContent>
                 )}

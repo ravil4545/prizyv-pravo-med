@@ -8,7 +8,14 @@
 //  гос-структур (find-government-structures) и медкарты. Поля редактируются,
 //  добавляются/удаляются; список полей выводится из токенов (extractTokens).
 //  Экспорт (DOCX/печать) — в lib/docxBuilder.ts.
+//
+//  Помимо плоской подстановки поддерживаются условные блоки и списки —
+//  {{#if}} / {{#unless}} / {{#each}}, см. lib/templateLogic.ts. Без них на
+//  каждый вариант ситуации приходилось заводить отдельный шаблон, и каталог рос
+//  линейно.
 // ════════════════════════════════════════════════════════════════════════
+
+import { expandBlocks, extractBlockKeys } from "./templateLogic";
 
 export interface FieldDef {
   key: string;
@@ -200,22 +207,42 @@ export function autofillValue(key: string, ctx: FillContext): string {
 }
 
 // ── Рендер ──────────────────────────────────────────────────────────────────
+// @index исключён из общего токена: это служебная переменная {{#each}}.
 const TOKEN_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 
+/**
+ * Рендер шаблона: сначала раскрываем условные блоки и списки, потом
+ * подставляем токены.
+ *
+ * Порядок важен: если сначала подставить значения, внутри вырезанного
+ * {{#if}}-блока успеют появиться заглушки вида «[Место учёбы]», и они попадут
+ * в документ, хотя блок не должен был показываться вовсе.
+ */
 export function renderTemplate(bodyTemplate: string, values: Record<string, string>): string {
-  return bodyTemplate.replace(TOKEN_RE, (_, key: string) => {
+  const expanded = expandBlocks(bodyTemplate, values);
+  return expanded.replace(TOKEN_RE, (_, key: string) => {
     const v = values[key];
     if (v != null && String(v).trim() !== "") return String(v);
     return `[${fieldLabel(key)}]`;
   });
 }
 
+/**
+ * Ключи полей шаблона. Помимо обычных {{токенов}} включает ключи из блочных
+ * конструкций: поле «Место учёбы» обязано появиться в форме, даже если
+ * {{study_org}} встречается только внутри {{#if study_org}}. Иначе пользователю
+ * нечем заполнить условие и блок никогда не раскроется.
+ */
 export function extractTokens(bodyTemplate: string): string[] {
   const out: string[] = [];
   let m: RegExpExecArray | null;
   TOKEN_RE.lastIndex = 0;
   while ((m = TOKEN_RE.exec(bodyTemplate)) !== null) {
-    if (!out.includes(m[1])) out.push(m[1]);
+    // @index и this — служебные переменные {{#each}}, полями не являются.
+    if (m[1] !== "this" && !out.includes(m[1])) out.push(m[1]);
+  }
+  for (const key of extractBlockKeys(bodyTemplate)) {
+    if (!out.includes(key)) out.push(key);
   }
   return out;
 }
@@ -239,8 +266,16 @@ const SIGN = `{{today}}                    _______________ / {{full_name}} /`;
 const ACCEPT = `Отметка о принятии (заполняется органом при подаче):
 Входящий № ______ от __________ 20__ г.    Принял: должность, ФИО, подпись, печать`;
 
-const APPENDIX = `Приложения:
-{{docs_list}}`;
+// Заголовок «Приложения:» теперь появляется только если перечень заполнен —
+// раньше при пустом поле в документ уходила осиротевшая строка с заглушкой.
+//
+// Перечень намеренно оставлен плоским {{docs_list}}, а не переведён на
+// {{#each docs_list}}{{@index}}. {{this}}{{/each}}: автонумерация — улучшение,
+// но у всех 21 шаблонов defaults пронумерованы вручную («1. …\n2. …»), и
+// переключение требует одновременной правки всех и визуальной сверки готового
+// DOCX. Это отдельная задача, а не побочный эффект.
+const APPENDIX = `{{#if docs_list}}Приложения:
+{{docs_list}}{{/if}}`;
 
 // общий «хвост» документа
 const TAIL = `${APPENDIX}
