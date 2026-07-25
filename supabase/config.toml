@@ -1,5 +1,11 @@
 project_id = "kqbetheonxiclwgyatnm"
 
+# Публичный разбор дела: намеренно без JWT — гейт стоит на сохранении
+# результата, а не на его получении. Защита — суточный лимит по хешу IP
+# (CASE_REVIEW_MAX_PER_DAY) внутри самой функции.
+[functions.case-review]
+verify_jwt = false
+
 [functions.chat]
 verify_jwt = false
 

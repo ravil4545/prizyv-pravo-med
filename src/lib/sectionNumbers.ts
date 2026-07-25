@@ -30,6 +30,7 @@ const HOME_SECTIONS = [
 
 /** Самостоятельные страницы — нумерация продолжается после главной. */
 const STANDALONE_PAGES = [
+  "review",
   "diagnoses",
   "privacy",
   "terms",

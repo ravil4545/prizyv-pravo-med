@@ -97,6 +97,12 @@ export type ConversionEvent =
   | "ai_public_question"
   | "ai_public_gate_shown"
   | "ai_public_gate_signup_click"
+  // Публичный разбор дела /razbor — единая дверь для холодного трафика (§2)
+  | "case_review_submit"
+  | "case_review_result"
+  | "case_review_rate_limited"
+  | "case_review_save_click"
+  | "case_review_call_click"
   // Шаги воронки регистрации/входа (видеть, где именно бросают)
   | "auth_view"
   | "auth_oauth_click"

@@ -96,9 +96,16 @@ export interface TemplatesWorkspaceProps {
   subtitle?: string;
   /** Блок над панелью действий (напр. селектор клиента у юриста). */
   headerExtra?: ReactNode;
+  /**
+   * Ключ шаблона из DOC_TEMPLATES — открыть сразу при монтировании.
+   * Нужен для перехода из юридического чек-листа разбора дела (/razbor):
+   * пункт «подать заявление о приобщении» открывает готовый шаблон, а не
+   * общий каталог, где его ещё надо найти.
+   */
+  initialTemplateKey?: string | null;
 }
 
-const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading, subtitle, headerExtra }: TemplatesWorkspaceProps) => {
+const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading, subtitle, headerExtra, initialTemplateKey }: TemplatesWorkspaceProps) => {
   const { toast } = useToast();
 
   const [gov, setGov] = useState<Record<string, string> | null>(null);
@@ -157,6 +164,19 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
     setEd({ savedId: null, baseKey: t.key, title: t.title, category: t.category, fields, bodyTemplate: t.bodyTemplate, format: { ...DEFAULT_FORMAT }, tables: [] });
     setEditText(false);
   };
+
+  // Deep-link «?template=<key>»: открываем шаблон один раз при монтировании.
+  // Ref, а не флаг в state, — чтобы повторный рендер не переоткрывал редактор
+  // поверх начатой работы.
+  const deepLinkDoneRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkDoneRef.current || !initialTemplateKey) return;
+    const tpl = DOC_TEMPLATES.find((t) => t.key === initialTemplateKey);
+    if (!tpl) return;
+    deepLinkDoneRef.current = true;
+    openTemplate(tpl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTemplateKey]);
 
   // «Мой шаблон»: пустой редактор — юрист собирает документ полностью сам
   // (свой текст, поля и таблицы). Данные клиента подставляются через селектор.

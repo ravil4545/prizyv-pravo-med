@@ -131,6 +131,7 @@ const Footer = () => {
                   /commissariats есть в шапке, но не было в подвале. */}
               {[
                 { to: "/", label: "Главная" },
+                { to: "/razbor", label: "Разбор дела за 3 минуты" },
                 { to: "/ai", label: "Спросить ИИ" },
                 { to: "/services", label: "Услуги и цены" },
                 { to: "/diagnoses", label: "Диагнозы" },

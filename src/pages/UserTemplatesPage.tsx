@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- профиль/документы из БД читаются динамически без сгенерированных типов */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -11,6 +11,10 @@ import TemplatesWorkspace, { mapMedicalDocs, type DocItem } from "@/components/T
 // LawyerTemplatesPage с данными выбранного клиента.
 const UserTemplatesPage = () => {
   const navigate = useNavigate();
+  // «?template=<key>» — переход из юридического чек-листа разбора дела (/razbor):
+  // открываем нужный шаблон сразу, а не бросаем человека в каталог из 21 позиции.
+  const [searchParams] = useSearchParams();
+  const initialTemplateKey = searchParams.get("template");
   const [profile, setProfile] = useState<Record<string, any> | null>(null);
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [email, setEmail] = useState<string | null>(null);
@@ -46,6 +50,7 @@ const UserTemplatesPage = () => {
           docs={docs}
           email={email}
           storageKey="nepriziv_user_templates_v1"
+          initialTemplateKey={initialTemplateKey}
           onBack={() => navigate("/dashboard")}
           subtitle="Выберите шаблон — поля заполнятся из вашего профиля, военкоматы и диспансеры найдём по адресу регистрации. Документ можно отредактировать и скачать в DOCX или распечатать."
         />

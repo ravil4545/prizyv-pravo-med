@@ -64,6 +64,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const AuthConfirmPage = lazy(() => import("./pages/AuthConfirmPage"));
 const AiChatPage = lazy(() => import("./pages/AiChatPage"));
+const CaseReviewPage = lazy(() => import("./pages/CaseReviewPage"));
 const TestimonialsPage = lazy(() => import("./pages/TestimonialsPage"));
 const DiagnosesPage = lazy(() => import("./pages/DiagnosesPage"));
 const DiagnosisDetailPage = lazy(() => import("./pages/DiagnosisDetailPage"));
@@ -206,6 +207,8 @@ const App = () => (
                 <Route path="/auth/confirm" element={<AuthConfirmPage />} />
                 <Route path="/services" element={<ServicesPage />} />
                 <Route path="/ai" element={<AiChatPage />} />
+                {/* Публичный разбор дела — единая дверь для холодного трафика (§2). */}
+                <Route path="/razbor" element={<CaseReviewPage />} />
                 <Route path="/testimonials" element={<TestimonialsPage />} />
                 <Route path="/templates" element={<TemplatesPage />} />
                 <Route path="/diagnoses" element={<DiagnosesPage />} />

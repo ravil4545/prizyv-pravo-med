@@ -38,6 +38,7 @@ const initials = (full: string): string => {
 // входа для холодного трафика, но её не было ни в шапке, ни в подвале —
 // попасть можно было только из Hero или плавающего виджета.
 const PRIMARY_NAV = [
+  { to: "/razbor", label: "Разбор дела" },
   { to: "/ai", label: "Спросить ИИ" },
   { to: "/services", label: "Услуги и цены" },
   { to: "/diagnoses", label: "Диагнозы" },
