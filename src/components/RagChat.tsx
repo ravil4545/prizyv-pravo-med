@@ -14,6 +14,7 @@ import {
   remainingLabel,
   plural,
 } from "@/lib/aiLimits";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 interface Message {
   role: "user" | "assistant";
@@ -24,7 +25,7 @@ interface RagChatProps {
   initialOpen?: boolean;
 }
 
-const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag";
+const EDGE_URL = functionUrl("chat-rag");
 
 const HIDDEN_ROUTES = [
   "/auth", "/login", "/register", "/reset-password",

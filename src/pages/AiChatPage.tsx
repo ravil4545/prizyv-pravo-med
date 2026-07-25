@@ -18,12 +18,13 @@ import {
   remainingLabel,
   plural,
 } from "@/lib/aiLimits";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 // Публичный ИИ-чат БЕЗ регистрации — главный «вход в ценность» для холодного трафика.
 // Раньше любой клик по «ИИ» вёл незалогиненного на /auth; из анонимной воронки было
 // 0 регистраций (аудит конверсии 2026-06-25). Здесь человек сразу получает ответ, и
 // только после нескольких вопросов — мягкое предложение создать аккаунт.
-const EDGE_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/chat-rag";
+const EDGE_URL = functionUrl("chat-rag");
 // Лимит и формулировки — из единого источника (@/lib/aiLimits), иначе обещание
 // на главной, здесь и в плавающем виджете снова разъедется.
 const FREE_LIMIT = PUBLIC_AI_FREE_LIMIT;

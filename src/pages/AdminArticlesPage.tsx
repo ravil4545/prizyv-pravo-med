@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Upload, Loader2, FileText, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 export default function AdminArticlesPage() {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ export default function AdminArticlesPage() {
       if (!session) throw new Error("Not authenticated");
 
       const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/import-articles`,
+        functionUrl("import-articles"),
         {
           method: "POST",
           headers: {

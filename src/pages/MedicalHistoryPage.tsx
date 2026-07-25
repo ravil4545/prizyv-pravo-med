@@ -16,6 +16,7 @@ import { getSignedDocumentUrl } from "@/lib/storage";
 import { toast } from "sonner";
 import RbArticleView from "@/components/RbArticleView";
 import { articleFullName, articleShortName } from "@/lib/rb565";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 interface Article {
   id: string;
@@ -781,7 +782,7 @@ export default function MedicalHistoryPage() {
       const fullContent = `ПЛАН ОБСЛЕДОВАНИЙ\nНа основании всех загруженных медицинских документов\nДата: ${new Date().toLocaleDateString("ru-RU")}\n\n${contentToExport}`;
 
       const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        functionUrl("generate-document"),
         {
           method: "POST",
           headers: {
@@ -847,7 +848,7 @@ export default function MedicalHistoryPage() {
       const fullContent = `МИНИМАЛЬНЫЕ НЕОБХОДИМЫЕ ОБСЛЕДОВАНИЯ\nСтатья ${selectedArticle.article_number}: ${articleFullName(selectedArticle.article_number, selectedArticle.title)}\n\n${contentToExport}`;
 
       const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        functionUrl("generate-document"),
         {
           method: "POST",
           headers: {

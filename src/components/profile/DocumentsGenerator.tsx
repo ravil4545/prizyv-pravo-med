@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Download, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 interface DocumentsGeneratorProps {
   profile: any;
@@ -63,7 +64,7 @@ const DocumentsGenerator = ({ profile, userId }: DocumentsGeneratorProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       const response = await fetch(
-        `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+        functionUrl("generate-document"),
         {
           method: 'POST',
           headers: {

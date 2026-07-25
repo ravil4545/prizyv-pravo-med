@@ -33,6 +33,7 @@ import DiseaseScheduleDrawer from "@/components/DiseaseScheduleDrawer";
 import { BookOpen } from "lucide-react";
 import { CRM_STAGE_LABELS } from "@/lib/crmStages";
 import { useLawyerConversations } from "@/hooks/useLawyerConversations";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 interface Message {
   id: string; sender_id: string; content: string | null;
@@ -112,7 +113,7 @@ const GroundingMeta = ({
   );
 };
 
-const SUGGEST_URL = "https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/lawyer-chat-suggest";
+const SUGGEST_URL = functionUrl("lawyer-chat-suggest");
 const SUGGESTION_CACHE_PREFIX = "lawyer-chat-suggestions";
 const DATE_EXTRACT_CACHE_PREFIX = "lawyer-chat-date-extract";
 

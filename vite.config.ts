@@ -1,11 +1,17 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import seoPrerender from "./vite-plugin-seo-prerender";
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  // Vite НЕ кладёт .env в process.env — плагину пре-рендера значения нужно
+  // передать явно, иначе он собирал бы <head> против другого проекта, чем
+  // само приложение.
+  const env = loadEnv(mode, process.cwd(), "VITE_");
+
+  return {
   server: {
     host: "::",
     port: 8080,
@@ -27,7 +33,10 @@ export default defineConfig(({ mode }) => ({
     },
     // SEO-подложка: впекает per-route <head>/canonical/og/JSON-LD в исходный
     // HTML важных страниц после сборки (см. vite-plugin-seo-prerender.ts).
-    seoPrerender(),
+    seoPrerender({
+      supabaseUrl: env.VITE_SUPABASE_URL,
+      supabaseAnonKey: env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    }),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -57,4 +66,5 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-}));
+  };
+});

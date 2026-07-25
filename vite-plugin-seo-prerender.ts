@@ -15,11 +15,16 @@ import {
 import { makeCommissariatSlug } from "./src/lib/slug";
 import { getDiagnosisGuide } from "./src/content/diagnosisGuides";
 
-// Публичные ключи (anon) — те же, что в src/integrations/supabase/client.ts.
-// Используются только на чтение публичных таблиц во время СБОРКИ.
-const SUPABASE_URL = "https://kqbetheonxiclwgyatnm.supabase.co";
-const SUPABASE_ANON =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxYmV0aGVvbnhpY2x3Z3lhdG5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMjgxNjAsImV4cCI6MjA3NDkwNDE2MH0.EETf8kfnnN9NgEj_PKup1cLuZbtORz3RjxWuY65KwlI";
+// Публичные ключи (anon) читаются из окружения — тот же источник, что и у
+// приложения (@/lib/supabaseConfig). Раньше они были захардкожены здесь, и
+// сборка ходила в облако даже после правки .env: страницы работали против
+// одного проекта, а пре-рендеренный <head> — против другого.
+//
+// Значения приезжают из vite.config.ts через loadEnv: Vite НЕ кладёт .env в
+// process.env сам, поэтому плагин принимает их параметром, а process.env —
+// запасной путь для случая, когда плагин зовут напрямую.
+let SUPABASE_URL = "";
+let SUPABASE_ANON = "";
 
 const escapeHtml = (s: string): string =>
   String(s)
@@ -97,6 +102,18 @@ function injectSeo(template: string, seo: PageSeo): string {
 
 async function fetchDynamicRoutes(): Promise<PageSeo[]> {
   const routes: PageSeo[] = [];
+
+  // Без адреса и ключа динамику не получить. Сообщаем явно и выходим:
+  // молчаливый пропуск выглядел бы как «в базе нет диагнозов», и потеря
+  // сотни SEO-страниц заметилась бы только по падению трафика.
+  if (!SUPABASE_URL || !SUPABASE_ANON) {
+    console.warn(
+      "[seo-prerender] VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY не заданы — " +
+        "динамические маршруты (диагнозы, блог, военкоматы) пропущены",
+    );
+    return routes;
+  }
+
   // Динамический импорт — supabase-js грузится только на сборке, не при чтении конфига.
   const { createClient } = await import("@supabase/supabase-js");
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
@@ -150,7 +167,17 @@ async function fetchDynamicRoutes(): Promise<PageSeo[]> {
  * динамики только пропускает динамические маршруты, статические пишутся всегда,
  * сборка НИКОГДА не падает.
  */
-export default function seoPrerender(): Plugin {
+export interface SeoPrerenderOptions {
+  /** Адрес Supabase. Из vite.config.ts через loadEnv. */
+  supabaseUrl?: string;
+  /** Публичный anon-ключ. */
+  supabaseAnonKey?: string;
+}
+
+export default function seoPrerender(options: SeoPrerenderOptions = {}): Plugin {
+  SUPABASE_URL = (options.supabaseUrl || process.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+  SUPABASE_ANON = options.supabaseAnonKey || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+
   return {
     name: "seo-prerender",
     apply: "build",

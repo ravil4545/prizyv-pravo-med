@@ -14,6 +14,7 @@ import { Loader2, ClipboardList, Save, FileDown, ChevronDown, ChevronUp, CheckCi
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { registerCyrillicFont } from "@/lib/cyrillicPdfFont";
+import { functionUrl } from "@/lib/supabaseConfig";
 
 interface QuestionSection {
   id: string;
@@ -501,7 +502,7 @@ export default function MedicalQuestionnairePage() {
 
       try {
         const response = await fetch(
-          `https://kqbetheonxiclwgyatnm.supabase.co/functions/v1/generate-document`,
+          functionUrl("generate-document"),
           {
             method: "POST",
             headers: {
