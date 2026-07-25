@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
 // Письмо юристу о том, что клиент передал дело из ИИ-чата (эскалация).
 // Вызывается клиентом (verify_jwt=true) сразу после RPC client_escalate_to_lawyer.
 // Без письма юрист узнаёт об эскалации, только зайдя в кабинет.
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Заголовки собираются НА ЗАПРОС по общему белому списку (_shared/cors.ts).
+// Раньше здесь стоял const-объект с "Access-Control-Allow-Origin": "*", то есть
+// эндпоинт отвечал любой странице в интернете.
+const cors = (req: Request) => corsHeaders(req, { methods: "POST, OPTIONS" });
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => (
@@ -18,12 +18,12 @@ const esc = (s: string) =>
   ));
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
 
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors(req), "Content-Type": "application/json" },
     });
 
   try {

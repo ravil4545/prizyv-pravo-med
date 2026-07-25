@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
 /**
  * send-deadline-reminders (Модуль 4, Фаза 3 — движок уведомлений).
@@ -28,11 +29,10 @@ import * as webpush from "jsr:@negrel/webpush@0.3.0";
  * SUPABASE_SERVICE_ROLE_KEY (уже есть). Секрет cron — в Vault (cron_secret).
  */
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-cron-secret",
-};
+// Заголовки собираются НА ЗАПРОС по общему белому списку (_shared/cors.ts).
+// Раньше здесь стоял const-объект с "Access-Control-Allow-Origin": "*", то есть
+// эндпоинт отвечал любой странице в интернете.
+const cors = (req: Request) => corsHeaders(req, { methods: "POST, OPTIONS" });
 
 const SITE = "https://nepriziv.ru";
 const FROM = "НеПризыв <onboarding@resend.dev>"; // как в остальных функциях проекта
@@ -64,7 +64,7 @@ interface CaseEventRow {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...cors(req), "Content-Type": "application/json" },
   });
 
 const escapeHtml = (s: string) =>
@@ -122,7 +122,7 @@ const lawyerEmailHtml = (
   </div>`;
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",

@@ -1,14 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Заголовки собираются НА ЗАПРОС по общему белому списку (_shared/cors.ts).
+// Раньше здесь стоял const-объект с "Access-Control-Allow-Origin": "*" — то есть
+// эндпоинт отвечал любой странице в интернете. Для admin-users, удаления
+// аккаунта и импорта статей это особенно скверно.
+const cors = (req: Request) => corsHeaders(req, { methods: "POST, OPTIONS" });
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors(req) });
   }
 
   try {
@@ -16,7 +17,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
     const userId = claimsData.claims.sub as string;
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
     if (!roleData) {
       return new Response(JSON.stringify({ error: "Admin access required" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
     if (!rawText || typeof rawText !== "string") {
       return new Response(JSON.stringify({ error: "rawText is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -70,7 +71,7 @@ Deno.serve(async (req) => {
     if (articles.length === 0) {
       return new Response(
         JSON.stringify({ error: "No articles found in text", preview: rawText.slice(0, 500) }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -117,13 +118,13 @@ Deno.serve(async (req) => {
         notFoundInDb: notFound,
         articleNumbers: articles.map((a) => a.number),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...cors(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error:", error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } }
     );
   }
 });

@@ -18,12 +18,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Заголовки собираются НА ЗАПРОС по общему белому списку (_shared/cors.ts).
+// Раньше здесь стоял const-объект с "Access-Control-Allow-Origin": "*", то есть
+// эндпоинт отвечал любой странице в интернете.
+const cors = (req: Request) => corsHeaders(req, { methods: "POST, OPTIONS" });
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -31,7 +31,7 @@ const escapeHtml = (s: string) =>
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors(req) });
   }
 
   try {
@@ -42,14 +42,14 @@ serve(async (req) => {
     if (!resendApiKey) {
       return new Response(
         JSON.stringify({ error: "RESEND_API_KEY не настроен в Supabase секретах" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } },
       );
     }
 
     const authHeader = req.headers.get("authorization") || "";
     if (!authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Требуется авторизация" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -60,14 +60,14 @@ serve(async (req) => {
     const { data: { user }, error: authErr } = await anonClient.auth.getUser();
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Неверный токен" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
     const { lawyerClientId, overrideEmail } = await req.json();
     if (!lawyerClientId) {
       return new Response(JSON.stringify({ error: "lawyerClientId обязателен" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -81,12 +81,12 @@ serve(async (req) => {
       .single();
     if (cardErr || !card) {
       return new Response(JSON.stringify({ error: "Карточка не найдена" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
     if (card.lawyer_id !== user.id) {
       return new Response(JSON.stringify({ error: "Нет доступа: чужая карточка" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...cors(req), "Content-Type": "application/json" },
       });
     }
 
@@ -97,7 +97,7 @@ serve(async (req) => {
     if (!recipientEmail || !/^\S+@\S+\.\S+$/.test(recipientEmail)) {
       return new Response(
         JSON.stringify({ error: "У карточки нет email клиента — заполните его в кабинете" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -186,17 +186,17 @@ serve(async (req) => {
       console.error("Resend error:", sendErr);
       return new Response(
         JSON.stringify({ error: `Не удалось отправить письмо: ${sendErr.message || "unknown"}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } },
       );
     }
 
     return new Response(JSON.stringify({ success: true, sent_to: recipientEmail }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...cors(req), "Content-Type": "application/json" },
     });
   } catch (error: any) {
     console.error("lawyer-send-invite error:", error);
     return new Response(JSON.stringify({ error: error?.message || "Внутренняя ошибка" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...cors(req), "Content-Type": "application/json" },
     });
   }
 });

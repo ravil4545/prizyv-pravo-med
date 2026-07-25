@@ -23,6 +23,7 @@ import {
   hashIp,
   waitUntil,
 } from "../_shared/aiUsage.ts";
+import { resolveOrigin } from "../_shared/cors.ts";
 
 // Публичный виджет — самый большой анонимный анти-абьюз-риск (без логина,
 // без аккаунта на который вешать ₽-бюджет). Единственная защита — IP-лимит
@@ -31,15 +32,13 @@ const CHAT_RAG_MAX_PER_DAY = Number(Deno.env.get("CHAT_RAG_MAX_PER_DAY")) || 20;
 const CHAT_RAG_MAX_TOKENS = Number(Deno.env.get("CHAT_RAG_MAX_TOKENS")) || 1000;
 
 // ─── CORS (same pattern as other functions in this project) ──────────────────
-const getAllowedOrigin = (req: Request): string => {
-  const origin = req.headers.get("origin") || "";
-  if (
-    origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru"
-  ) return origin;
-  if (origin.endsWith(".lovable.app")) return origin;
-  if (origin.startsWith("http://localhost")) return origin;
-  return origin || "*";
-};
+/**
+ * Origin из общего белого списка (_shared/cors.ts).
+ * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
+ * то есть возвращавший Origin атакующего и обнулявший проверку.
+ * "null" = «никому»: браузер не отдаст ответ чужой странице.
+ */
+const getAllowedOrigin = (req: Request): string => resolveOrigin(req) ?? "null";
 
 const getCorsHeaders = (req: Request) => ({
   "Access-Control-Allow-Origin": getAllowedOrigin(req),

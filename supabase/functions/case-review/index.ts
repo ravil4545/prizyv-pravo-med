@@ -14,6 +14,7 @@ import {
 import { FALLBACK_ANSWER_POLICY, getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
 import { checkAnonRateLimit, getClientIp, getServiceRoleClient, hashIp } from "../_shared/aiUsage.ts";
 import { LEGAL_TEMPLATES, STAGE_LABELS, type ReviewResult } from "./contract.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
 // ════════════════════════════════════════════════════════════════════════
 //  case-review — публичный «разбор за 3 минуты» (§2 предложения по оптимизации).
@@ -37,34 +38,8 @@ import { LEGAL_TEMPLATES, STAGE_LABELS, type ReviewResult } from "./contract.ts"
 //  ложное ожидание оборачивается претензией.
 // ════════════════════════════════════════════════════════════════════════
 
-// Закрытый белый список. Осознанно НЕ повторяем распространённый в проекте
-// паттерн `return origin || "*"` — он возвращает Origin атакующего и сводит
-// проверку на нет.
-const ALLOWED_ORIGINS = new Set([
-  "https://nepriziv.ru",
-  "https://www.nepriziv.ru",
-]);
-
-const resolveOrigin = (req: Request): string | null => {
-  const origin = req.headers.get("origin") || "";
-  if (!origin) return null;
-  if (ALLOWED_ORIGINS.has(origin)) return origin;
-  if (/^https:\/\/[a-z0-9-]+\.lovable\.app$/.test(origin)) return origin;
-  if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return origin;
-  const extra = Deno.env.get("ALLOWED_ORIGIN");
-  if (extra && origin === extra) return origin;
-  return null;
-};
-
-const corsHeaders = (req: Request): Record<string, string> => {
-  const origin = resolveOrigin(req);
-  return {
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
-  };
-};
+// Белый список вынесен в общий модуль — эта функция была написана с ним сразу,
+// а остальные 28 приведены к нему позже (§9).
 
 const requestSchema = z.object({
   stage: z.enum(["summons", "medical_board", "decision_made", "preparing"]),

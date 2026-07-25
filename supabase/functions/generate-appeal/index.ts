@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
+import { resolveOrigin } from "../_shared/cors.ts";
 
 /**
  * generate-appeal — генерирует черновик жалобы на отрицательное решение призывной комиссии.
@@ -10,15 +11,13 @@ import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
  * + детали события как контекст.
  */
 
-const getAllowedOrigin = (req?: Request) => {
-  const requestOrigin = req?.headers.get("origin") || "";
-  const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
-  if (allowedOrigin && requestOrigin === allowedOrigin) return requestOrigin;
-  if (requestOrigin === "https://nepriziv.ru" || requestOrigin === "https://www.nepriziv.ru") return requestOrigin;
-  if (requestOrigin.endsWith(".lovable.app")) return requestOrigin;
-  if (requestOrigin.startsWith("http://localhost")) return requestOrigin;
-  return allowedOrigin || "*";
-};
+/**
+ * Origin из общего белого списка (_shared/cors.ts).
+ * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
+ * то есть возвращавший Origin атакующего и обнулявший проверку.
+ * "null" = «никому»: браузер не отдаст ответ чужой странице.
+ */
+const getAllowedOrigin = (req?: Request): string => (req ? resolveOrigin(req) ?? "null" : "null");
 
 const getCorsHeaders = (req?: Request) => ({
   "Access-Control-Allow-Origin": getAllowedOrigin(req),

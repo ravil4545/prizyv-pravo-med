@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import { corsHeaders } from "../_shared/cors.ts";
 
 // Запись анонимной демо-телеметрии. Раньше клиент писал в demo_visitors напрямую,
 // а таблица была открыта на чтение/запись всем (RLS USING(true)) — утечка PII
@@ -7,21 +8,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 //   • прямой доступ к таблице закрыт (RLS только для админов),
 //   • запись идёт только через эту функцию на service-role с валидацией входа.
 
+/**
+ * Прежняя проверка была дырявой сразу с двух сторон:
+ *   • `allowedList.length === 0` — при незаданном секрете ALLOWED_ORIGIN
+ *     разрешался ЛЮБОЙ origin;
+ *   • `origin.includes("lovable.app")` — проверка ПОДСТРОКОЙ, обходится
+ *     доменом вида `lovable.app.evil.com`.
+ * Теперь — общий белый список со строгим сравнением (_shared/cors.ts).
+ */
 function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") || "*";
-  const allowed = Deno.env.get("ALLOWED_ORIGIN") || "";
-  const allowedList = allowed.split(",").map((s) => s.trim()).filter(Boolean);
-  const isAllowed =
-    allowedList.length === 0 ||
-    allowedList.some((a) => origin.includes(a)) ||
-    origin.includes("lovableproject.com") ||
-    origin.includes("lovable.app") ||
-    origin.includes("localhost");
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : allowedList[0] || "*",
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
-  };
+  return corsHeaders(req);
 }
 
 const UUID_RE =

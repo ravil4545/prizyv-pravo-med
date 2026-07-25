@@ -18,14 +18,15 @@ import {
   serializeBundle,
   type SerializeOpts,
 } from "../_shared/contextBundle.ts";
+import { resolveOrigin } from "../_shared/cors.ts";
 
-const getAllowedOrigin = (req: Request): string => {
-  const origin = req.headers.get("origin") || "";
-  if (origin === "https://nepriziv.ru" || origin === "https://www.nepriziv.ru") return origin;
-  if (origin.endsWith(".lovable.app")) return origin;
-  if (origin.startsWith("http://localhost")) return origin;
-  return origin || "*";
-};
+/**
+ * Origin из общего белого списка (_shared/cors.ts).
+ * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
+ * то есть возвращавший Origin атакующего и обнулявший проверку.
+ * "null" = «никому»: браузер не отдаст ответ чужой странице.
+ */
+const getAllowedOrigin = (req: Request): string => resolveOrigin(req) ?? "null";
 
 const corsHeaders = (req: Request) => ({
   "Access-Control-Allow-Origin": getAllowedOrigin(req),

@@ -2,17 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "npm:resend@4.0.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
-// CORS configuration - restrict to production domain in production
-const getAllowedOrigin = () => {
-  const origin = Deno.env.get("ALLOWED_ORIGIN");
-  return origin || "*"; // Default to * for development
-};
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': getAllowedOrigin(),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Заголовки собираются НА ЗАПРОС, а не один раз при загрузке модуля.
+// Раньше здесь был const-объект, вычисляемый на старте: Origin запроса ему
+// недоступен в принципе, поэтому единственным рабочим значением оставалась
+// звёздочка. Теперь белый список из _shared/cors.ts применяется к каждому
+// запросу — это публичная форма обратной связи, ломать её нельзя.
+const cors = (req: Request) => corsHeaders(req, { methods: "POST, OPTIONS" });
 
 // Rate limiting: Track submissions by IP
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -146,7 +143,7 @@ function checkRateLimit(ipAddress: string): { allowed: boolean; remainingTime?: 
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors(req) });
   }
 
   try {
@@ -175,7 +172,7 @@ serve(async (req) => {
           }),
           {
             status: 429,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...cors(req), 'Content-Type': 'application/json' },
           }
         );
       }
@@ -192,7 +189,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -232,7 +229,7 @@ serve(async (req) => {
         }),
         {
           status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -362,7 +359,7 @@ serve(async (req) => {
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors(req), 'Content-Type': 'application/json' },
       }
     );
 
@@ -375,7 +372,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors(req), 'Content-Type': 'application/json' },
       }
     );
   }

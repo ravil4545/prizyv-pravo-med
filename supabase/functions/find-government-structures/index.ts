@@ -2,10 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 
-const getAllowedOrigin = () => {
-  const origin = Deno.env.get("ALLOWED_ORIGIN");
-  return origin || "*";
-};
+/**
+ * Origin из общего белого списка (_shared/cors.ts).
+ * Раньше здесь был локальный список, заканчивавшийся `return origin || "*"`,
+ * то есть возвращавший Origin атакующего и обнулявший проверку.
+ * "null" = «никому»: браузер не отдаст ответ чужой странице.
+ */
+const getAllowedOrigin = (): string => Deno.env.get("ALLOWED_ORIGIN") ?? "null";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": getAllowedOrigin(),
