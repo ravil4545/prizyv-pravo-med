@@ -35,23 +35,46 @@ export interface CabinetNavItem {
   messagesBadge?: boolean;
 }
 
-/** Первичные действия (ТЗ): всегда на виду, ≤1 тап. Порядок = порядок табов. */
+/**
+ * Первичные действия: всегда на виду, ≤1 тап. Порядок = порядок табов.
+ *
+ * Было 4 + 8 = 12 пунктов для человека, который зашёл впервые и в стрессе.
+ * Причём часть из них — не разделы, а шаги внутри одного процесса: опросник
+ * заполняется один раз, «Расписание болезней» — это публичный справочник
+ * /diagnoses, шаблоны нужны в момент, когда до них дошёл юридический чек-лист.
+ *
+ * Теперь 4 + 3 = 7, и каждый оставшийся пункт — МЕСТО, а не действие.
+ * Выброшенные из меню инструменты не потеряны: они собраны блоком «Инструменты
+ * дела» на странице «Моё дело», то есть там, где реально нужны.
+ */
 export const PRIMARY_NAV: CabinetNavItem[] = [
-  { label: "Главная", to: "/dashboard", icon: Home },
-  { label: "Дело", to: "/dashboard/case-tracking", icon: CalendarClock },
-  { label: "ИИ-консультант", to: "/dashboard/ai-chat", icon: MessageSquare },
+  { label: "Моё дело", to: "/dashboard", icon: Home },
   { label: "Документы", to: "/dashboard/medical-documents", icon: FileHeart },
+  { label: "ИИ-консультант", to: "/dashboard/ai-chat", icon: MessageSquare },
+  { label: "Юрист", to: "/client/messages", icon: MessagesSquare, messagesBadge: true },
 ];
 
 /** Вторичные: доступны, но не доминируют — в сайдбаре ниже разделителя и в «Ещё». */
 export const SECONDARY_NAV: CabinetNavItem[] = [
-  { label: "Чат с юристом", to: "/client/messages", icon: MessagesSquare, messagesBadge: true },
+  { label: "Ведение дела и сроки", to: "/dashboard/case-tracking", icon: CalendarClock },
   { label: "Профиль и подписка", to: "/profile", icon: User },
-  { label: "Мой календарь", to: "/dashboard/calendar", icon: Calendar },
-  { label: "Опросник для ИИ", to: "/medical-questionnaire", icon: ClipboardList },
-  { label: "Расписание болезней", to: "/medical-history", icon: BookOpen },
-  { label: "Шаблоны заявлений", to: "/dashboard/templates", icon: FileText },
   { label: "Семейный доступ", to: "/family", icon: Users },
+];
+
+/**
+ * Инструменты, убранные из основного меню. Показываются блоком на странице
+ * ведения дела — рядом с картой пути и чек-листами, где они и нужны.
+ * Маршруты никуда не делись, изменилась только точка входа.
+ */
+export const CASE_TOOLS: CabinetNavItem[] = [
+  { label: "Шаблоны заявлений", to: "/dashboard/templates", icon: FileText },
+  { label: "Опросник для ИИ", to: "/medical-questionnaire", icon: ClipboardList },
+  // Это НЕ публичный справочник /diagnoses, а личная сверка: статьи РБ рядом
+  // с загруженными документами и оценкой ИИ. Прежняя подпись «Расписание
+  // болезней» вводила в заблуждение — она совпадала с названием публичной
+  // страницы, хотя ведёт в совсем другое место.
+  { label: "Мои статьи и документы", to: "/medical-history", icon: BookOpen },
+  { label: "Мой календарь", to: "/dashboard/calendar", icon: Calendar },
   { label: "Найти юриста", to: "/lawyers", icon: Search, external: true },
 ];
 

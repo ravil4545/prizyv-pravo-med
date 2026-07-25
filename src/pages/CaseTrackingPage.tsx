@@ -22,6 +22,7 @@ import CaseTimeline from "@/components/CaseTimeline";
 import { eventTypeMeta } from "@/lib/caseEvents";
 import { getStageDef, getStageIndex, CRM_STAGE_ORDER } from "@/lib/crmStages";
 import CasePathMap from "@/components/dashboard/CasePathMap";
+import CaseToolsGrid from "@/components/dashboard/CaseToolsGrid";
 import { buildCasePath } from "@/lib/casePath";
 
 interface CaseEvent {
@@ -359,6 +360,10 @@ export default function CaseTrackingPage() {
               })}
             />
           )}
+
+          {/* Инструменты, убранные из меню кабинета при сокращении 12 -> 7 (§4).
+              Стоят здесь, а не в общем списке: они нужны по ходу дела. */}
+          <CaseToolsGrid className="mt-6" />
         </div>
       </main>
       <Footer />
