@@ -1,6 +1,9 @@
+import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import Pricing from "@/components/Pricing";
+import SubscriptionPricing from "@/components/SubscriptionPricing";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -24,61 +27,88 @@ const ServicesPage = () => {
     window.open(`https://wa.me/79253500533?text=${message}`, "_blank");
   };
 
+  // У каждой карточки теперь есть реальное назначение. Раньше все 10 кнопок
+  // («Подробнее» ×6 и «Заказать» ×4) были без onClick и без ссылки — клик не
+  // делал ничего.
   const legalServices = [
     {
       icon: FileText,
       title: "Анализ документов и личного дела",
-      description: "Детальный разбор всех документов в военкомате"
+      description: "Детальный разбор всех документов в военкомате",
+      cta: "Шаблон заявления об ознакомлении",
+      to: "/templates",
     },
     {
       icon: Gavel,
       title: "Составление жалоб и заявлений",
-      description: "Профессиональная подготовка процессуальных документов"
+      description: "Профессиональная подготовка процессуальных документов",
+      cta: "Готовые шаблоны",
+      to: "/templates",
     },
     {
       icon: Users,
       title: "Представительство в военкомате",
-      description: "Личное сопровождение на заседаниях призывной комиссии"
+      description: "Личное сопровождение на заседаниях призывной комиссии",
+      cta: "Стоимость",
+      to: "#pricing",
     },
     {
       icon: Scale,
       title: "Судебное представительство",
-      description: "Полное ведение дела в судах всех инстанций"
+      description: "Полное ведение дела в судах всех инстанций",
+      cta: "Стоимость",
+      to: "#pricing",
     },
     {
       icon: AlertTriangle,
       title: "Экстренная правовая помощь",
-      description: "Срочные консультации в критических ситуациях"
+      description: "Срочные консультации в критических ситуациях",
+      cta: "Позвонить сейчас",
+      to: "tel:+79253500533",
     },
     {
       icon: BookOpen,
       title: "Правовое просвещение",
-      description: "Обучение правам и обязанностям призывника"
-    }
+      description: "Обучение правам и обязанностям призывника",
+      cta: "Читать статьи",
+      to: "/blog",
+    },
   ];
 
   const medicalServices = [
     {
       icon: Heart,
       title: "Анализ медицинских документов",
-      description: "Экспертная оценка имеющихся справок и заключений"
+      description: "Экспертная оценка имеющихся справок и заключений",
+      cta: "Спросить ИИ бесплатно",
+      to: "/ai",
     },
     {
       icon: FileCheck,
       title: "Планирование дополнительных обследований",
-      description: "Рекомендации по необходимым медицинским процедурам"
+      description: "Рекомендации по необходимым медицинским процедурам",
+      cta: "Спросить ИИ бесплатно",
+      to: "/ai",
     },
     {
       icon: Users,
       title: "Подготовка к медкомиссии",
-      description: "Консультации по процедуре медицинского освидетельствования"
+      description: "Консультации по процедуре медицинского освидетельствования",
+      cta: "Скачать чек-лист",
+      to: "/leadmagnets/checklist-medcomission.pdf",
     },
     {
       icon: BookOpen,
       title: "Консультации по Расписанию болезней",
-      description: "Разъяснение медицинских критериев годности"
-    }
+      description: "Разъяснение медицинских критериев годности",
+      cta: "Открыть справочник",
+      to: "/diagnoses",
+    },
   ];
+
+  /** Внутренние маршруты рендерим через Link, tel/hash/файлы — обычной ссылкой. */
+  const isExternalHref = (href: string) =>
+    href.startsWith("tel:") || href.startsWith("#") || href.startsWith("http") || href.endsWith(".pdf");
 
   const serviceSteps = [
     {
@@ -157,7 +187,7 @@ const ServicesPage = () => {
             {legalServices.map((service, index) => {
               const Icon = service.icon;
               return (
-                <Card key={index} className="shadow-medium hover:shadow-strong transition-smooth border-0 bg-gradient-card">
+                <Card key={index} className="shadow-medium hover:shadow-strong transition-shadow duration-300 border-0 bg-gradient-card">
                   <CardHeader className="pb-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary mb-4">
                       <Icon className="h-6 w-6 text-primary-foreground" />
@@ -168,11 +198,13 @@ const ServicesPage = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-center">
-                      <Button variant="outline" size="sm" className="w-full">
-                        Подробнее
-                      </Button>
-                    </div>
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                      {isExternalHref(service.to) ? (
+                        <a href={service.to}>{service.cta}</a>
+                      ) : (
+                        <Link to={service.to}>{service.cta}</Link>
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
               );
@@ -197,7 +229,7 @@ const ServicesPage = () => {
             {medicalServices.map((service, index) => {
               const Icon = service.icon;
               return (
-                <Card key={index} className="shadow-medium hover:shadow-strong transition-smooth border-0 bg-background">
+                <Card key={index} className="shadow-medium hover:shadow-strong transition-shadow duration-300 border-0 bg-background">
                   <CardHeader className="pb-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 mb-4">
                       <Icon className="h-6 w-6 text-accent" />
@@ -208,11 +240,13 @@ const ServicesPage = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-center">
-                      <Button variant="outline" size="sm" className="w-full">
-                        Заказать
-                      </Button>
-                    </div>
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                      {isExternalHref(service.to) ? (
+                        <a href={service.to}>{service.cta}</a>
+                      ) : (
+                        <Link to={service.to}>{service.cta}</Link>
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
               );
@@ -220,6 +254,12 @@ const ServicesPage = () => {
           </div>
         </div>
       </section>
+
+      {/* Тарифы (§1.6). Страница «Услуги» — единственный пункт меню, названный
+          как услуги, — не содержала ни одной цены: прайс жил только на главной.
+          Человек, пришедший за «сколько стоит», уходил ни с чем. */}
+      <Pricing />
+      <SubscriptionPricing />
 
       {/* Process Steps */}
       <section className="py-20 bg-background">

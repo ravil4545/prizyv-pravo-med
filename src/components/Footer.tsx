@@ -125,14 +125,21 @@ const Footer = () => {
               Разделы
             </h4>
             <ul className="space-y-2.5">
+              {/* Добавлены /ai, /success-cases и /commissariats: /ai — главная
+                  точка входа холодного трафика — не была залинкована ни здесь,
+                  ни в шапке; /success-cases не была залинкована нигде вообще;
+                  /commissariats есть в шапке, но не было в подвале. */}
               {[
                 { to: "/", label: "Главная" },
-                { to: "/services", label: "Услуги" },
+                { to: "/ai", label: "Спросить ИИ" },
+                { to: "/services", label: "Услуги и цены" },
                 { to: "/diagnoses", label: "Диагнозы" },
                 { to: "/templates", label: "Шаблоны" },
                 { to: "/blog", label: "Блог" },
                 { to: "/forum", label: "Форум" },
+                { to: "/success-cases", label: "Выигранные дела" },
                 { to: "/testimonials", label: "Отзывы" },
+                { to: "/commissariats", label: "Военкоматы" },
               ].map((l) => (
                 <li key={l.to}>
                   <Link

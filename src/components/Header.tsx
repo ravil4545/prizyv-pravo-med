@@ -34,8 +34,12 @@ const initials = (full: string): string => {
 
 // Главное меню — 4 ключевых раздела. Остальное уходит в дроп-даун «Ещё»
 // и в мобильный Sheet, чтобы не размывать фокус на главные CTA.
+// «Спросить ИИ» выведен в первичное меню: /ai — заявленная главная точка
+// входа для холодного трафика, но её не было ни в шапке, ни в подвале —
+// попасть можно было только из Hero или плавающего виджета.
 const PRIMARY_NAV = [
-  { to: "/services", label: "Услуги" },
+  { to: "/ai", label: "Спросить ИИ" },
+  { to: "/services", label: "Услуги и цены" },
   { to: "/diagnoses", label: "Диагнозы" },
   { to: "/blog", label: "Блог" },
 ];
@@ -43,6 +47,7 @@ const PRIMARY_NAV = [
 const SECONDARY_NAV = [
   { to: "/forum", label: "Форум" },
   { to: "/templates", label: "Шаблоны" },
+  { to: "/success-cases", label: "Выигранные дела" },
   { to: "/testimonials", label: "Отзывы" },
   { to: "/commissariats", label: "Военкоматы" },
 ];
