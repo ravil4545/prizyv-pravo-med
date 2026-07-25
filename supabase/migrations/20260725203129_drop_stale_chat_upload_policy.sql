@@ -1,0 +1,21 @@
+-- ════════════════════════════════════════════════════════════════════════
+--  Удаление политики «Give users authenticated access to folder 14tobej_0».
+--
+--  Автоимя выдал мастер загрузки в дашборде Supabase. Условие было такое:
+--
+--    bucket_id = 'chat-attachments'
+--    AND (storage.foldername(name))[1] = 'private'
+--    AND auth.role() = 'authenticated'
+--
+--  То есть ЛЮБОЙ авторизованный мог заливать произвольные файлы в папку
+--  private/. Роль authenticated получают в том числе демо-посетители сайта
+--  (вход анонимный) — фактически это открытый файлообменник на квоте
+--  проекта. Пока бакет был публичным, к нему прилагалось ещё и открытое
+--  чтение: залил файл, получил постоянную публичную ссылку.
+--
+--  Приложение в 'private/' не пишет никогда. Все загрузки идут в
+--  chat/{lawyer_client_id}/ — ClientChatPage.tsx:373, LawyerChatPage.tsx:631,
+--  SendDocToLawyerButton.tsx:81. Политика мёртвая, а доступ по ней живой.
+-- ════════════════════════════════════════════════════════════════════════
+
+DROP POLICY IF EXISTS "Give users authenticated access to folder 14tobej_0" ON storage.objects;
