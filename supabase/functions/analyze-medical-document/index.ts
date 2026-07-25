@@ -9,6 +9,8 @@ import { MODEL_VISION } from "../_shared/llmGateway.ts";
 import { dedupeAdvice } from "../_shared/medicalAdvice.ts";
 import { getRagAnswerPolicy } from "../_shared/ragPolicy.ts";
 import { resolveOrigin } from "../_shared/cors.ts";
+import { enforceDailyLimit } from "../_shared/aiGuard.ts";
+import { getServiceRoleClient } from "../_shared/aiUsage.ts";
 
 /**
  * Origin из общего белого списка (_shared/cors.ts).
@@ -545,6 +547,22 @@ serve(async (req) => {
         },
       );
     }
+
+    // Суточный лимит: самая дорогая функция проекта — на один документ уходит
+    // ДВА vision-запроса к OpenAI. До сих пор её сдерживала только квота на
+    // число документов, а она снимается перезаписью того же documentId.
+    // Считаем по пользователю (см. _shared/aiGuard.ts).
+    const limited = await enforceDailyLimit({
+      req,
+      admin: getServiceRoleClient(),
+      functionName: "analyze-medical-document",
+      userId: authData.user.id,
+      envKey: "ANALYZE_DOCUMENT_MAX_PER_DAY",
+      fallbackMax: 40,
+      headers: corsHeaders,
+      message: "Сегодня доступно 40 разборов документов. Попробуйте завтра или напишите юристу.",
+    });
+    if (limited) return limited;
 
     const {
       imageBase64,

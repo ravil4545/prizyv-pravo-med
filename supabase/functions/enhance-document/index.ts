@@ -1,6 +1,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { enforceDailyLimit } from "../_shared/aiGuard.ts";
+import { getServiceRoleClient } from "../_shared/aiUsage.ts";
 
 
 // Заголовки собираются НА ЗАПРОС, а не один раз при загрузке модуля:
@@ -14,6 +16,21 @@ serve(async (req) => {
   }
 
   try {
+    // Суточный лимит ПО IP: эта функция единственная из дорогих работает без
+    // авторизации (verify_jwt=false), то есть её мог дёргать кто угодно
+    // сколько угодно — каждый вызов это vision-запрос к OpenAI при месячном
+    // бюджете в 1650 ₽. Ключ — хеш IP, сырой адрес не сохраняется.
+    const limited = await enforceDailyLimit({
+      req,
+      admin: getServiceRoleClient(),
+      functionName: "enhance-document",
+      envKey: "ENHANCE_DOCUMENT_MAX_PER_DAY",
+      fallbackMax: 30,
+      headers: cors(req),
+      message: "Сегодня доступно 30 улучшений снимка. Попробуйте завтра.",
+    });
+    if (limited) return limited;
+
     const { imageBase64 } = await req.json();
 
     if (!imageBase64) {

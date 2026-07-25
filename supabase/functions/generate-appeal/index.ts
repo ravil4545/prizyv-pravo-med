@@ -3,6 +3,8 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { llmChat, MODEL_MAIN, isLlmConfigured } from "../_shared/llmGateway.ts";
 import { resolveOrigin } from "../_shared/cors.ts";
+import { enforceDailyLimit } from "../_shared/aiGuard.ts";
+import { getServiceRoleClient } from "../_shared/aiUsage.ts";
 
 /**
  * generate-appeal — генерирует черновик жалобы на отрицательное решение призывной комиссии.
@@ -93,6 +95,20 @@ serve(async (req) => {
       });
     }
     const userId = userRes.user.id;
+
+    // Суточный лимит: генерация жалобы — полноценный LLM-запрос с контекстом
+    // дела. Лимит по пользователю (см. _shared/aiGuard.ts).
+    const limited = await enforceDailyLimit({
+      req,
+      admin: getServiceRoleClient(),
+      functionName: "generate-appeal",
+      userId,
+      envKey: "GENERATE_APPEAL_MAX_PER_DAY",
+      fallbackMax: 15,
+      headers: corsHeaders,
+      message: "Сегодня доступно 15 генераций жалобы. Попробуйте завтра или отредактируйте уже созданную.",
+    });
+    if (limited) return limited;
 
     const body = await req.json();
     const eventId: string = body.eventId;

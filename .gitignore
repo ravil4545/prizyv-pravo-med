@@ -37,3 +37,5 @@ scripts/ingest.secrets.env
 # Python bytecode (скрипты инжеста)
 __pycache__/
 *.pyc
+deno.lock
+audit-conversion-*/

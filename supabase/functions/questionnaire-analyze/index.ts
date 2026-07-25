@@ -15,6 +15,8 @@ import {
 } from "../_shared/ragPolicy.ts";
 import { dedupeAdvice, normalizeAdviceText } from "../_shared/medicalAdvice.ts";
 import { resolveOrigin } from "../_shared/cors.ts";
+import { enforceDailyLimit } from "../_shared/aiGuard.ts";
+import { getServiceRoleClient } from "../_shared/aiUsage.ts";
 
 // ════════════════════════════════════════════════════════════════════════
 //  questionnaire-analyze (P3.2) — «адаптивный опросник по РБ».
@@ -89,6 +91,20 @@ serve(async (req) => {
         headers: corsHeaders,
       });
     }
+
+    // Суточный лимит: разбор опросника — LLM-запрос с RAG-контекстом.
+    // Считаем по пользователю (см. _shared/aiGuard.ts).
+    const limited = await enforceDailyLimit({
+      req,
+      admin: getServiceRoleClient(),
+      functionName: "questionnaire-analyze",
+      userId: authData.user.id,
+      envKey: "QUESTIONNAIRE_ANALYZE_MAX_PER_DAY",
+      fallbackMax: 30,
+      headers: corsHeaders,
+      message: "Сегодня доступно 30 разборов опросника. Попробуйте завтра.",
+    });
+    if (limited) return limited;
 
     if (!isLlmConfigured()) {
       return Response.json({ error: "OPENAI_API_KEY не настроен" }, {

@@ -3,6 +3,8 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { MODEL_VISION_FAST } from "../_shared/llmGateway.ts";
 import { resolveOrigin } from "../_shared/cors.ts";
+import { enforceDailyLimit } from "../_shared/aiGuard.ts";
+import { getServiceRoleClient } from "../_shared/aiUsage.ts";
 
 /**
  * parse-summons — распознаёт повестку из военкомата по фото/PDF.
@@ -80,6 +82,20 @@ serve(async (req) => {
       });
     }
     const userId = userRes.user.id;
+
+    // Суточный лимит: распознавание повестки — vision-запрос к OpenAI.
+    // Лимит по пользователю, а не по IP (см. _shared/aiGuard.ts).
+    const limited = await enforceDailyLimit({
+      req,
+      admin: getServiceRoleClient(),
+      functionName: "parse-summons",
+      userId,
+      envKey: "PARSE_SUMMONS_MAX_PER_DAY",
+      fallbackMax: 20,
+      headers: corsHeaders,
+      message: "Сегодня доступно 20 распознаваний повестки. Попробуйте завтра или добавьте событие вручную.",
+    });
+    if (limited) return limited;
 
     const { imageBase64, autoCreateEvent = true } = await req.json();
     if (!imageBase64) {
