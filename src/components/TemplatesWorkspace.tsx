@@ -24,8 +24,9 @@ import {
 import {
   FileText, Search, Sparkles, MapPin, Download, Printer, Plus, Trash2, ArrowLeft,
   Save, Settings2, Loader2, Pencil, FilePlus2, FolderOpen, MoreVertical, RotateCcw, Table as TableIcon,
-  FileDown,
+  FileDown, Blocks,
 } from "lucide-react";
+import DocumentBlockBuilder from "@/components/DocumentBlockBuilder";
 import {
   LEGACY_STORAGE_KEYS,
   listTemplates,
@@ -221,6 +222,24 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
       fields: [], bodyTemplate: "", format: { ...DEFAULT_FORMAT }, tables: [],
     });
     setEditText(true);
+  };
+
+  // Конструктор: тот же пустой редактор, но каркас документа собран из блоков —
+  // с правильными реквизитами, правовым основанием и порядком частей. Поля
+  // выводятся из токенов собранного текста, как и у обычного шаблона.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const composeFromBlocks = (body: string) => {
+    const ctx = fillCtx();
+    const fields: EditorField[] = extractTokens(body).map((k, i) => ({
+      id: `${k}-${i}`, key: k, label: fieldLabel(k),
+      value: autofillValue(k, ctx) || "",
+      multiline: !!FIELD_DEFS[k]?.multiline,
+    }));
+    setEd({
+      savedId: null, baseKey: null, title: "Мой документ", category: "Свои шаблоны",
+      fields, bodyTemplate: body, format: { ...DEFAULT_FORMAT }, tables: [],
+    });
+    setEditText(false);
   };
 
   const openSaved = (s: SavedTemplate) => {
@@ -422,6 +441,7 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
         </DialogContent>
       </Dialog>
       <SavedDialog open={savedOpen} onOpenChange={setSavedOpen} saved={saved} onOpen={openSaved} onDelete={deleteSaved} />
+      <DocumentBlockBuilder open={builderOpen} onOpenChange={setBuilderOpen} onCompose={composeFromBlocks} />
     </>
   );
 
@@ -461,6 +481,23 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
                   {saved.length > 0 && <Badge variant="secondary">{saved.length}</Badge>}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Конструктор стоит ПЕРЕД «с нуля»: для большинства задач
+                      собрать каркас из готовых частей быстрее и надёжнее, чем
+                      писать документ с чистого листа и вспоминать нормы. */}
+                  <button
+                    onClick={() => setBuilderOpen(true)}
+                    className="flex flex-col items-start gap-2 rounded-lg border-2 border-primary/50 bg-primary/[0.05] p-5 text-left transition-colors hover:border-primary hover:bg-primary/[0.09]"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-primary">
+                      <Blocks className="h-5 w-5" />
+                    </span>
+                    <span className="font-semibold">Собрать из блоков</span>
+                    <span className="text-sm text-muted-foreground">
+                      Шапка, основание, просительная часть, приложения — отметьте нужные части,
+                      порядок выставится сам. Правовые основания из библиотеки.
+                    </span>
+                  </button>
+
                   <button
                     onClick={openBlank}
                     className="flex flex-col items-start gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-primary/[0.03] p-5 text-left transition-colors hover:border-primary hover:bg-primary/[0.06]"
@@ -468,10 +505,10 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <FilePlus2 className="h-5 w-5" />
                     </span>
-                    <span className="font-semibold">Мой шаблон</span>
+                    <span className="font-semibold">Чистый лист</span>
                     <span className="text-sm text-muted-foreground">
-                      Создайте документ с нуля: свой текст, поля и таблицы. Данные клиента
-                      подставятся из меню выбора клиента выше.
+                      Свой текст, поля и таблицы с нуля. Данные клиента подставятся из меню
+                      выбора клиента выше.
                     </span>
                   </button>
                   {saved.map((s) => (
