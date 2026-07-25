@@ -1277,6 +1277,66 @@ export type Database = {
         }
         Relationships: []
       }
+      lawyer_invoices: {
+        Row: {
+          amount_kopecks: number
+          created_at: string
+          description: string | null
+          due_at: string | null
+          id: string
+          issued_at: string | null
+          lawyer_client_id: string
+          lawyer_id: string
+          paid_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          amount_kopecks: number
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          issued_at?: string | null
+          lawyer_client_id: string
+          lawyer_id: string
+          paid_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          amount_kopecks?: number
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          issued_at?: string | null
+          lawyer_client_id?: string
+          lawyer_id?: string
+          paid_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_invoices_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lawyer_invoices_lawyer_client_id_fkey"
+            columns: ["lawyer_client_id"]
+            isOneToOne: false
+            referencedRelation: "lawyer_clients_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lawyer_profiles: {
         Row: {
           accent_color: string | null
