@@ -1,0 +1,102 @@
+# ════════════════════════════════════════════════════════════════════════
+#  CI для nepriziv.ru (§8 предложения).
+#
+#  До этого проверок не было вообще: ни линта, ни типов, ни сборки на PR.
+#  При двустороннем синке с Lovable это особенно неприятно — правка, сделанная
+#  в редакторе Lovable, попадает в main без единой проверки.
+#
+#  ВАЖНО про две системы типов. `tsc` НЕ видит supabase/functions — они не
+#  входят в tsconfig и живут в Deno. Ошибки в edge-функциях ловятся только
+#  `deno check`. Именно так были найдены 6 ошибок типов в case-review, которых
+#  фронтовый typecheck не показывал.
+# ════════════════════════════════════════════════════════════════════════
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Новый пуш в ту же ветку отменяет предыдущий прогон — незачем занимать раннер.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Фронтенд — типы, линт, сборка
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Проверка типов
+        run: npx tsc -b --noEmit
+
+      # Линт пока НЕ блокирует: в проекте ~249 накопленных замечаний
+      # (в основном no-explicit-any). Сначала нужно разгрести долг, потом
+      # убрать continue-on-error — иначе CI будет красным всегда и его
+      # перестанут читать.
+      - name: Линт (пока не блокирует)
+        run: npx eslint .
+        continue-on-error: true
+
+      - name: Сборка
+        run: npm run build
+        env:
+          # Пре-рендер ходит в Supabase за диагнозами и блогом. Без ключей
+          # он отработает вхолостую, но сборку не свалит.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+  functions:
+    name: Edge-функции — типы и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Проверка типов edge-функций
+        run: deno check supabase/functions/**/index.ts
+
+      - name: Тесты
+        run: deno test --allow-net tests/
+
+  cors-guard:
+    name: Страж CORS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Отдельная проверка, потому что цена ошибки высока: до §9 весь кабинет
+      # юриста отдавал Access-Control-Allow-Origin атакующему. Если кто-то
+      # вернёт старый паттерн — CI обязан упасть.
+      - name: Запрет «звёздочки» и эха Origin
+        run: |
+          set -e
+          FAIL=0
+          # Комментарии вырезаем: в них старые паттерны процитированы намеренно.
+          for f in supabase/functions/*/index.ts; do
+            CODE=$(perl -0777 -pe 's{/\*.*?\*/}{}gs; s{(^|[^:])//[^\n]*}{$1}g' "$f")
+            if echo "$CODE" | grep -qE 'return\s+origin\s*\|\|\s*"\*"'; then
+              echo "::error file=$f::эхо любого Origin (return origin || \"*\")"; FAIL=1
+            fi
+            if echo "$CODE" | grep -qE '"Access-Control-Allow-Origin"\s*:\s*"\*"'; then
+              echo "::error file=$f::литерал \"*\" в Access-Control-Allow-Origin"; FAIL=1
+            fi
+            if echo "$CODE" | grep -qE 'includes\("lovable'; then
+              echo "::error file=$f::проверка домена подстрокой — обходится"; FAIL=1
+            fi
+          done
+          exit $FAIL

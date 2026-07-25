@@ -9,12 +9,21 @@
  *    достаточно завести цель типа «JavaScript-событие» с нужным идентификатором.
  * 2. Sentry: sentry.io → Create Project (React) → скопировать DSN в SENTRY_DSN.
  *
+ * ⚠️ ПОРЯДОК ВКЛЮЧЕНИЯ SENTRY ВАЖЕН. Фильтр персональных данных
+ * (lib/sentryScrub.ts) уже подключён через beforeSend/beforeBreadcrumb: он
+ * вырезает ФИО, телефоны, email, паспорт, СНИЛС и полис, отрезает query-строку
+ * (в /ai?q=… приезжает жалоба) и выбрасывает целиком ввод в поля, тело запроса
+ * и произвольный контекст. Не отключайте его, вставляя DSN, — иначе медданные
+ * клиентов уедут на серверы стороннего сервиса.
+ *
  * Пока константы пустые — ни один скрипт не грузится, ничего не отправляется.
  * Вебвизор ВКЛЮЧЁН (записи сессий публичных страниц). Кабинет (DashboardLayout/
  * LawyerLayout/AdminLayout), формы входа и тексты ИИ-чатов помечены классом
  * `ym-hide-content` — их содержимое в записи скрывается; ввод в поля Метрика по
  * умолчанию не пишет. Так медданные (152-ФЗ) в записи сессий не попадают.
  */
+import { scrubBreadcrumb, scrubEvent } from "@/lib/sentryScrub";
+
 export const YM_COUNTER_ID = 109765864; // счётчик Яндекс.Метрики nepriziv.ru
 export const SENTRY_DSN = ""; // ← вставить DSN Sentry, например "https://…@….ingest.sentry.io/…"
 
@@ -60,6 +69,16 @@ export function initMonitoring() {
           dsn: SENTRY_DSN,
           environment: import.meta.env.MODE,
           tracesSampleRate: 0.1,
+
+          // ── Защита персональных данных (152-ФЗ) ──────────────────────────
+          // Sentry по умолчанию кладёт в событие URL с query, ввод в поля,
+          // тело запроса и произвольный контекст. На этом сайте всё это может
+          // содержать диагноз, ФИО, паспорт и СНИЛС — специальную категорию
+          // персональных данных. Без фильтров включать DSN нельзя.
+          sendDefaultPii: false,
+          beforeSend: (event) => scrubEvent(event as never) as never,
+          beforeBreadcrumb: (crumb) => scrubBreadcrumb(crumb as never) as never,
+
           ignoreErrors: [
             // Протухший кеш после деплоя — уже обрабатывается авто-перезагрузкой
             "Failed to fetch dynamically imported module",

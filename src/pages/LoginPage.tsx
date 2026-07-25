@@ -321,7 +321,9 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    // ym-hide-content: Вебвизор пишет записи сессий, а здесь вводят почту и
+    // пароль. AuthPage и RegisterPage были закрыты, эта страница — нет.
+    <div className="min-h-screen flex flex-col bg-background ym-hide-content">
       <Header />
       
       <main className="flex-1 flex items-center justify-center py-8 sm:py-12 md:py-20 px-4">

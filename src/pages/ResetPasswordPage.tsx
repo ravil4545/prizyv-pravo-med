@@ -74,7 +74,9 @@ const ResetPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    // ym-hide-content: страница восстановления пароля — тот же класс данных,
+    // что и вход. В записи сессии её содержимое попадать не должно.
+    <div className="min-h-screen flex flex-col bg-background ym-hide-content">
       <Header />
       
       <main className="flex-1 flex items-center justify-center py-20 px-4">
