@@ -10,6 +10,7 @@ import { getDiagnosisGuide } from "@/content/diagnosisGuides";
 import DiagnosisGuideView from "@/components/DiagnosisGuideView";
 import { ArrowRight, Phone, Loader2, Bot, FileSearch } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
+import DiagnosisTemplates from "@/components/DiagnosisTemplates";
 
 interface Diagnosis {
   id: string;
@@ -28,6 +29,8 @@ const DiagnosisDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+  /** Медицинский профиль статьи из disease_articles_565 (НЕ категория годности). */
+  const [articleCategory, setArticleCategory] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) =>
@@ -67,6 +70,19 @@ const DiagnosisDetailPage = () => {
       }
 
       setDiagnosis(found as Diagnosis);
+
+      // Медицинский профиль статьи (mental / skin / respiratory…) — он живёт в
+      // ДРУГОЙ таблице. В `diagnoses` колонка category означает категорию
+      // годности (Б/В/Г/Д), а профиль нужен, чтобы подсказать, какой диспансер
+      // выдаёт выписку. Ловушка одинаковых имён колонок.
+      supabase
+        .from("disease_articles_565")
+        .select("category")
+        .eq("article_number", (found as Diagnosis).article_number)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!cancelled) setArticleCategory((data?.category as string) ?? null);
+        });
 
       // Related: same category
       if ((found as Diagnosis).category) {
@@ -210,6 +226,15 @@ const DiagnosisDetailPage = () => {
 
           {/* Расширенные SEO-блоки для топовых статей (если есть гайд) */}
           {guide && <DiagnosisGuideView guide={guide} />}
+
+          {/* Документы под эту статью (§5): человек уже понял, что статья его —
+              сразу показываем, чем её подтверждают и где взять бумаги. */}
+          <DiagnosisTemplates
+            articleNumber={diagnosis.article_number}
+            category={articleCategory}
+            isAuthed={isAuthed}
+            routePrefix={branding.routePrefix}
+          />
 
           {/* Lead magnet — матрица «диагноз → статья 565», максимально по теме страницы */}
           <section className="mb-10">

@@ -24,6 +24,7 @@ import {
 import {
   FileText, Search, Sparkles, MapPin, Download, Printer, Plus, Trash2, ArrowLeft,
   Save, Settings2, Loader2, Pencil, FilePlus2, FolderOpen, MoreVertical, RotateCcw, Table as TableIcon,
+  FileDown,
 } from "lucide-react";
 import {
   LEGACY_STORAGE_KEYS,
@@ -377,6 +378,29 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
   };
   const exportPrint = () => { if (ed) printDoc({ title: ed.title, text: previewText, tables: ed.tables, format: ed.format }); };
 
+  // PDF отдельным файлом, а не через диалог печати: у каждого браузера он свой,
+  // на мобильных часто отсутствует, а колонтитулы браузера норовят попасть в
+  // документ. Шрифт и jsPDF грузятся лениво (~400 КБ), поэтому показываем
+  // индикатор — первая генерация не мгновенная.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const exportPdf = async () => {
+    if (!ed || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const { downloadPdf } = await import("@/lib/pdfBuilder");
+      await downloadPdf({ title: ed.title, text: previewText, tables: ed.tables, format: ed.format });
+      toast({ title: "PDF скачан", description: "Готов к печати и отправке." });
+    } catch (e) {
+      toast({
+        title: "Не удалось собрать PDF",
+        description: e instanceof Error ? e.message : "Попробуйте «Печать» — там тоже есть сохранение в PDF.",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const unusedFieldKeys = useMemo(() => {
     const used = new Set(ed?.fields.map((f) => f.key) || []);
     return Object.keys(FIELD_DEFS).filter((k) => !used.has(k));
@@ -556,8 +580,15 @@ const TemplatesWorkspace = ({ profile, docs, email, storageKey, onBack, heading,
               <ArrowLeft className="mr-2 h-4 w-4" /> К шаблонам
             </Button>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={saveTemplate}><Save className="mr-1.5 h-4 w-4" /> Сохранить</Button>
-              <Button variant="outline" size="sm" onClick={exportPrint}><Printer className="mr-1.5 h-4 w-4" /> Печать / PDF</Button>
+              <Button variant="outline" size="sm" onClick={saveTemplate} disabled={savingTpl}>
+                {savingTpl ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+                Сохранить
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportPrint}><Printer className="mr-1.5 h-4 w-4" /> Печать</Button>
+              <Button variant="outline" size="sm" onClick={exportPdf} disabled={pdfBusy}>
+                {pdfBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileDown className="mr-1.5 h-4 w-4" />}
+                PDF
+              </Button>
               <Button size="sm" onClick={exportDocx}><Download className="mr-1.5 h-4 w-4" /> Скачать DOCX</Button>
             </div>
           </div>
