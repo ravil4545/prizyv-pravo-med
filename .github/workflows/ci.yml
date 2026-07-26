@@ -70,11 +70,13 @@ jobs:
       - name: Проверка типов edge-функций
         run: deno check supabase/functions/**/index.ts
 
-      # sloppy-imports: тесты покрывают и src/lib — а там импорты без
-      # расширения (.ts дописывает Vite). --allow-env нужен тестам aiGuard,
-      # они подменяют переменные лимитов.
+      # Через npm test, а не своей строкой с флагами: набор разрешений Deno
+      # задан ровно в одном месте (package.json). Когда флаги дублировались,
+      # они разъехались — в CI не было --allow-read, и сторож конфигурации
+      # (tests/supabaseConfig_test.ts) читает исходники, то есть на CI он
+      # падал бы, а локально проходил.
       - name: Тесты
-        run: deno test --allow-net --allow-env --unstable-sloppy-imports tests/
+        run: npm test
 
   cors-guard:
     name: Страж CORS
