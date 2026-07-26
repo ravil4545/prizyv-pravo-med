@@ -69,6 +69,10 @@ VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJz
 
 > Эти ключи **публичные** (anon key защищён через RLS-политики на стороне Supabase) — их безопасно хранить в репозитории. Service-role key в проект не попадает.
 
+**Переключение окружения — только через `.env`.** Адрес Supabase и ключ читаются из одного места, [`src/lib/supabaseConfig.ts`](src/lib/supabaseConfig.ts): оттуда их берут и клиент, и плагин пре-рендера, и все прямые `fetch` к edge-функциям (через хелпер `functionUrl(name)`). Если `.env` нет — подставляются значения облачного проекта, поэтому сборка в Lovable работает без него.
+
+Раньше адрес и ключ были захардкожены в тринадцати местах, и правка `.env` переключала окружение лишь частично: часть приложения продолжала ходить в облако. Чтобы это не вернулось, за файлами следит тест [`tests/supabaseConfig_test.ts`](tests/supabaseConfig_test.ts) — он падает, если адрес или ключ снова появились в `src/` мимо `supabaseConfig`. Это особенно важно для `src/integrations/supabase/client.ts`: его генерирует Lovable, и при перегенерации он вернёт хардкод обратно.
+
 ```sh
 # 4. Запустите dev-сервер
 bun run dev
@@ -111,20 +115,37 @@ nepriziv/
 
 ### Edge Functions
 
-Список развёрнутых функций (`supabase/functions/<name>/index.ts`):
+Развёрнуто 30 функций, полный список — в `supabase/functions/`. Основные:
 
 | Функция | Назначение |
 |---|---|
 | `chat` | AI-чат помощника (OpenAI API) |
+| `chat-rag` | Публичный виджет «База знаний» поверх RAG |
+| `case-review` | Публичный разбор дела за 3 минуты |
 | `analyze-medical-document` | Анализ загруженных медицинских документов |
 | `analyze-diagnosis` | Анализ диагноза по Расписанию болезней |
+| `questionnaire-analyze` | Разбор медицинского опросника |
 | `generate-document` | Генерация юридических документов |
-| `enhance-document` | Улучшение/доработка готового документа |
+| `generate-appeal` | Черновик жалобы на решение призывной комиссии |
+| `parse-summons` | Распознавание повестки по фото |
+| `enhance-document` | Фото документа → чистый скан |
 | `find-government-structures` | Поиск контактов госорганов |
-| `import-articles` | Импорт статей в блог |
-| `submit-contact` | Обработка формы обратной связи |
-| `notify-payment-click` | Логирование клика по кнопке оплаты |
-| `admin-users` | Админские операции с пользователями |
+| `lawyer-*` | Агенты кабинета юриста (план дела, ассистент, подсказки) |
+| `sitemap` | Карта сайта |
+
+**Два общих правила для любой новой функции.**
+
+*CORS.* Origin проверяется по белому списку из [`_shared/cors.ts`](supabase/functions/_shared/cors.ts) — `resolveOrigin(req)` возвращает `null` для чужих доменов, и в заголовок уходит строка `"null"` («никому»). Никогда не пишите `origin || "*"`: раньше так и было, и функции возвращали `Access-Control-Allow-Origin` с доменом атакующего. За этим следит отдельная задача CI (`cors-guard`).
+
+*Суточный лимит.* Дорогие ИИ-вызовы закрыты предохранителем [`_shared/aiGuard.ts`](supabase/functions/_shared/aiGuard.ts) — `enforceDailyLimit()` возвращает готовый ответ 429 либо `null`. Ключ — пользователь, если запрос авторизован, и хеш IP, если нет (лимит по IP наказывал бы соседей по общему NAT). При сбое БД запрос пропускается: отказать человеку из-за сбоя счётчика хуже, чем пропустить лишний вызов.
+
+| Функция | Лимит/сутки | Переменная окружения |
+|---|---|---|
+| `analyze-medical-document` | 40 | `ANALYZE_DOCUMENT_MAX_PER_DAY` |
+| `questionnaire-analyze` | 30 | `QUESTIONNAIRE_ANALYZE_MAX_PER_DAY` |
+| `enhance-document` | 30 | `ENHANCE_DOCUMENT_MAX_PER_DAY` |
+| `parse-summons` | 20 | `PARSE_SUMMONS_MAX_PER_DAY` |
+| `generate-appeal` | 15 | `GENERATE_APPEAL_MAX_PER_DAY` |
 
 ### Секреты (уже настроены в Supabase)
 
@@ -208,7 +229,38 @@ supabase migration new <название_миграции>
 
 ---
 
-## 11. Настройка email-подтверждения (Supabase)
+## 11. Тесты и CI
+
+Тестов на React-компоненты нет — покрыта чистая логика, вынесенная из страниц в `src/lib/`, и общие модули edge-функций. Раннер — Deno (тот же, что и у функций), поэтому отдельный Jest/Vitest не нужен.
+
+```sh
+npm test          # весь набор из tests/
+deno check supabase/functions/**/index.ts   # типы edge-функций
+```
+
+**`tsc` НЕ видит `supabase/functions`** — они не входят в `tsconfig` и исполняются в Deno. Ошибки там ловит только `deno check`, поэтому в CI это отдельный шаг.
+
+Разрешения Deno заданы ровно в одном месте — в скрипте `test` из `package.json`. CI зовёт `npm test`, а не свою строку с флагами: когда они дублировались, набор разрешений разъехался и часть тестов падала только на CI.
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) на каждый push и PR:
+
+| Задача | Что делает |
+|---|---|
+| `frontend` | `tsc --noEmit`, `eslint`, `vite build` |
+| `functions` | `deno check` по всем функциям + `npm test` |
+| `cors-guard` | Падает, если в функциях снова появился `origin \|\| "*"`, литерал `"*"` или проверка Origin через `includes("lovable` |
+
+Линтер пока с `continue-on-error`: в проекте накоплено около 250 замечаний, и жёсткая проверка блокировала бы все PR. Снять флаг стоит после разбора долга.
+
+---
+
+## 12. Перенос на свой сервер
+
+Материалы — в папке [`selfhost/`](selfhost/): скрипт переноса файлов Storage, шаблоны `Caddyfile`, конфига Cloudflare Tunnel и `.env`, скрипт резервного копирования. Порядок действий — в `selfhost/README.md`.
+
+---
+
+## 13. Настройка email-подтверждения (Supabase)
 
 Тема и текст письма подтверждения регистрации настраиваются в Supabase Dashboard:
 
@@ -220,7 +272,7 @@ supabase migration new <название_миграции>
 
 ---
 
-## 12. Полезные ссылки
+## 14. Полезные ссылки
 
 - **Lovable Project**: https://lovable.dev/projects/50740c09-a321-485c-ac20-c8d60273fcfa
 - **Supabase Dashboard**: https://supabase.com/dashboard/project/kqbetheonxiclwgyatnm

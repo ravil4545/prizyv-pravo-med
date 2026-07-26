@@ -18,11 +18,22 @@ bun run dev
 # Production build
 bun run build
 
-# Lint
+# Lint (~250 pre-existing errors; CI runs it with continue-on-error)
 npm run lint
+
+# Tests — Deno, not Jest/Vitest
+npm test
+
+# Type-check edge functions. tsc does NOT see supabase/functions
+# (not in tsconfig, Deno runtime) — only this catches errors there.
+deno check supabase/functions/**/index.ts
 ```
 
-No test runner is configured (no Jest/Vitest).
+**Tests live in [tests/](tests/) and run on Deno** — the same runtime as the edge functions, so no second test toolchain is needed. They cover pure logic extracted from pages into `src/lib/` plus the shared edge-function modules; React components are not covered.
+
+Deno permissions are declared in **one** place — the `test` script in `package.json`. CI calls `npm test` rather than its own flag string: when the two were duplicated they drifted, and some tests passed locally but failed on CI for missing `--allow-read`.
+
+When you move logic out of a page to make it testable, put the module in `src/lib/` and the test in `tests/<name>_test.ts`. Do **not** put Deno test files under `src/` — that breaks both `tsc` and `vite build`.
 
 ## Architecture
 
@@ -35,8 +46,29 @@ No test runner is configured (no Jest/Vitest).
 - [src/pages/](src/pages/) — 25 route pages (public, auth, dashboard, medical, admin)
 - [src/components/](src/components/) — shared components; [src/components/ui/](src/components/ui/) is auto-generated shadcn/ui (don't manually refactor)
 - [src/hooks/](src/hooks/) — `useSubscription`, `useDemoMode`, `useAnalyticsTracking`, `use-mobile`
-- [src/integrations/supabase/](src/integrations/supabase/) — **auto-generated** client and types, do not edit manually
-- [src/lib/](src/lib/) — sanitize (DOMPurify), storage (localStorage), validations (Zod schemas), utils
+- [src/integrations/supabase/](src/integrations/supabase/) — **auto-generated** types, do not edit manually. `client.ts` is also generated, but carries one deliberate manual edit: it imports the URL and key from `@/lib/supabaseConfig` instead of hardcoding them (see «Supabase configuration» below)
+- [src/lib/](src/lib/) — sanitize (DOMPurify), escapeHtml, storage, validations (Zod), utils, and the logic extracted from oversized pages (see below)
+- [selfhost/](selfhost/) — scripts and config templates for moving off Supabase Cloud onto the owner's own machine
+
+### Supabase configuration — single source
+
+The project URL and anon key come from **[`src/lib/supabaseConfig.ts`](src/lib/supabaseConfig.ts) only**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `functionUrl(name)` for direct `fetch` to edge functions (needed where the response is an SSE stream — `supabase.functions.invoke` buffers the whole body in the browser).
+
+Values are read from the environment, with the cloud project's values as a fallback so the Lovable build works without a local `.env`.
+
+They used to be hardcoded in thirteen places, which meant editing `.env` switched the environment only partially — half the app kept talking to the cloud. [`tests/supabaseConfig_test.ts`](tests/supabaseConfig_test.ts) fails if a Supabase URL or anon key reappears anywhere under `src/`. This matters most for `client.ts`: Lovable regenerates it and will put the hardcoded constants back.
+
+### Modules extracted from `MedicalDocumentsPage`
+
+The page was 2834 lines and nothing in it could be tested — importing it pulls in pdfjs, jsPDF and half of shadcn/ui. Reach for these instead of re-implementing:
+
+- [`medicalDocumentTypes.ts`](src/lib/medicalDocumentTypes.ts) — shared types
+- [`documentSort.ts`](src/lib/documentSort.ts) — filter, sort, «what to do next» summary, category badge variant
+- [`imagePipeline.ts`](src/lib/imagePipeline.ts) — photo/PDF → JPEG → compress → build PDF; sets up the pdfjs worker itself
+- [`documentExport.ts`](src/lib/documentExport.ts) — download, save extracted text, print window
+- [`escapeHtml.ts`](src/lib/escapeHtml.ts) — **use this whenever HTML is assembled as a string.** The print window interpolated the document title straight into markup, and the title comes from the uploaded filename; the window inherits the site origin along with the Supabase session in localStorage
+
+Fitness categories (А/Б/В/Г/Д) live in [`fitnessCategories.ts`](src/lib/fitnessCategories.ts) and are the single source for their meaning and colour. Note the semantics: **В and Д are the desired outcome** for a conscript — do not paint them red.
 - [supabase/functions/](supabase/functions/) — Deno edge functions: `chat`, `analyze-medical-document`, `analyze-diagnosis`, `generate-document`, `enhance-document`, `find-government-structures`, etc.
 - [supabase/migrations/](supabase/migrations/) — timestamped SQL migrations
 
@@ -68,6 +100,14 @@ Branded `/u/:slug/*` links are resolved with [`withBrandPath`](src/lib/brandPath
 3. AI features POST to edge functions at `supabase/functions/<name>` with CORS headers
 4. Medical AI context is auto-loaded from the user's uploaded documents and disease articles
 
+### Edge-function rules — apply to every new function
+
+**CORS.** Resolve the Origin through the shared whitelist in [`_shared/cors.ts`](supabase/functions/_shared/cors.ts): `resolveOrigin(req) ?? "null"`. The string `"null"` means «nobody» — the browser will not hand the response to a foreign page. Never write `origin || "*"`; that is what the code used to do, and functions were echoing the attacker's Origin back. The `cors-guard` CI job fails the build if that pattern returns.
+
+**Daily limit on expensive calls.** Wrap them in `enforceDailyLimit()` from [`_shared/aiGuard.ts`](supabase/functions/_shared/aiGuard.ts) — it returns a ready 429 `Response` or `null`. Key by user when the request is authenticated, by IP hash otherwise: an IP-only limit punishes everyone behind a shared NAT (dorm, office, mobile carrier). Raw IPs are never stored. It fails **open** — a database outage lets the request through, because denying someone their document analysis over a broken counter is worse than one extra call. Limits are overridable per function via env vars (see README).
+
+**Do not trust `verify_jwt`.** `analyze-medical-document` and `enhance-document` run with `verify_jwt = false` in `config.toml`; the first checks the token itself, the second has no auth at all and is therefore the most exposed expensive endpoint.
+
 ### Auth & Subscriptions
 
 - Supabase Auth (email/password + anonymous)
@@ -83,9 +123,23 @@ Branded `/u/:slug/*` links are resolved with [`withBrandPath`](src/lib/brandPath
 
 Design tokens are HSL CSS variables defined in [src/index.css](src/index.css). Dark mode uses `.dark` class. Tailwind config extends these variables for colors, gradients, shadows, and animations. Radius is `0.75rem`.
 
+### Storage buckets
+
+| Bucket | Public | Contents |
+|---|---|---|
+| `blog-images`, `lawyer-brand-assets` | yes | site imagery |
+| `medical-documents`, `test-results` | **no** | client medical records |
+| `chat-attachments` | **no** | client↔lawyer chat files |
+
+Private buckets are served through signed URLs — store the storage **path** in the database, never a public URL (see [`src/lib/storage.ts`](src/lib/storage.ts)). `chat-attachments` was public until 25.07.2026: the migration making it private sat in the repo for two months without being applied, and because it had no `INSERT` policy either, attachments could not be uploaded at all.
+
+Upload paths are policy-relevant: `medical-documents` uses `{user_id}/…`, `chat-attachments` uses `chat/{lawyer_client_id}/…`. RLS reads the first path segments, so changing the layout silently breaks access.
+
 ### Environment Variables
 
 [.env](.env) contains public Supabase keys (safe to commit). Backend secrets (`OPENAI_API_KEY`, `RESEND_API_KEY`) live only in the Supabase Dashboard.
+
+Frontend code must **not** read `import.meta.env` for Supabase values directly — go through `@/lib/supabaseConfig` (see above). `vite.config.ts` passes the values to the pre-render plugin via `loadEnv`, because Vite does not put `.env` into `process.env`.
 
 ### Deployment
 
