@@ -67,8 +67,24 @@ jobs:
         with:
           deno-version: v2.x
 
+      # Тесты покрывают не только edge-функции, но и модули src/lib, а те
+      # тянут npm-пакеты (date-fns, jspdf, pdfjs). Без установки зависимостей
+      # прогон падает на «Could not resolve date-fns/locale».
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # --node-modules-dir=none обязателен. В корне лежит package.json, и без
+      # флага Deno переключается на резолвинг через node_modules, которого на
+      # чистом раннере нет: проверка падает на «Could not find
+      # @supabase/supabase-js», не дойдя до самих типов. Локально ошибка не
+      # видна — node_modules там есть, и именно поэтому пять настоящих ошибок
+      # типов дожили до первого запуска CI.
       - name: Проверка типов edge-функций
-        run: deno check supabase/functions/**/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/**/index.ts
 
       # Через npm test, а не своей строкой с флагами: набор разрешений Deno
       # задан ровно в одном месте (package.json). Когда флаги дублировались,

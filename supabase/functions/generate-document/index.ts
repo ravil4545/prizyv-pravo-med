@@ -116,9 +116,16 @@ serve(async (req) => {
     // Генерируем файл в зависимости от формата
     if (format === "docx") {
       const doc = generateDocxDocument(textContent);
+      // Packer.toBuffer отдаёт Node-Buffer, а Response ждёт BodyInit.
+      // Ни Buffer, ни Uint8Array<ArrayBufferLike> под BodyInit не подпадают:
+      // в текущих типах массив параметризован видом буфера, а BodyInit
+      // требует именно ArrayBuffer. Копируем в массив с обычным буфером —
+      // документ размером в десятки килобайт, копия ничего не стоит.
       const buffer = await Packer.toBuffer(doc);
+      const body = new Uint8Array(buffer.length);
+      body.set(buffer);
 
-      return new Response(buffer, {
+      return new Response(body, {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

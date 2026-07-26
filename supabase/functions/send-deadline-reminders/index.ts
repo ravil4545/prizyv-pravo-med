@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Resend } from "npm:resend@4.0.0";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { corsHeaders } from "../_shared/cors.ts";
+import { vapidKeysToJwk } from "../_shared/vapidKeys.ts";
 
 /**
  * send-deadline-reminders (Модуль 4, Фаза 3 — движок уведомлений).
@@ -61,7 +62,11 @@ interface CaseEventRow {
   notify_client_push: boolean;
 }
 
-const json = (body: unknown, status = 200) =>
+// Хелпер принимает req явно. Раньше он звал cors(req) на уровне модуля, где
+// никакого req нет — каждый вызов json() падал бы с ReferenceError. Функция
+// вызывается по расписанию раз в сутки, поэтому отказ был бы тихим: письма
+// просто не уходят, а в ответ никто не смотрит.
+const json = (req: Request, body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...cors(req), "Content-Type": "application/json" },
@@ -131,18 +136,18 @@ serve(async (req) => {
 
   // --- защита: сверяем заголовок с секретом cron_secret из Vault (RPC) ---
   const token = req.headers.get("x-cron-secret") ?? "";
-  if (!token) return json({ error: "Unauthorized" }, 401);
+  if (!token) return json(req, { error: "Unauthorized" }, 401);
   const { data: secretOk, error: secretErr } = await supabase.rpc("match_cron_secret", {
     p_token: token,
   });
   if (secretErr) {
     console.error("Secret check failed:", secretErr);
-    return json({ error: "Secret validation error" }, 500);
+    return json(req, { error: "Secret validation error" }, 500);
   }
-  if (secretOk !== true) return json({ error: "Unauthorized" }, 401);
+  if (secretOk !== true) return json(req, { error: "Unauthorized" }, 401);
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  if (!RESEND_API_KEY) return json({ error: "RESEND_API_KEY not configured" }, 500);
+  if (!RESEND_API_KEY) return json(req, { error: "RESEND_API_KEY not configured" }, 500);
 
   const resend = new Resend(RESEND_API_KEY);
 
@@ -174,7 +179,7 @@ serve(async (req) => {
 
   if (error) {
     console.error("Query error:", error);
-    return json({ error: "Query failed", detail: error.message }, 500);
+    return json(req, { error: "Query failed", detail: error.message }, 500);
   }
 
   const rows = (events ?? []) as CaseEventRow[];
@@ -206,8 +211,11 @@ serve(async (req) => {
     const pub = (vapid as { public_key?: string; private_key?: string } | null)?.public_key;
     const priv = (vapid as { public_key?: string; private_key?: string } | null)?.private_key;
     if (pub && priv) {
+      // В Vault лежат base64url-строки, а importVapidKeys ждёт JsonWebKey.
+      // Раньше строки передавались как есть: вызов падал, а catch ниже писал
+      // «VAPID init skipped» — push молча не работал с июня 2026.
       const keys = await webpush.importVapidKeys(
-        { publicKey: pub, privateKey: priv },
+        vapidKeysToJwk(pub, priv),
         { extractable: false },
       );
       pushServer = await webpush.ApplicationServer.new({
@@ -320,7 +328,7 @@ serve(async (req) => {
     if (updErr) errors.push(`update:${ev.id}`);
   }
 
-  return json({
+  return json(req, {
     ok: true,
     dry_run: dryRun,
     today_msk: todayStr,
