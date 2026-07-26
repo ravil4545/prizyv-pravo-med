@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import Footer from "@/components/Footer";
 import TermHint from "@/components/TermHint";
 import { Button } from "@/components/ui/button";
@@ -914,6 +915,13 @@ export default function MedicalHistoryPage() {
       <Header />
 
       <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 md:pb-12">
+        {/*
+          Страница глубокая: её нет ни в сайдбаре, ни в нижних табах — она в
+          блоке «Инструменты дела» на «Моём деле». Возврат раньше был текстовой
+          кнопкой в правом верхнем углу, рядом с кнопкой действия «Опросник»,
+          и читался как ещё одно действие. Ставим слева и сверху, где его ищут.
+        */}
+        <BackLink to="/dashboard" label="К моему делу" className="mb-2" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2 sm:gap-3">
@@ -941,13 +949,6 @@ export default function MedicalHistoryPage() {
             >
               <ClipboardList className="h-4 w-4" />
               Опросник
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/dashboard")}
-            >
-              Назад
             </Button>
           </div>
         </div>

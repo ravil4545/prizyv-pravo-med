@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -579,6 +580,8 @@ export default function MedicalQuestionnairePage() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 pb-24 md:pb-12 max-w-3xl">
+        {/* Страница из «Инструментов дела» — в меню её нет, возврат только отсюда. */}
+        <BackLink to="/dashboard" label="К моему делу" className="mb-2" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
@@ -603,11 +606,6 @@ export default function MedicalQuestionnairePage() {
               </p>
             )}
             <p className="text-[11px] text-muted-foreground mt-1">Черновик сохраняется автоматически в этом браузере.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
-              Назад
-            </Button>
           </div>
         </div>
 
