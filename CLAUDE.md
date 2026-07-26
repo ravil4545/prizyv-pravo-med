@@ -143,13 +143,23 @@ Frontend code must **not** read `import.meta.env` for Supabase values directly �
 
 ### Deployment
 
-Frontend is published via the Lovable UI (requires manual "Update" click after code changes). Edge functions and migrations deploy automatically on GitHub push. The live site is https://nepriziv.ru.
+**Nothing deploys on `git push`.** `.github/workflows/` contains only `ci.yml`, which type-checks, lints, builds and runs tests — it has no deploy step, and there is no Supabase GitHub Action. An earlier version of this file claimed edge functions and migrations deploy automatically on push; they do not.
 
-To deploy edge functions locally:
+| What | How it reaches production |
+|---|---|
+| Frontend | Manual **Update / Publish** click in the Lovable UI |
+| Edge functions | `npx supabase functions deploy <name> --project-ref kqbetheonxiclwgyatnm` |
+| Migrations | Applied deliberately — via the Supabase MCP/dashboard, or `supabase db push` |
+
+The live site is https://nepriziv.ru.
+
+**Do not run a blind `supabase db push`.** Repo filenames and the versions recorded in prod `supabase_migrations.schema_migrations` have never matched: Lovable applies SQL through its own integration and records its own version numbers. As of 25.07.2026, 92 of 107 files in `supabase/migrations/` look «unapplied» to the CLI while the schema they describe is long since live. A blind push would replay them and fail on the first `CREATE TABLE`.
+
+When you apply a migration yourself, name the repo file with the **exact version the database recorded**, so the CLI sees it as applied. The seven July files follow this rule; the older ones are historical and left alone.
+
 ```bash
 supabase link --project-ref kqbetheonxiclwgyatnm
 supabase functions deploy <function-name>
-supabase db push
 ```
 
 ### Lovable ↔ GitHub Sync
