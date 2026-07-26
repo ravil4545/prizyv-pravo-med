@@ -217,9 +217,23 @@ const AiChatPage = () => {
 
         {/* Лента сообщений */}
         {/* ym-hide-content: тексты вопросов/ответов о здоровье не попадают в записи Webvisor (152-ФЗ) */}
+        {/*
+          Высота: min(56dvh, 100dvh − 360px). Второе слагаемое резервирует
+          360px под шапку, заголовок и поле ввода.
+
+          Раньше стояло фиксированное 56dvh с min-h 320px, и на телефоне поле
+          ввода уходило под нижний край: на 390×664 (айфон с адресной строкой)
+          на 31px, на 360×600 — на 79px. Само по себе это лечилось бы
+          прокруткой, но лента занимает 56% экрана и имеет overscroll-contain:
+          палец при свайпе попадает именно в неё, жест перехватывается и
+          наружу не уходит, а прокручивать внутри нечего — сообщение одно.
+          Со стороны выглядело так, будто писать негде и страница «залипла».
+
+          На высоких экранах ограничение не срабатывает, и размер прежний.
+        */}
         <div
           ref={messagesRef}
-          className="h-[56dvh] min-h-[320px] max-h-[560px] flex-none overscroll-contain rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto ym-hide-content"
+          className="h-[min(56dvh,calc(100dvh-360px))] min-h-[180px] sm:min-h-[320px] max-h-[560px] flex-none overscroll-contain rounded-2xl border border-border bg-card/40 p-3 sm:p-4 space-y-3 overflow-y-auto ym-hide-content"
         >
           {messages.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
